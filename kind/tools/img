@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+
+set -e
+
+DIR="$(dirname "$0")"
+. $DIR/common
+
+IMAGE_URI=$1
+if [ -z "$IMAGE_URI" ]; then
+    echo "Usage: $0 <image_uri>"
+    exit 1
+fi
+
+# tools
+REQUIRED_TOOLS=(kind kubectl)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# get all nodes
+NODES=$(kubectl get nodes --no-headers -o custom-columns=NAME:.metadata.name | grep '^test-worker')
+NODE_LIST=$(echo "$NODES" | tr '\n' ',' | sed 's/,$//')
+
+# load image
+msg "Loading image $IMAGE_URI to cluster $CLUSTER_NAME ($NODE_LIST)"
+kind load docker-image --name $CLUSTER_NAME --nodes $NODE_LIST $IMAGE_URI

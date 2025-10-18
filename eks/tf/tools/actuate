@@ -1,0 +1,74 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Paths
+# Paths
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+ROOT=$(dirname "${DIR}")
+SRC_DIR="${SRC_DIR:-${ROOT}/terraform}"
+CONFIG_FILE="$(realpath "${1:-}")"
+
+# Check for required tools
+REQUIRED_TOOLS=(yq terraform)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# Validate required environment variables
+if [[ -z "$CONFIG_FILE" ]]; then
+  err "Usage: $0 <path to config.yaml>"
+fi
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  err "Error: Config file does not exist at the specified path: ${CONFIG_FILE}"
+fi
+
+
+if [[ -z "${SRC_DIR:-}" ]]; then
+  err "Error: SRC_DIR environment variable is not set."
+fi
+if [[ ! -d "${SRC_DIR}" ]]; then
+  err "Error: SRC_DIR directory does not exist at the specified path: ${SRC_DIR}"
+fi
+
+# Config 
+DEP_ID="$(yq -er '.deployment.id' $CONFIG_FILE)"
+DEP_REGION="$(yq -er '.deployment.region' $CONFIG_FILE)"
+ACCOUNT_ID="$(yq -er '.deployment.account' $CONFIG_FILE)"
+CLUSTER="$(yq -er '.cluster.name' $CONFIG_FILE)"
+DESTROY="$(yq -er '.deployment.destroy // "false"' "$CONFIG_FILE")"
+BUCKET_NAME="cluster-builder-state-${ACCOUNT_ID}"
+STATE_KEY="deployments/${DEP_REGION}/${DEP_ID}/terraform.tfstate"
+
+msg "Using"
+msg " config:     $CONFIG_FILE"
+msg " source:     $SRC_DIR"
+msg " deployment: $DEP_ID"
+msg " region:     $DEP_REGION"
+msg " account:    $ACCOUNT_ID"
+msg " bucket:     $BUCKET_NAME"
+msg " destroy:    $($DESTROY == "true" && echo "yes" || echo "no")"
+msg " state:      s3://$BUCKET_NAME/$STATE_KEY"
+
+# Initialize, plan and apply
+msg "Initializing Terraform..."
+terraform -chdir="$SRC_DIR" init \
+  -upgrade \
+  -migrate-state \
+  -backend-config="bucket=$BUCKET_NAME" \
+  -backend-config="region=$DEP_REGION" \
+  -backend-config="encrypt=true" \
+  -backend-config="key=$STATE_KEY"
+
+if [[ "$DESTROY" == "true" ]]; then
+  msg "Destroying deployment, OK?"
+  TF_VAR_CONFIG_PATH="$CONFIG_FILE" terraform -chdir="$SRC_DIR" destroy
+  exit 0
+fi
+
+msg "Planning deployment..."
+TF_VAR_CONFIG_PATH="$CONFIG_FILE" terraform -chdir="$SRC_DIR" plan -out="plan.cache"
+
+msg "Applying deployment plan..."
+TF_VAR_CONFIG_PATH="$CONFIG_FILE" terraform -chdir="$SRC_DIR" apply "plan.cache"
+
+msg "Deployment complete"

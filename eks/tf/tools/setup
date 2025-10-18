@@ -1,0 +1,170 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Paths
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+ROOT=$(dirname "${DIR}")
+OUT_DIR="${ROOT}/terraform"
+
+# Check for required tools
+REQUIRED_TOOLS=(aws)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# Config
+CONFIG_FILE="${1:-}"
+if [[ -z "$CONFIG_FILE" ]]; then
+  err "Usage: $0 <path to config.yaml>"
+fi
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  err "Error: Config file does not exist at the specified path: ${CONFIG_FILE}"
+fi
+
+# Derived variables
+REGION=$(yq -er '.deployment.region' "$CONFIG_FILE")
+DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
+ACCOUNT_ID=$(yq -er '.deployment.account' "$CONFIG_FILE")
+SA_NAME="${SA_NAME:-cluster-builder-sa}"
+CURRENT_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+POLICY_NAME="${POLICY_NAME:-cluster-builder-policy}"
+POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${POLICY_NAME}"
+BUCKET_NAME="cluster-builder-state-${ACCOUNT_ID}"
+
+# validate account
+if [[ "$ACCOUNT_ID" != "$CURRENT_ACCOUNT_ID" ]]; then
+  err "Invalid AWS account (want:$ACCOUNT_ID, got:$CURRENT_ACCOUNT_ID."
+fi
+
+msg "Account ID: ${ACCOUNT_ID}"
+msg "User:       ${SA_NAME}"
+msg "Policy:     ${POLICY_NAME}"
+msg "Bucket:     ${BUCKET_NAME}"
+msg "Output:     ${OUT_DIR}"
+
+# prep 
+mkdir -p $OUT_DIR
+
+# =========================================================================================
+# State Bucket
+# =========================================================================================
+
+# create versioned bucket if it does not exist
+if ! aws s3api head-bucket --bucket "$BUCKET_NAME" --region "$REGION" 2>/dev/null; then
+  echo "Creating S3 bucket: $BUCKET_NAME in region $REGION"
+  aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+fi
+
+aws s3api put-bucket-versioning \
+  --bucket "$BUCKET_NAME" \
+  --region "$REGION" \
+  --versioning-configuration "Status=Enabled"
+
+# Block all public access
+aws s3api put-public-access-block \
+  --bucket "$BUCKET_NAME" \
+  --region "$REGION" \
+  --public-access-block-configuration \
+    "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+
+# SSE-KMS on bucket
+aws s3api put-bucket-encryption \
+  --bucket "$BUCKET_NAME" \
+  --region "$REGION" \
+  --server-side-encryption-configuration '{
+    "Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"aws:kms"}}]
+  }'
+
+
+cat <<EOF > "${OUT_DIR}/backend.hcl"
+bucket         = "$BUCKET_NAME"
+region         = "$REGION"
+encrypt        = true
+EOF
+
+msg "Created backend configuration in ${OUT_DIR}/backend.hcl"
+
+# =========================================================================================
+# Service Account
+# =========================================================================================
+
+# Embedded policy (broad/simple for demo purposes, tighten as needed in production)
+POLICY_JSON=$(cat <<'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Effect": "Allow",
+    "Action": [
+      "ec2:*",
+      "autoscaling:*",
+      "eks:*",
+      "iam:*",
+      "logs:*",
+      "s3:*",
+      "kms:*"
+    ],
+    "Resource": "*"
+  }]
+}
+EOF
+)
+
+# Temp file + cleanup
+TMP_POLICY="$(mktemp)"
+trap 'rm -f "${TMP_POLICY}"' EXIT
+printf '%s\n' "${POLICY_JSON}" > "${TMP_POLICY}"
+
+# Create IAM user if missing
+if ! aws iam get-user --user-name "${SA_NAME}" >/dev/null 2>&1; then
+  aws iam create-user --user-name "${SA_NAME}" >/dev/null
+  msg "Created IAM user ${SA_NAME}"
+else
+  msg "IAM user ${SA_NAME} already exists"
+fi
+
+# Create or update the policy (prune old versions if at limit)
+if aws iam get-policy --policy-arn "${POLICY_ARN}" >/dev/null 2>&1; then
+  # Policy exists; AWS caps at 5 versions. If at 5, delete the oldest NON-default version.
+  versions_json="$(aws iam list-policy-versions --policy-arn "${POLICY_ARN}")"
+  versions_count="$(jq -r '.Versions | length' <<<"${versions_json}")" || versions_count=0
+  if [[ "${versions_count}" -ge 5 ]]; then
+    oldest_non_default="$(jq -r '.Versions | map(select(.IsDefaultVersion==false)) | sort_by(.CreateDate) | .[0].VersionId' <<<"${versions_json}")"
+    if [[ -n "${oldest_non_default}" && "${oldest_non_default}" != "null" ]]; then
+      aws iam delete-policy-version --policy-arn "${POLICY_ARN}" --version-id "${oldest_non_default}" >/dev/null
+      msg "Pruned oldest non-default policy version: ${oldest_non_default}"
+    fi
+  fi
+  aws iam create-policy-version \
+    --policy-arn "${POLICY_ARN}" \
+    --policy-document "file://${TMP_POLICY}" \
+    --set-as-default >/dev/null
+  msg "Updated policy ${POLICY_NAME} (set new default version)"
+else
+  aws iam create-policy \
+    --policy-name "${POLICY_NAME}" \
+    --policy-document "file://${TMP_POLICY}" >/dev/null
+  msg "Created policy ${POLICY_NAME}"
+fi
+
+# Attach policy to user if not yet attached
+if ! aws iam list-attached-user-policies --user-name "${SA_NAME}" \
+      --query "AttachedPolicies[?PolicyName=='${POLICY_NAME}']" --output text | grep -q .; then
+  aws iam attach-user-policy --user-name "${SA_NAME}" --policy-arn "${POLICY_ARN}" >/dev/null
+  msg "Attached policy to user"
+else
+  msg "Policy already attached to user"
+fi
+
+# Create access key (ensure we don't exceed 2 keys)
+keys_count="$(aws iam list-access-keys --user-name "${SA_NAME}" --query 'length(AccessKeyMetadata)' --output text)"
+if [[ "${keys_count}" -ge 2 ]]; then
+  err "User already has ${keys_count} access keys (AWS limit is 2). Delete one before creating a new key."
+fi
+
+KEY_OUT="${ROOT}/.${ACCOUNT_ID}-key.json"
+aws iam create-access-key --user-name "${SA_NAME}" > "${KEY_OUT}"
+chmod 600 "${KEY_OUT}"
+msg "Created access key. Saved to: ${KEY_OUT}"
+msg "Export with:"
+msg "  export AWS_ACCESS_KEY_ID=\$(jq -r .AccessKey.AccessKeyId ${KEY_OUT})"
+msg "  export AWS_SECRET_ACCESS_KEY=\$(jq -r .AccessKey.SecretAccessKey ${KEY_OUT})"

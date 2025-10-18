@@ -35,3 +35,45 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+*lock.hcl
+
+
+
+# certs
+*.pem
+*.key
+*.pub
+
+# OS-specific
+.DS_Store
+
+# Editor-specific
+.vscode
+
+# Log files
+*.log
+
+# Generated files (may contain secerts or sensitive data)
+*-backend.yaml
+*-pv.yaml
+deployments/eks/runai
+
+
+# disco
+images.txt
+sbom.json
+
+# keys
+*key.json
+*.pem 
+*.key
+*.pub
+*.crt
+*.p12
+*.jks
+*.der
+*.pfx
+*.asc
+*.kdbx
+*.gpg
+*.env

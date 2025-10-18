@@ -1,0 +1,121 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: d1  # used to prefix all resources (must be unique per account)
+  csp: AWS
+  account: "123456789101" # enter your AWS account ID here
+  region: us-east-1
+  #destroy: true
+  tags:
+    owner: mchmarny
+    env: dev
+
+cluster:
+  name: demo
+  version: "1.33"  # optional, defaults to latest
+  addOns:  # optional, empty version "" defaults to latest, or null to disable
+    coreDns: ""
+    vpcCni: ""
+    kubeProxy: ""
+    cloudwatchObservability: ""
+    metricsServer: ""
+    ebsCsi: ""
+  controlPlane:
+    cidr: 172.20.0.0/16
+    allowedCidrs: # CIDRs allowed to access control plane (e.g. kubectl)
+      - 1.2.3.4/32
+  adminRoles:
+    - ClusterAdmin
+
+observability:
+  logRetentionInDays: 7
+  metricsGranularity: "1Minute"
+
+network:
+  cidrs:
+    host: 10.0.0.0/16
+    pod: 100.65.0.0/16
+  subnets:
+    public:
+      - cidr: 10.0.1.0/27
+        zone: us-east-1a
+      - cidr: 10.0.2.0/27
+        zone: us-east-1b
+    system:
+      - cidr: 10.0.4.0/22
+        zone: us-east-1a
+      - cidr: 10.0.8.0/22
+        zone: us-east-1c
+    worker:
+      - cidr: 10.0.128.0/17
+        zone: us-east-1-dfw-2a
+        disableEndpoints: true
+    pod:
+      - cidr: 100.65.0.0/16
+        zone: us-east-1-dfw-2a
+        disableEndpoints: true
+  endpoints:
+    - s3
+    - ssm
+    - ec2messages
+    - ssmmessages
+    - logs
+
+compute:
+  # TODO: Replace with your own SSH public key
+  sshPublicKey: "ssh-ed25519 AAAA..."
+
+  nodeGroups:
+
+    # AMIs used in this example (https://cloud-images.ubuntu.com/docs/aws/eks/)
+    # - ami-0b72f4a84c39bcd30 (amd64)
+    # - ami-0b68ba66e5a106899 (arm64)
+
+    system:
+      instanceType: t3.xlarge
+      imageId: ami-0b72f4a84c39bcd30
+      capacity:
+        desired: 3
+        min: 3
+        max: 6
+      blockDevice:
+        mount: "/dev/sda1"
+        type: gp3
+        size: 500
+      labels:
+        nodeGroup: system
+
+    workers:
+      - name: amd-cpu-worker-1
+        instanceType: m6i.xlarge
+        imageId: ami-0b72f4a84c39bcd30
+        capacity:
+          desired: 1  # min/max are inferred from desired
+        blockDevice:
+          mount: "/dev/sda1"
+          type: gp3
+          size: 50
+        labels:
+          nodeGroup: cpu-worker
+
+      - name: arm-cpu-worker-1  # example of multiple node groups of the same type, block device omitted to use defaults
+        instanceType: c6gn.xlarge
+        imageId: ami-0b68ba66e5a106899
+        capacity:
+          desired: 1
+        labels:
+          nodeGroup: cpu-worker
+
+      - name: gpu-worker-1
+        instanceType: p6e-gb200.36xlarge
+        gpuType: gb200
+        imageId: ami-0b68ba66e5a106899
+        capacity:
+          desired: 0
+          reservation:  # example of capacity reservation usage
+            marketType: capacity-block
+            preference: capacity-reservations-only
+            resourceGroup: demo-gb200-rg  # arn derived form account id and region
+        labels:
+          nodeGroup: gpu-worker

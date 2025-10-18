@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+
+set -e
+
+DIR="$(dirname "$0")"
+. $DIR/common
+
+# configuration
+CLUSTER_NAME=${1:-"test"}
+
+# Check if the required tools are installed
+REQUIRED_TOOLS=(kind)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+kind delete cluster --name $CLUSTER_NAME

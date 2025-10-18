@@ -1,0 +1,47 @@
+#!/bin/bash
+
+# validation 
+gcloud=$(which gcloud) || ( echo "gcloud not found" && exit 1 )
+
+# Check gcloud is authenticated.
+ACCOUNT=$(gcloud auth list --filter=status:ACTIVE --format="value(account)")
+if [[ -z "${ACCOUNT}" ]]; then
+  echo "Run 'gcloud auth login' to authenticate to GCP first."
+  exit 1
+fi;
+
+# Check project is set
+export PROJECT_ID=$(gcloud config list --format 'value(core.project)')
+if [[ -z "${PROJECT_ID}" ]]; then
+  echo "`gcloud config set project YOUR_PROJECT_ID` note set."
+  exit 1
+fi;
+
+# Check project is set
+export REGION=$(gcloud config list --format 'value(compute.region)')
+if [[ -z "${REGION}" ]]; then
+  echo "`gcloud config set compute/region YOUR_REGION` note set."
+  exit 1
+fi;
+
+# Config
+export CLUSTER_NAME="kcc-demo"
+export CLUSTER_ZONE="${REGION}-c"
+export CLUSTER_CHANNEL="regular"
+export SA_NAME="kcc-demo-sa"
+export DEMO_NS="demo"
+
+# Print variables
+cat << EOF
+
+Configuration:
+  PROJECT_ID: ${PROJECT_ID}
+  ACCOUNT:    ${ACCOUNT}
+  REGION:     ${REGION}
+  ZONE:       ${CLUSTER_ZONE}
+  CLUSTER:    ${CLUSTER_NAME}
+  CHANNEL:    ${CLUSTER_CHANNEL}
+  NAMESPACE:  ${DEMO_NS}
+  ACCOUNT:    ${SA_NAME}
+
+EOF

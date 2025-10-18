@@ -1,0 +1,54 @@
+#!/bin/bash
+
+DIR="$(dirname "$0")"
+. "${DIR}/env"
+
+set -o errexit
+set -o pipefail
+
+
+# Enable APIs.
+gcloud services enable compute.googleapis.com             # GCE
+gcloud services enable container.googleapis.com           # GKE
+gcloud services enable serviceusage.googleapis.com        # KCC
+gcloud services enable containerfilesystem.googleapis.com # Streaming Images
+gcloud services enable iam.googleapis.com                 # IAM
+
+# Create GKE cluster.
+gcloud container clusters create $CLUSTER_NAME \
+    --zone=$CLUSTER_ZONE \
+    --num-nodes=1 \
+    --enable-autoscaling --min-nodes=1 --max-nodes=5 \
+    --image-type="COS_CONTAINERD" \
+    --workload-metadata="GKE_METADATA" \
+    --enable-image-streaming \
+    --release-channel=$CLUSTER_CHANNEL \
+    --addons=ConfigConnector \
+    --workload-pool="${PROJECT_ID}.svc.id.goog" \
+    --labels=demo=kcc,environment=demo \
+    --logging=SYSTEM \
+    --monitoring=SYSTEM
+
+# Get cluster version 
+gcloud container clusters describe $CLUSTER_NAME \
+    --zone $CLUSTER_ZONE --format "value(currentMasterVersion)"
+
+# Creating service account.
+gcloud iam service-accounts create $SA_NAME
+
+# Give service account elevated permissions on your project.
+gcloud projects add-iam-policy-binding $PROJECT_ID \
+    --member="serviceAccount:${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/editor"
+
+# Create policy binding between sa and k8s sa used by KCC.
+gcloud iam service-accounts add-iam-policy-binding \
+    "${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --member="serviceAccount:${PROJECT_ID}.svc.id.goog[cnrm-system/cnrm-controller-manager]" \
+    --role="roles/iam.workloadIdentityUser"
+
+# Get new GKE cluster entry/credentials.
+gcloud container clusters get-credentials $CLUSTER_NAME
+
+echo "DONE"
+

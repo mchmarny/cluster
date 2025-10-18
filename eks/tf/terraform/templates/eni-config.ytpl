@@ -1,0 +1,11 @@
+%{~ for sub in subnets ~}
+apiVersion: crd.k8s.amazonaws.com/v1alpha1
+kind: ENIConfig
+metadata:
+  name: ${sub.name}
+spec:
+  securityGroups:
+    - ${sub.sg}
+  subnet: ${sub.id}
+---
+%{ endfor }

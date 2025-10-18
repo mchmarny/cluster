@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+set -e
+
+# colors
+COLOR_GREEN='\033[0;32m'
+COLOR_RED='\033[0;31m'
+COLOR_RESET='\033[0m' # No color
+MSG_LINE="====================================================================="
+
+# global functions
+err() {
+  local message=$1
+  printf "${COLOR_RED}[ERR]${COLOR_RESET} $message\n" >&2
+  exit 1
+}
+
+msg() {
+  local message=$1
+  printf "${COLOR_GREEN}[MSG]${COLOR_RESET} $message\n" >&2
+}
+
+headmsg() {
+  local message=$1
+  msg $MSG_LINE
+  msg "$message"
+  msg $MSG_LINE
+}
+
+# Check if the required tools are installed
+has_tools() {
+  local tools=("$@")
+  for tool in "${tools[@]}"; do
+      if ! command -v $tool &> /dev/null
+      then
+          err "Required tool ($tool) is not installed."
+          exit 1
+      fi
+  done
+}

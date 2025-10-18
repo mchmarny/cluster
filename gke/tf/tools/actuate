@@ -1,0 +1,82 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Paths
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+ROOT=$(dirname "${DIR}")
+SRC_DIR="${SRC_DIR:-${ROOT}/terraform}"
+CONFIG_FILE="$(realpath "${1:-}")"
+
+# Check for required tools
+REQUIRED_TOOLS=(yq terraform)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# Validate required environment variables
+if [[ -z "$CONFIG_FILE" ]]; then
+  err "Usage: $0 <path to config.yaml>"
+fi
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  err "Error: Config file does not exist at the specified path: ${CONFIG_FILE}"
+fi
+
+if [[ -z "${SRC_DIR:-}" ]]; then
+  err "Error: SRC_DIR environment variable is not set."
+fi
+if [[ ! -d "${SRC_DIR}" ]]; then
+  err "Error: SRC_DIR directory does not exist at the specified path: ${SRC_DIR}"
+fi
+
+# Config 
+DEP_ID="$(yq -er '.deployment.id' $CONFIG_FILE)"
+DEP_REGION="$(yq -er '.deployment.region' $CONFIG_FILE)"
+PROJECT_ID="$(yq -er '.deployment.project' $CONFIG_FILE)"
+CLUSTER="$(yq -er '.cluster.name' $CONFIG_FILE)"
+DESTROY="$(yq -er '.deployment.destroy // "false"' "$CONFIG_FILE")"
+BUCKET_NAME="cluster-builder-state-${PROJECT_ID}"
+STATE_PREFIX="deployments/${DEP_REGION}/${DEP_ID}"
+
+msg "Using"
+msg " config:     $CONFIG_FILE"
+msg " source:     $SRC_DIR"
+msg " deployment: $DEP_ID"
+msg " region:     $DEP_REGION"
+msg " project:    $PROJECT_ID"
+msg " bucket:     $BUCKET_NAME"
+msg " destroy:    $([[ "$DESTROY" == "true" ]] && echo "yes" || echo "no")"
+msg " state:      gs://$BUCKET_NAME/$STATE_PREFIX/terraform.tfstate"
+
+# Check if GOOGLE_APPLICATION_CREDENTIALS is set
+if [[ -z "${GOOGLE_APPLICATION_CREDENTIALS:-}" ]]; then
+  msg "Warning: GOOGLE_APPLICATION_CREDENTIALS not set. Using gcloud default credentials."
+fi
+
+# Initialize, plan and apply
+msg "Initializing Terraform..."
+terraform -chdir="$SRC_DIR" init \
+  -upgrade \
+  -migrate-state \
+  -force-copy \
+  -backend-config="bucket=$BUCKET_NAME" \
+  -backend-config="prefix=$STATE_PREFIX"
+
+if [[ "$DESTROY" == "true" ]]; then
+  msg "Destroying deployment, OK?"
+  read -p "Type 'yes' to confirm destruction: " confirm
+  if [[ "$confirm" != "yes" ]]; then
+    err "Destruction cancelled"
+  fi
+  TF_VAR_CONFIG_PATH="$CONFIG_FILE" terraform -chdir="$SRC_DIR" destroy
+  msg "Destruction complete"
+  exit 0
+fi
+
+msg "Planning deployment..."
+TF_VAR_CONFIG_PATH="$CONFIG_FILE" terraform -chdir="$SRC_DIR" plan -out="plan.cache"
+
+msg "Applying deployment plan..."
+TF_VAR_CONFIG_PATH="$CONFIG_FILE" terraform -chdir="$SRC_DIR" apply "plan.cache"
+
+msg "Deployment complete, connecting to cluster..."
+gcloud container clusters get-credentials ${CLUSTER} --region ${DEP_REGION} --project ${PROJECT_ID}

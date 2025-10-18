@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+
+set -e
+
+DIR="$(dirname "$0")"
+. $DIR/common
+
+# configuration
+CLUSTER_NAME=${1:-"demo"}
+KIND_NODE_IMAGE=${2:-"kindest/node:v1.32.2"}
+KIND_CONFIG_FILE=${3:-"config/config.yaml"}
+
+# check required tools
+REQUIRED_TOOLS=(kind docker)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# Create a cluster with the local registry enabled in containerd
+msg "Creating kind cluster: $CLUSTER_NAME"
+kind create cluster \
+    --name $CLUSTER_NAME \
+    --image $KIND_NODE_IMAGE \
+    --config $KIND_CONFIG_FILE \
+    --wait 5m
+
+# Install nginx
+kubectl apply \
+    -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
+
+kubectl wait -n ingress-nginx \
+  --for=condition=ready pod \
+  --selector=app.kubernetes.io/component=controller \
+  --timeout=90s
