@@ -34,6 +34,9 @@ jobs:
         with:
           terraform_version: 1.13.4
 
+      - name: Create Terraform plugin cache directory
+        run: mkdir -p ~/.terraform.d/plugin-cache
+
       - name: Cache Terraform plugin directory
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830  # v4.3.0
         with:
