@@ -48,61 +48,18 @@ jobs:
       - name: Install TFLint
         uses: terraform-linters/setup-tflint@acd1575d3c037258ce5b2dd01379dc49ce24c6b7  # v6.2.0
 
+      - name: Terraform init
+        run: make tf-init
+
       - name: Terraform fmt (check)
-        run: |
-          set -euo pipefail
-          echo "Running 'terraform fmt -recursive -check -diff'..."
-          terraform fmt -recursive -check -diff
+        run: make tf-fmt
 
       - name: Terraform validate (per directory)
         shell: bash
-        run: |
-          set -euo pipefail
-
-          # Find unique directories that contain *.tf files
-          mapfile -t DIRS < <(git ls-files '*.tf' | xargs -n1 dirname | sort -u)
-
-          if [[ ${#DIRS[@]} -eq 0 ]]; then
-            echo "No Terraform directories found."
-            exit 0
-          fi
-
-          echo "Validating Terraform in the following directories:"
-          printf ' - %s\n' "${DIRS[@]}"
-
-          FAILED=()
-
-          for d in "${DIRS[@]}"; do
-            echo ""
-            echo "=== $d ==="
-            # Use -backend=false to avoid touching remote backends during validation
-            if ! terraform -chdir="$d" init -backend=false -input=false -no-color; then
-              echo "::error title=terraform init failed::$d"
-              FAILED+=("$d (init)")
-              continue
-            fi
-            if ! terraform -chdir="$d" validate -no-color; then
-              echo "::error title=terraform validate failed::$d"
-              FAILED+=("$d (validate)")
-              continue
-            fi
-          done
-
-          if [[ ${#FAILED[@]} -ne 0 ]]; then
-            echo ""
-            echo "The following directories failed:"
-            printf ' - %s\n' "${FAILED[@]}"
-            exit 1
-          fi
+        run: make tf-validate
 
       - name: TFLint (recursive)
-        run: |
-          set -euo pipefail
-          # Initialize TFLint (downloads rulesets) and run recursively.
-          tflint --init
-          # --recursive: scan all subdirectories that contain *.tf
-          # --format=compact for readable CI logs; change to sarif if you want annotations
-          tflint --recursive --format compact
+        run: make tf-lint
 
       - name: Trivy IaC scan (Terraform)
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1

@@ -11,7 +11,6 @@ TF ?= terraform
 TFLINT ?= tflint
 TRIVY ?= trivy
 
-
 # Functions
 define list_tf_dirs
 git ls-files '*.tf' | xargs -n1 dirname | sort -u
@@ -20,28 +19,50 @@ TF_DIRS := $(shell $(list_tf_dirs))
 
 # Commands
 
-.PHONY: check
-check: ## Run all checks
+.PHONY: dep-check
+dep-check: ## Run all dependency checks
 	@command -v $(TF) >/dev/null || { echo "Missing '$(TF)'. Install Terraform."; exit 127; }
 	@command -v $(TFLINT) >/dev/null || { echo "Missing '$(TFLINT)'. Install tflint."; exit 127; }
 	@command -v $(TRIVY) >/dev/null || { echo "Missing '$(TRIVY)'. Install trivy."; exit 127; }
 
-.PHONY: fmt
-fmt: check ## Format Terraform files (per directory)
+.PHONY: tf-init
+tf-init: dep-check ## Initialize Terraform in all directories
+	@mkdir -p ~/.terraform.d/plugin-cache
 	@for dir in $(TF_DIRS); do \
-		echo "Formatting Terraform files in $$dir"; \
-		$(TF) fmt $$dir; \
+		echo "Initializing Terraform in $$dir"; \
+		$(TF) -chdir=$$dir init -backend=false -input=false -no-color; \
 	done
 
-.PHONY: fmt-check
-fmt-check: check ## Check Terraform file formatting (per directory)
+.PHONY: tf-validate
+tf-validate: tf-init ## Validate Terraform configuration in all directories
+	@echo "Validating Terraform configurations..."
+	@FAILED=""; \
+	for dir in $(TF_DIRS); do \
+		echo "Validating $$dir..."; \
+		if ! $(TF) -chdir=$$dir validate -no-color; then \
+			if [ -z "$$FAILED" ]; then \
+				FAILED="$$dir"; \
+			else \
+				FAILED="$$FAILED $$dir"; \
+			fi; \
+		fi; \
+	done; \
+	if [ -n "$$FAILED" ]; then \
+		echo ""; \
+		echo "Validation failed in: $$FAILED"; \
+		exit 1; \
+	fi; \
+	echo "All Terraform configurations are valid!"
+
+.PHONY: tf-fmt
+tf-fmt: dep-check ## Check Terraform file formatting (per directory)
 	@for dir in $(TF_DIRS); do \
 		echo "Checking format of Terraform files in $$dir"; \
 		$(TF) fmt -check -diff $$dir; \
 	done
 
-.PHONY: lint
-lint: check ## Run tflint (per directory)
+.PHONY: tf-lint
+tf-lint: dep-check ## Run tflint (per directory)
 	@$(TFLINT) --init
 	@for dir in $(TF_DIRS); do \
 		echo "Running tflint in $$dir"; \
@@ -49,11 +70,11 @@ lint: check ## Run tflint (per directory)
 	done
 
 .PHONY: scan
-scan: check ## Run trivy security scan
+scan: dep-check ## Run trivy security scan
 	@$(TRIVY) config . --severity $(SCAN_SEVERITY) --format table --ignorefile .trivyignore --quiet
 
-.PHONY: validate ## Run all validation checks
-validate: fmt-check lint scan ## Run all validation checks (format, lint, security scan)
+.PHONY: all
+all: tf-validate tf-lint tf-fmt scan  ## Run all validation checks (format, lint, security scan, terraform validate)
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \
