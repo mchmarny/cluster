@@ -41,7 +41,7 @@ resource "aws_kms_key" "eks" {
   })
 
   tags = merge(local.config.deployment.tags, {
-    Name = "${local.prefix}-eks-secrets",
+    Name           = "${local.prefix}-eks-secrets",
     LastReconciled = "${local.updateTime}",
   })
 }
