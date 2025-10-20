@@ -1,5 +1,3 @@
-data "google_client_config" "current" {}
-
 data "google_project" "current" {
   project_id = local.project
 }
@@ -11,7 +9,7 @@ data "http" "egress_ip" {
 
 locals {
   // Load configuration from YAML file
-  config = yamldecode(file("${var.CONFIG_PATH}"))
+  config = yamldecode(file(var.CONFIG_PATH))
 
   configDir      = dirname(var.CONFIG_PATH)
   configFilename = basename(var.CONFIG_PATH)
@@ -50,7 +48,6 @@ locals {
 
   // Network
   vpc_name = try(local.config.network.name, "${local.prefix}-vpc")
-  vpc_cidr = try(local.config.network.cidr, "10.0.0.0/16")
 
   // NAT configuration
   nat_enabled                     = try(local.config.network.nat.enabled, true)

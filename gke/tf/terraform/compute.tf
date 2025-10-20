@@ -3,13 +3,9 @@
 // =====================================================================================
 
 locals {
-  # Map node pools to their designated subnets
-  node_pool_subnets = {
-    for np in local.all_node_pools :
-    np.name => np.type == "system" ? keys(local.node_subnets)[0] : keys(local.node_subnets)[length(keys(local.node_subnets)) > 1 ? 1 : 0]
-  }
 }
 
+// All node pools
 resource "google_container_node_pool" "pools" {
   for_each = { for np in local.all_node_pools : np.name => np }
 

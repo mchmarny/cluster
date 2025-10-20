@@ -25,68 +25,6 @@ locals {
     aws_subnet.main["${local.prefix}-system-${cfg.zone}"].id
   ]
 
-  # Define routing tables for each subnet type
-  route_tables_public = {
-    for i, sub in local.config.network.subnets.public :
-    "${local.prefix}-public-${i}" => {
-      routes = [
-        {
-          cidr_block = "0.0.0.0/0"
-          gateway_id = aws_internet_gateway.main.id
-        }
-      ]
-    }
-  }
-
-  route_tables_system = {
-    for i, sub in local.config.network.subnets.system :
-    "${local.prefix}-system-${i}" => {
-      routes = [
-        {
-          cidr_block     = "0.0.0.0/0"
-          nat_gateway_id = aws_nat_gateway.main["${local.prefix}-nat-${i}"].id
-        }
-      ]
-    }
-  }
-
-  route_tables_worker = {
-    for i, sub in local.config.network.subnets.worker :
-    "${local.prefix}-worker-${i}" => {
-      routes = [
-        {
-          cidr_block     = "0.0.0.0/0"
-          nat_gateway_id = aws_nat_gateway.main["${local.prefix}-nat-${i}"].id
-        }
-      ]
-    }
-  }
-
-  # Define routing tables associations - simplified mapping to direct resources
-  route_table_association_public = {
-    for i, cfg in local.config.network.subnets.public :
-    "${local.prefix}-public-${i}" => {
-      route_table_id = aws_route_table.public["${local.prefix}-public-rt-${i}"].id
-      subnet_id      = aws_subnet.main["${local.prefix}-public-${cfg.zone}"].id
-    }
-  }
-
-  route_table_association_system = {
-    for i, cfg in local.config.network.subnets.system :
-    "${local.prefix}-system-${i}" => {
-      route_table_id = aws_route_table.private_system["${local.prefix}-system-rt-${i}"].id
-      subnet_id      = aws_subnet.main["${local.prefix}-system-${cfg.zone}"].id
-    }
-  }
-
-  route_table_association_worker = {
-    for i, cfg in local.config.network.subnets.worker :
-    "${local.prefix}-worker-${i}" => {
-      route_table_id = aws_route_table.private_worker["${local.prefix}-worker-rt-${i}"].id
-      subnet_id      = aws_subnet.main["${local.prefix}-worker-${cfg.zone}"].id
-    }
-  }
-
 }
 
 # VPC
@@ -366,7 +304,7 @@ resource "local_file" "eniconfig" {
     subnets = flatten([
       for name, group in local.config.network.subnets : [
         for _, cfg in group : {
-          name = "${cfg.zone}" # Use zone name directly to match ENI_CONFIG_LABEL_DEF
+          name = cfg.zone # Use zone name directly to match ENI_CONFIG_LABEL_DEF
           sg   = aws_security_group.main["${local.prefix}-${name}"].id
           id   = aws_subnet.main["${local.prefix}-${name}-${cfg.zone}"].id
         }

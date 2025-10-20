@@ -6,11 +6,11 @@ data "http" "egress_ip" {
 
 locals {
   // Load configuration from YAML file
-  config = yamldecode(file("${var.CONFIG_PATH}"))
+  config = yamldecode(file(var.CONFIG_PATH))
 
-  configDir       = dirname(var.CONFIG_PATH)
-  configFilename  = basename(var.CONFIG_PATH)
-  configBasename  = replace(local.configFilename, "/\\.ya?ml$/", "")
+  configDir      = dirname(var.CONFIG_PATH)
+  configFilename = basename(var.CONFIG_PATH)
+  configBasename = replace(local.configFilename, "/\\.ya?ml$/", "")
   statusFilePath = "${local.configDir}/${local.configBasename}-status.json"
 
   // Update time 
@@ -38,10 +38,8 @@ locals {
   vpcCniWarmIpTarget    = tostring(try(local.config.networking.vpcCni.warmIpTarget, 20))
 
   // ASG Configuration
-  asgHealthCheckType        = try(local.config.compute.autoscaling.healthCheck.type, "EC2")
   asgHealthCheckGracePeriod = try(local.config.compute.autoscaling.healthCheck.gracePeriod, 300)
   asgCapacityTimeout        = try(local.config.compute.autoscaling.capacityTimeout, "10m")
-  asgTerminationPolicies    = try(local.config.compute.autoscaling.terminationPolicies, ["OldestLaunchTemplate", "OldestInstance"])
   asgMinHealthyPercentage   = try(local.config.compute.autoscaling.instanceRefresh.minHealthyPercentage, 90)
   asgInstanceWarmup         = try(local.config.compute.autoscaling.instanceRefresh.instanceWarmup, 300)
   asgCheckpointPercentages  = try(local.config.compute.autoscaling.instanceRefresh.checkpointPercentages, [50, 100])
@@ -66,7 +64,7 @@ locals {
 
 check "account_matches" {
   assert {
-    condition     = "${local.account}" == "${local.config.deployment.account}"
+    condition     = local.account == local.config.deployment.account
     error_message = "Invalid AWS account (want: ${local.config.deployment.account}, got: ${local.account})."
   }
 }
