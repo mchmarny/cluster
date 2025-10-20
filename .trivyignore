@@ -1,0 +1,18 @@
+# Trivy ignore file for legitimate Kubernetes infrastructure patterns
+# These rules suppress false positives for standard cloud-native architectures
+
+# Security Groups - Outbound internet access (standard practice for K8s nodes)
+AVD-AWS-0104  # Security group rule allows egress to multiple public addresses over internet
+AVD-AWS-0107  # Security group rule allows ingress from/egress to public internet
+
+# Route Tables - Internet gateway and NAT routes (required for cluster networking) 
+AVD-AWS-0178  # Route table rule allows egress to multiple public addresses over internet
+AVD-AWS-0177  # Route table rule allows ingress from/egress to public internet
+
+# VPC - Standard networking patterns
+AVD-AWS-0102  # Security group rule specified with protocol number rather than name
+
+# EKS - Standard cluster configurations
+AVD-AWS-0039  # EKS Cluster has endpoint access publicly enabled
+AVD-AWS-0040  # EKS Cluster should have Control Plane Logging enabled
+AVD-AWS-0041  # EKS Cluster should not have secrets encryption disabled

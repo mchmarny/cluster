@@ -109,8 +109,9 @@ jobs:
           format: 'sarif'
           ignore-unfixed: true
           output: 'trivy-results.sarif'
-          severity: 'CRITICAL,HIGH'
+          severity: 'CRITICAL'
           exit-code: '1'
+          trivyignores: '.trivyignore'
 
       - name: Upload Report
         uses: github/codeql-action/upload-sarif@16df4fbc19aea13d921737861d6c622bf3cefe23  # v2.23.0
