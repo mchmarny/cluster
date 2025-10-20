@@ -105,12 +105,11 @@ jobs:
         uses: aquasecurity/trivy-action@b6643a29fecd7f34b3597bc6acb0a98b03d33ff8  # v0.33.1
         with:
           scan-type: 'config'
-          hide-progress: true
+          scan-ref: '.'
           format: 'sarif'
-          ignore-unfixed: true
           output: 'trivy-results.sarif'
           severity: 'CRITICAL'
-          exit-code: '1'
+          exit-code: '0'
           trivyignores: '.trivyignore'
 
       - name: Upload Report

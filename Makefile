@@ -4,10 +4,12 @@ SHELL := bash
 .SHELLFLAGS      := -eu -o pipefail -c
 .DEFAULT_GOAL    := help
 YAML_FILES       := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
+SCAN_SEVERITY    := CRITICAL,HIGH
 
 # Tools
 TF ?= terraform
 TFLINT ?= tflint
+TRIVY ?= trivy
 
 
 # Functions
@@ -22,6 +24,7 @@ TF_DIRS := $(shell $(list_tf_dirs))
 check: ## Run all checks
 	@command -v $(TF) >/dev/null || { echo "Missing '$(TF)'. Install Terraform."; exit 127; }
 	@command -v $(TFLINT) >/dev/null || { echo "Missing '$(TFLINT)'. Install tflint."; exit 127; }
+	@command -v $(TRIVY) >/dev/null || { echo "Missing '$(TRIVY)'. Install trivy."; exit 127; }
 
 .PHONY: fmt
 fmt: check ## Format Terraform files (per directory)
@@ -44,6 +47,13 @@ lint: check ## Run tflint (per directory)
 		echo "Running tflint in $$dir"; \
 		$(TFLINT) --chdir=$$dir --format compact || true; \
 	done
+
+.PHONY: scan
+scan: check ## Run trivy security scan
+	@$(TRIVY) config . --severity $(SCAN_SEVERITY) --format table --ignorefile .trivyignore --quiet
+
+.PHONY: validate ## Run all validation checks
+validate: fmt-check lint scan ## Run all validation checks (format, lint, security scan)
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \
