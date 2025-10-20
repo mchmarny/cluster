@@ -2,11 +2,7 @@ name: terraform-validate
 
 on:
   push:
-    branches: [ main, master ]
-    paths:
-      - '**/*.tf'
-      - '**/*.tfvars'
-      - '**/.terraform.lock.hcl'
+    branches: [ main ]
   pull_request:
     paths:
       - '**/*.tf'
