@@ -118,6 +118,7 @@ resource "azurerm_network_security_rule" "system_kubelet" {
 }
 
 // System NSG - ICMP for path MTU discovery
+// trivy:ignore:AVD-AZU-0047 ICMP must be allowed from any source for MTU path discovery (RFC 1191)
 resource "azurerm_network_security_rule" "system_icmp" {
   name                        = "AllowICMP"
   priority                    = 130
@@ -216,6 +217,7 @@ resource "azurerm_network_security_rule" "worker_ingress" {
 }
 
 // Worker NSG - ICMP for path MTU discovery
+// trivy:ignore:AVD-AZU-0047 ICMP must be allowed from any source for MTU path discovery (RFC 1191)
 resource "azurerm_network_security_rule" "worker_icmp" {
   name                        = "AllowICMP"
   priority                    = 140
@@ -290,6 +292,7 @@ resource "azurerm_network_security_rule" "pod_from_nodes" {
 }
 
 // Pod NSG - ICMP for path MTU discovery
+// trivy:ignore:AVD-AZU-0047 ICMP must be allowed from any source for MTU path discovery (RFC 1191)
 resource "azurerm_network_security_rule" "pod_icmp" {
   count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
 

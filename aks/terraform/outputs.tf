@@ -91,7 +91,7 @@ locals {
         name               = azurerm_kubernetes_cluster.main.default_node_pool[0].name
         vmSize             = azurerm_kubernetes_cluster.main.default_node_pool[0].vm_size
         availabilityZones  = azurerm_kubernetes_cluster.main.default_node_pool[0].zones
-        autoScalingEnabled   = azurerm_kubernetes_cluster.main.default_node_pool[0].auto_scaling_enabled
+        autoScalingEnabled = azurerm_kubernetes_cluster.main.default_node_pool[0].auto_scaling_enabled
         minCount           = azurerm_kubernetes_cluster.main.default_node_pool[0].min_count
         maxCount           = azurerm_kubernetes_cluster.main.default_node_pool[0].max_count
         currentNodeCount   = azurerm_kubernetes_cluster.main.default_node_pool[0].node_count
@@ -105,7 +105,7 @@ locals {
           name               = v.name
           vmSize             = v.vm_size
           availabilityZones  = v.zones
-          autoScalingEnabled   = v.auto_scaling_enabled
+          autoScalingEnabled = v.auto_scaling_enabled
           minCount           = v.min_count
           maxCount           = v.max_count
           currentNodeCount   = v.node_count

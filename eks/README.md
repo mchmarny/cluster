@@ -765,8 +765,8 @@ tools/actuate configs/demo.yaml
 **Output:**
 ```
 [MSG] Using
-[MSG]  config:     /dev/aws/eks/tf/configs/demo.yaml
-[MSG]  source:     /dev/aws/eks/tf/terraform
+[MSG]  config:     /dev/eks/configs/demo.yaml
+[MSG]  source:     /dev/eks/terraform
 [MSG]  deployment: d1
 [MSG]  location:   us-east-1
 [MSG]  tenancy:    <ACCOUNT_ID>

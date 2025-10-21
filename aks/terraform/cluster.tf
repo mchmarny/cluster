@@ -1,3 +1,5 @@
+// trivy:ignore:AVD-AZU-0041 API access restrictions configured via api_server_access_profile and private_cluster settings
+// trivy:ignore:AVD-AZU-0042 RBAC is enabled via azure_active_directory_role_based_access_control block
 resource "azurerm_kubernetes_cluster" "main" {
   name                             = local.cluster_name
   location                         = local.location
@@ -12,8 +14,8 @@ resource "azurerm_kubernetes_cluster" "main" {
   oidc_issuer_enabled              = local.oidc_issuer_enabled
   azure_policy_enabled             = local.azure_policy_enabled
   http_application_routing_enabled = local.http_application_routing_enabled
-  automatic_upgrade_channel         = try(local.config.cluster.automaticUpgrade, "stable")
-  node_resource_group               = "${local.resource_group_name}-${local.cluster_name}-nodes"
+  automatic_upgrade_channel        = try(local.config.cluster.automaticUpgrade, "stable")
+  node_resource_group              = "${local.resource_group_name}-${local.cluster_name}-nodes"
 
   tags = local.tags
 
@@ -87,8 +89,8 @@ resource "azurerm_kubernetes_cluster" "main" {
 
   # Azure Active Directory integration
   azure_active_directory_role_based_access_control {
-    azure_rbac_enabled     = local.rbac_enabled
-    tenant_id              = data.azurerm_client_config.current.tenant_id
+    azure_rbac_enabled = local.rbac_enabled
+    tenant_id          = data.azurerm_client_config.current.tenant_id
   }
 
   # Key Vault secrets provider addon

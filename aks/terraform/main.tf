@@ -1,7 +1,5 @@
 data "azurerm_client_config" "current" {}
 
-data "azurerm_subscription" "current" {}
-
 data "http" "egress_ip" {
   url             = "https://checkip.amazonaws.com"
   request_headers = { Accept = "text/plain" }
