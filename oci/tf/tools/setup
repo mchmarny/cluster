@@ -1,0 +1,91 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Paths
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+ROOT=$(dirname "${DIR}")
+OUT_DIR="${ROOT}/terraform"
+
+# Check for required tools
+REQUIRED_TOOLS=(oci yq)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# Config
+CONFIG_FILE="${1:-}"
+if [[ -z "$CONFIG_FILE" ]]; then
+  err "Usage: $0 <path to config.yaml>"
+fi
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  err "Error: Config file does not exist at the specified path: ${CONFIG_FILE}"
+fi
+
+# Derived variables
+TENANCY_OCID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
+COMPARTMENT_OCID=$(yq -er '.deployment.compartment' "$CONFIG_FILE")
+REGION=$(yq -er '.deployment.region' "$CONFIG_FILE")
+DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
+BUCKET_NAME="cluster-builder-state-${DEPLOYMENT_ID}"
+NAMESPACE="$(oci os ns get --query 'data' --raw-output)"
+
+# Validate OCI CLI configuration
+CURRENT_TENANCY="$(oci iam tenancy get --tenancy-id "$TENANCY_OCID" --query 'data.id' --raw-output 2>/dev/null || echo '')"
+if [[ -z "$CURRENT_TENANCY" ]]; then
+  err "Cannot access tenancy ${TENANCY_OCID}. Check your OCI CLI configuration."
+fi
+
+msg "Tenancy OCID:    ${TENANCY_OCID}"
+msg "Compartment OCID: ${COMPARTMENT_OCID}"
+msg "Region:          ${REGION}"
+msg "Namespace:       ${NAMESPACE}"
+msg "Bucket:          ${BUCKET_NAME}"
+msg "Output:          ${OUT_DIR}"
+
+# prep 
+mkdir -p "$OUT_DIR"
+
+# Enable required APIs / Services
+msg "Checking required OCI services..."
+# OCI doesn't have an enable/disable service concept like GCP
+# Services are enabled by default at the tenancy level
+
+# Create Object Storage bucket for Terraform state
+msg "Creating Object Storage bucket for Terraform state..."
+BUCKET_EXISTS=$(oci os bucket get --namespace "$NAMESPACE" --bucket-name "$BUCKET_NAME" \
+  --compartment-id "$COMPARTMENT_OCID" --query 'data.name' --raw-output 2>/dev/null || echo "")
+
+if [[ -z "$BUCKET_EXISTS" ]]; then
+  oci os bucket create \
+    --namespace "$NAMESPACE" \
+    --compartment-id "$COMPARTMENT_OCID" \
+    --name "$BUCKET_NAME" \
+    --public-access-type NoPublicAccess \
+    --storage-tier Standard \
+    --versioning Enabled
+  msg "Created bucket: ${BUCKET_NAME}"
+else
+  msg "Bucket already exists: ${BUCKET_NAME}"
+fi
+
+# Verify compartment access
+msg "Verifying compartment access..."
+COMP_NAME=$(oci iam compartment get --compartment-id "$COMPARTMENT_OCID" \
+  --query 'data.name' --raw-output 2>/dev/null || echo "")
+
+if [[ -z "$COMP_NAME" ]]; then
+  err "Cannot access compartment ${COMPARTMENT_OCID}. Check your permissions."
+fi
+msg "Compartment name: ${COMP_NAME}"
+
+# Setup complete
+msg "Setup complete!"
+msg ""
+msg "Next steps:"
+msg "1. Set OCI authentication environment variables:"
+msg "   export OCI_USER_OCID='your-user-ocid'"
+msg "   export OCI_FINGERPRINT='your-key-fingerprint'"
+msg "   export OCI_PRIVATE_KEY_PATH='~/.oci/oci_api_key.pem'"
+msg ""
+msg "2. Run the actuate script to deploy:"
+msg "   ./tools/actuate ${CONFIG_FILE}"

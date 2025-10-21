@@ -1,0 +1,90 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: d1  # used to prefix all resources (must be unique per compartment)
+  csp: OCI
+  tenancy: "ocid1.tenancy.oc1..aaaaaaaXXXXXXXX"  # enter your OCI tenancy OCID here
+  compartment: "ocid1.compartment.oc1..aaaaaaaXXXXXXXX"  # enter your OCI compartment OCID here
+  region: us-ashburn-1
+  deletionProtection: false
+  # destroy: true
+  tags:
+    owner: your-username
+    env: dev
+
+cluster:
+  name: demo
+  version: "v1.33.1"  # OKE Kubernetes version
+  addons:  # OKE managed addons
+    clusterAutoscaler: false
+    kubernetesDashboard: false
+    certManager: false
+  controlPlane:
+    cidr: 172.20.0.0/16  # services CIDR
+    allowedCidrs:  # CIDRs allowed to access control plane (e.g. kubectl)
+      - 1.2.3.4/32  # Replace with your IP
+
+observability:
+  logRetentionInDays: 30
+
+network:
+  cidrs:
+    host: 10.0.0.0/16  # VCN CIDR
+    pod: 100.65.0.0/16  # Pod CIDR
+  subnets:
+    public:  # For load balancers
+      - cidr: 10.0.1.0/27
+      - cidr: 10.0.2.0/27
+    apiEndpoint:  # For Kubernetes API endpoint (private)
+      - cidr: 10.0.3.0/28
+    nodePools:  # For worker nodes
+      - cidr: 10.0.4.0/22
+      - cidr: 10.0.8.0/22
+    pods:  # For pod networking
+      - cidr: 100.65.0.0/18
+      - cidr: 100.65.64.0/18
+
+compute:
+  sshPublicKey: "ssh-ed25519 AAAA..."  # TODO: Replace with your SSH public key
+  nodePools:
+    system:
+      type: system
+      shape: VM.Standard.E5.Flex  # AMD E5 Flex
+      ocpus: 2
+      memoryGb: 16
+      diskSizeGb: 100
+      size: 3
+      maxPodsPerNode: 31
+      autoscaling:
+        enabled: true
+        minSize: 2
+        maxSize: 10
+        targetCpuPercent: 70
+
+    worker:
+      type: worker
+      shape: VM.Standard.E5.Flex
+      ocpus: 4
+      memoryGb: 32
+      diskSizeGb: 200
+      size: 2
+      maxPodsPerNode: 31
+      autoscaling:
+        enabled: true
+        minSize: 1
+        maxSize: 20
+        targetCpuPercent: 70
+
+    # Optional: GPU node pool
+    # gpu:
+    #   type: worker
+    #   shape: VM.GPU.A10.1  # NVIDIA A10
+    #   diskSizeGb: 500
+    #   size: 1
+    #   maxPodsPerNode: 15
+    #   autoscaling:
+    #     enabled: true
+    #     minSize: 0
+    #     maxSize: 5
+    #     targetCpuPercent: 70
