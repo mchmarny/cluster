@@ -1,5 +1,6 @@
 // trivy:ignore:AVD-AZU-0041 API access restrictions configured via api_server_access_profile and private_cluster settings
 // trivy:ignore:AVD-AZU-0042 RBAC is enabled via azure_active_directory_role_based_access_control block
+// trivy:ignore:AVD-AZU-0040 Azure Monitor logging is optional and configured via monitoring.logAnalyticsWorkspaceId in config
 resource "azurerm_kubernetes_cluster" "main" {
   name                             = local.cluster_name
   location                         = local.location

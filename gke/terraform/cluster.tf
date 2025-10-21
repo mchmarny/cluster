@@ -36,6 +36,8 @@ resource "google_kms_crypto_key_iam_member" "gke_secrets_encrypter" {
 // GKE Cluster
 // =====================================================================================
 
+// trivy:ignore:AVD-GCP-0053 Private cluster is configurable via cluster.private.enabled setting
+// trivy:ignore:AVD-GCP-0059 Private nodes are enabled when cluster.private.enabled is true in config
 resource "google_container_cluster" "main" {
   provider = google-beta
 
@@ -70,6 +72,12 @@ resource "google_container_cluster" "main" {
   ip_allocation_policy {
     cluster_secondary_range_name  = try(local.secondary_ranges[keys(local.node_subnets)[0]].pods.rangeName, null)
     services_secondary_range_name = try(local.secondary_ranges[keys(local.node_subnets)[0]].services.rangeName, null)
+  }
+
+  # Network policy configuration
+  network_policy {
+    enabled  = true
+    provider = "PROVIDER_UNSPECIFIED" # Uses Calico as default provider
   }
 
   # Private cluster configuration
