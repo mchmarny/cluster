@@ -2,45 +2,40 @@
 
 Collection of Kubernetes cluster deployment tools for multiple cloud platforms and local development. This repository provides deployment tools and configurations for creating Kubernetes clusters across different platforms:
 
-### Managed Kubernetes Platforms
+## Managed Kubernetes Platforms
 
-#### Azure Kubernetes Service (AKS)
+### [Azure Kubernetes Service (AKS)](./aks/)
 
-**Location**: `ake/`
   - Production-ready with comprehensive security and networking
   - Network Security Groups for system/worker/pod isolation
   - Azure AD Workload Identity for pod-level authentication
   - Private cluster support with private DNS zones
   - Key Vault Secrets Provider and Container Insights integration
 
-#### Amazon Elastic Kubernetes Service (EKS)
+### [Amazon Elastic Kubernetes Service (EKS)](./eks/)
 
-**Location**: `eks/`
   - Production-ready with advanced networking and security
   - Multi-AZ deployment, custom VPC, VPC CNI custom networking
   - Self-managed node groups with system/worker separation
 
-#### Google Kubernetes Engine (GKE)
+### [Google Kubernetes Engine (GKE)](./gke/)
 
-**Location**: `gke/`
   - Enterprise-grade deployment with advanced features
   - Regional cluster, custom VPC networking, Workload Identity
   - Private cluster with authorized networks
 
-#### Oracle Kubernetes Engine (OKE)
+### [Oracle Kubernetes Engine (OKE)](./oke/)
 
-**Location**: `oke/`
   - Production-ready deployment for Oracle Cloud Infrastructure
   - VCN-native pod networking for optimal performance
   - Regional cluster with flexible compute shapes
   - Advanced IAM with dynamic groups and policies
   - Support for GPU and ARM-based workloads
 
-### Local Development
+## Local Development
 
-#### KinD (Kubernetes in Docker)
+### [KinD (Kubernetes in Docker)](./kind/)
 
-**Location**: `kind/`
 - KinD with Makefile automation
 - Local cluster for development and testing
 
