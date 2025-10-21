@@ -66,3 +66,80 @@ resource "oci_identity_policy" "cluster_autoscaler" {
 
   freeform_tags = local.freeform_tags
 }
+
+# Workload Identity Policy for FSS CSI Driver
+resource "oci_identity_policy" "fss_workload" {
+  compartment_id = local.compartment_ocid
+  name           = "${local.prefix}-fss-workload-policy"
+  description    = "Workload identity policy for FSS CSI driver in ${local.prefix}"
+
+  statements = [
+    <<-EOT
+      Allow any-user to manage file-family in compartment id ${local.compartment_ocid} where ALL {
+        request.principal.type = 'workload',
+        request.principal.namespace = 'kube-system',
+        request.principal.service_account = 'fss-csi-controller-sa',
+        request.principal.cluster_id = '${oci_containerengine_cluster.main.id}'
+      }
+    EOT
+    ,
+    <<-EOT
+      Allow any-user to use virtual-network-family in compartment id ${local.compartment_ocid} where ALL {
+        request.principal.type = 'workload',
+        request.principal.namespace = 'kube-system',
+        request.principal.service_account = 'fss-csi-controller-sa',
+        request.principal.cluster_id = '${oci_containerengine_cluster.main.id}'
+      }
+    EOT
+    ,
+    <<-EOT
+      Allow any-user to manage mount-targets in compartment id ${local.compartment_ocid} where ALL {
+        request.principal.type = 'workload',
+        request.principal.namespace = 'kube-system',
+        request.principal.service_account = 'fss-csi-controller-sa',
+        request.principal.cluster_id = '${oci_containerengine_cluster.main.id}'
+      }
+    EOT
+  ]
+
+  freeform_tags = local.freeform_tags
+}
+
+# Workload Identity Policy for Cluster Resources
+resource "oci_identity_policy" "cluster_workload" {
+  compartment_id = local.compartment_ocid
+  name           = "${local.prefix}-cluster-workload-policy"
+  description    = "Workload identity policy for cluster operations in ${local.prefix}"
+
+  statements = [
+    # Allow any workload in the cluster to join the cluster
+    <<-EOT
+      Allow any-user to {CLUSTER_JOIN} in compartment id ${local.compartment_ocid} where ALL {
+        request.principal.type = 'cluster',
+        target.cluster.id = '${oci_containerengine_cluster.main.id}'
+      }
+    EOT
+  ]
+
+  freeform_tags = local.freeform_tags
+}
+
+# Workload Identity Policy for Secrets Access (example for specific namespaces)
+resource "oci_identity_policy" "secrets_workload" {
+  count = try(local.config.iam.enableSecretsAccess, false) ? 1 : 0
+
+  compartment_id = local.compartment_ocid
+  name           = "${local.prefix}-secrets-workload-policy"
+  description    = "Workload identity policy for secrets access in ${local.prefix}"
+
+  statements = [
+    <<-EOT
+      Allow any-user to read secret-bundles in compartment id ${local.compartment_ocid} where ALL {
+        request.principal.type = 'workload',
+        request.principal.cluster_id = '${oci_containerengine_cluster.main.id}'
+      }
+    EOT
+  ]
+
+  freeform_tags = local.freeform_tags
+}

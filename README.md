@@ -1,12 +1,8 @@
 # Cluster
 
-Collection of Kubernetes cluster deployment tools for multiple cloud platforms and local development.
+Collection of Kubernetes cluster deployment tools for multiple cloud platforms and local development. This repository provides deployment tools and configurations for creating Kubernetes clusters across different platforms:
 
-## Overview
-
-This repository provides deployment tools and configurations for creating Kubernetes clusters across different platforms:
-
-### Cloud Platforms
+### Managed Kubernetes Platforms
 
 #### Azure Kubernetes Service (AKS)
 - **Location**: `aks/`
@@ -35,6 +31,14 @@ This repository provides deployment tools and configurations for creating Kubern
   - Regional cluster, custom VPC networking, Workload Identity
   - Private cluster with authorized networks
 
+#### Oracle Kubernetes Engine (OKE)
+- **Terraform**: `oci/tf/`
+  - Production-ready deployment for Oracle Cloud Infrastructure
+  - VCN-native pod networking for optimal performance
+  - Regional cluster with flexible compute shapes
+  - Advanced IAM with dynamic groups and policies
+  - Support for GPU and ARM-based workloads
+
 ### Local Development
 
 #### KinD (Kubernetes in Docker)
@@ -52,6 +56,7 @@ This repository provides deployment tools and configurations for creating Kubern
 
 ## Prerequisites
 
-- Platform-specific CLI tools (Azure CLI, AWS CLI, gcloud, kubectl)
-- For Terraform deployments: Terraform installed
+- Platform-specific CLI tools (Azure CLI, AWS CLI, gcloud, OCI CLI, kubectl)
+- For Terraform deployments: Terraform >= 1.13.0 installed
 - For KinD: Docker installed and running
+- yq (YAML processor) for configuration management

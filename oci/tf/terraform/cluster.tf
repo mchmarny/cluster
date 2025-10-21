@@ -4,6 +4,7 @@ resource "oci_containerengine_cluster" "main" {
   name               = local.cluster_name
   vcn_id             = oci_core_vcn.main.id
   kubernetes_version = local.oke_version
+  type               = "ENHANCED_CLUSTER"
 
   cluster_pod_network_options {
     cni_type = "OCI_VCN_IP_NATIVE"
@@ -12,6 +13,7 @@ resource "oci_containerengine_cluster" "main" {
   endpoint_config {
     is_public_ip_enabled = false
     subnet_id            = values(oci_core_subnet.api_endpoint)[0].id
+    nsg_ids              = [oci_core_network_security_group.control_plane.id]
   }
 
   options {

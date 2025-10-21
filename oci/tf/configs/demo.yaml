@@ -4,13 +4,13 @@ kind: Cluster
 deployment:
   id: d1  # used to prefix all resources (must be unique per compartment)
   csp: OCI
-  tenancy: "ocid1.tenancy.oc1..aaaaaaaXXXXXXXX"  # enter your OCI tenancy OCID here
-  compartment: "ocid1.compartment.oc1..aaaaaaaXXXXXXXX"  # enter your OCI compartment OCID here
+  tenancy: "ocid1.tenancy.oc1..aaaaaaaXXXXXXXX"  # enter OCI tenancy OCID here
+  compartment: "ocid1.compartment.oc1..aaaaaaaXXXXXXXX"  # enter OCI compartment OCID here
   region: us-ashburn-1
   deletionProtection: false
   # destroy: true
   tags:
-    owner: your-username
+    owner: mchmarny
     env: dev
 
 cluster:
@@ -23,7 +23,7 @@ cluster:
   controlPlane:
     cidr: 172.20.0.0/16  # services CIDR
     allowedCidrs:  # CIDRs allowed to access control plane (e.g. kubectl)
-      - 1.2.3.4/32  # Replace with your IP
+      - 1.2.3.4/32  # Replace with your CIDR
 
 observability:
   logRetentionInDays: 30
@@ -44,9 +44,15 @@ network:
     pods:  # For pod networking
       - cidr: 100.65.0.0/18
       - cidr: 100.65.64.0/18
+    # Optional: Storage subnet for File Storage Service (FSS/NFS)
+    # storage:
+    #   - cidr: 10.0.12.0/24
+
+iam:
+  enableSecretsAccess: false  # Enable workload identity for OCI Vault secrets access
 
 compute:
-  sshPublicKey: "ssh-ed25519 AAAA..."  # TODO: Replace with your SSH public key
+  sshPublicKey: "ssh-ed25519 AAAA..."  # TODO: Replace with SSH public key
   nodePools:
     system:
       type: system

@@ -20,6 +20,8 @@ resource "oci_containerengine_node_pool" "pools" {
       }
     }
 
+    nsg_ids = [oci_core_network_security_group.nodes.id]
+
     freeform_tags = merge(
       local.freeform_tags,
       {
@@ -34,6 +36,7 @@ resource "oci_containerengine_node_pool" "pools" {
       cni_type          = "OCI_VCN_IP_NATIVE"
       max_pods_per_node = try(each.value.maxPodsPerNode, 31)
       pod_subnet_ids    = [for s in oci_core_subnet.pods : s.id]
+      pod_nsg_ids       = [oci_core_network_security_group.pods.id]
     }
   }
 

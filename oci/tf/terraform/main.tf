@@ -54,41 +54,4 @@ locals {
 
   // SSH public key
   ssh_public_key = try(local.config.compute.sshPublicKey, null)
-
-  // Status for output
-  status = {
-    tenancyId = local.tenancy_ocid
-    cluster = {
-      id             = oci_containerengine_cluster.main.id
-      name           = local.cluster_name
-      version        = oci_containerengine_cluster.main.kubernetes_version
-      endpoint       = oci_containerengine_cluster.main.endpoints[0].private_endpoint
-      kubeconfigPath = local_sensitive_file.kubeconfig.filename
-    }
-    network = {
-      vcnId       = oci_core_vcn.main.id
-      vcnCidr     = local.vcn_cidr
-      podCidr     = local.pod_cidr
-      serviceCidr = local.service_cidr
-      subnets = {
-        public      = { for k, v in oci_core_subnet.public : k => { id = v.id, cidr = v.cidr_block } }
-        apiEndpoint = { for k, v in oci_core_subnet.api_endpoint : k => { id = v.id, cidr = v.cidr_block } }
-        nodePools   = { for k, v in oci_core_subnet.node_pools : k => { id = v.id, cidr = v.cidr_block } }
-        pods        = { for k, v in oci_core_subnet.pods : k => { id = v.id, cidr = v.cidr_block } }
-      }
-    }
-    nodePools = {
-      for k, v in oci_containerengine_node_pool.pools : k => {
-        id                = v.id
-        name              = v.name
-        kubernetesVersion = v.kubernetes_version
-        nodeShape         = v.node_shape
-        size              = v.node_config_details[0].size
-      }
-    }
-    iam = {
-      dynamicGroupId = oci_identity_dynamic_group.node_pools.id
-    }
-    lastUpdated = local.updateTime
-  }
 }
