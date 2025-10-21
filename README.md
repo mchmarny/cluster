@@ -5,34 +5,31 @@ Collection of Kubernetes cluster deployment tools for multiple cloud platforms a
 ### Managed Kubernetes Platforms
 
 #### Azure Kubernetes Service (AKS)
-- **Location**: `aks/`
-- **Tool**: Azure CLI with Makefile automation
-- **Features**: Configurable cluster parameters, static IP provisioning, node pool management
-- **Usage**: `make cluster` for deployment
+
+**Location**: `ake/`
+  - Production-ready with comprehensive security and networking
+  - Network Security Groups for system/worker/pod isolation
+  - Azure AD Workload Identity for pod-level authentication
+  - Private cluster support with private DNS zones
+  - Key Vault Secrets Provider and Container Insights integration
 
 #### Amazon Elastic Kubernetes Service (EKS)
-- **CloudFormation**: `eks/cf/`
-  - AWS CloudFormation templates for EKS deployment
-  - Custom AMI support for specialized workloads
-- **eksctl**: `eks/eksctl/` 
-  - Simple YAML-based cluster configuration
-  - Quick cluster creation with `eksctl create cluster`
-- **Terraform**: `eks/tf/`
+
+**Location**: `eks/`
   - Production-ready with advanced networking and security
   - Multi-AZ deployment, custom VPC, VPC CNI custom networking
   - Self-managed node groups with system/worker separation
 
 #### Google Kubernetes Engine (GKE)
-- **gcloud CLI**: `gke/gcloud/`
-  - Simple script-based deployment
-  - Basic cluster setup with essential APIs
-- **Terraform**: `gke/tf/`
+
+**Location**: `gke/`
   - Enterprise-grade deployment with advanced features
   - Regional cluster, custom VPC networking, Workload Identity
   - Private cluster with authorized networks
 
 #### Oracle Kubernetes Engine (OKE)
-- **Terraform**: `oci/tf/`
+
+**Location**: `oke/`
   - Production-ready deployment for Oracle Cloud Infrastructure
   - VCN-native pod networking for optimal performance
   - Regional cluster with flexible compute shapes
@@ -42,10 +39,10 @@ Collection of Kubernetes cluster deployment tools for multiple cloud platforms a
 ### Local Development
 
 #### KinD (Kubernetes in Docker)
-- **Location**: `kind/`
-- **Tool**: KinD with Makefile automation
-- **Features**: Local cluster for development and testing
-- **Usage**: `make cluster-up` for creation, `make cluster-down` for cleanup
+
+**Location**: `kind/`
+- KinD with Makefile automation
+- Local cluster for development and testing
 
 ## Getting Started
 

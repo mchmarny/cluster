@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+
+# Setup script for AKS Terraform backend (Azure Storage)
+# This script creates the required Azure Storage Account and Container for Terraform state
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Source common functions
+# shellcheck source=./common
+source "${SCRIPT_DIR}/common"
+
+# Default values
+DEFAULT_STORAGE_ACCOUNT_PREFIX="tfstate"
+DEFAULT_CONTAINER_NAME="tfstate"
+DEFAULT_SKU="Standard_LRS"
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS]
+
+Setup Azure Storage backend for Terraform state.
+
+OPTIONS:
+    -c, --config FILE           Path to YAML configuration file (required)
+    -s, --storage-account NAME  Storage account name (default: auto-generated)
+    -n, --container NAME        Container name (default: ${DEFAULT_CONTAINER_NAME})
+    -k, --sku SKU              Storage account SKU (default: ${DEFAULT_SKU})
+    -h, --help                 Show this help message
+
+EXAMPLES:
+    $(basename "$0") -c ../configs/demo.yaml
+    $(basename "$0") -c ../configs/demo.yaml -s mystorageaccount -n mycontainer
+
+EOF
+}
+
+main() {
+    local config_file=""
+    local storage_account_name=""
+    local container_name="${DEFAULT_CONTAINER_NAME}"
+    local sku="${DEFAULT_SKU}"
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -c|--config)
+                config_file="$2"
+                shift 2
+                ;;
+            -s|--storage-account)
+                storage_account_name="$2"
+                shift 2
+                ;;
+            -n|--container)
+                container_name="$2"
+                shift 2
+                ;;
+            -k|--sku)
+                sku="$2"
+                shift 2
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Validate required arguments
+    if [ -z "${config_file}" ]; then
+        log_error "Configuration file is required"
+        usage
+        exit 1
+    fi
+    
+    # Check prerequisites
+    check_prerequisites
+    check_azure_login
+    validate_config "${config_file}"
+    
+    # Extract values from config
+    local deployment_id
+    local subscription_id
+    local resource_group
+    local location
+    
+    deployment_id=$(parse_config "${config_file}" ".deployment.id")
+    subscription_id=$(parse_config "${config_file}" ".deployment.subscription")
+    resource_group=$(parse_config "${config_file}" ".deployment.resourceGroup")
+    location=$(parse_config "${config_file}" ".deployment.location")
+    
+    # Generate storage account name if not provided
+    if [ -z "${storage_account_name}" ]; then
+        # Storage account names must be 3-24 characters, lowercase letters and numbers only
+        local sanitized_id
+        sanitized_id=$(echo "${deployment_id}" | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
+        storage_account_name="${DEFAULT_STORAGE_ACCOUNT_PREFIX}${sanitized_id}"
+        
+        # Truncate if too long
+        if [ ${#storage_account_name} -gt 24 ]; then
+            storage_account_name="${storage_account_name:0:24}"
+        fi
+    fi
+    
+    log_info "Setup configuration:"
+    log_info "  Deployment ID:     ${deployment_id}"
+    log_info "  Subscription:      ${subscription_id}"
+    log_info "  Resource Group:    ${resource_group}"
+    log_info "  Location:          ${location}"
+    log_info "  Storage Account:   ${storage_account_name}"
+    log_info "  Container:         ${container_name}"
+    log_info "  SKU:               ${sku}"
+    
+    # Set subscription
+    log_info "Setting Azure subscription..."
+    az account set --subscription "${subscription_id}"
+    
+    # Create resource group if it doesn't exist
+    log_info "Ensuring resource group exists..."
+    if ! az group show --name "${resource_group}" &> /dev/null; then
+        log_info "Creating resource group: ${resource_group}"
+        az group create \
+            --name "${resource_group}" \
+            --location "${location}" \
+            --tags "deployment-id=${deployment_id}" "managed-by=terraform" "purpose=tfstate"
+    else
+        log_info "Resource group already exists: ${resource_group}"
+    fi
+    
+    # Create storage account if it doesn't exist
+    log_info "Ensuring storage account exists..."
+    if ! az storage account show --name "${storage_account_name}" --resource-group "${resource_group}" &> /dev/null; then
+        log_info "Creating storage account: ${storage_account_name}"
+        az storage account create \
+            --name "${storage_account_name}" \
+            --resource-group "${resource_group}" \
+            --location "${location}" \
+            --sku "${sku}" \
+            --kind StorageV2 \
+            --https-only true \
+            --min-tls-version TLS1_2 \
+            --allow-blob-public-access false \
+            --tags "deployment-id=${deployment_id}" "managed-by=terraform" "purpose=tfstate"
+    else
+        log_info "Storage account already exists: ${storage_account_name}"
+    fi
+    
+    # Enable versioning and soft delete
+    log_info "Configuring storage account security features..."
+    az storage account blob-service-properties update \
+        --account-name "${storage_account_name}" \
+        --resource-group "${resource_group}" \
+        --enable-versioning true \
+        --enable-delete-retention true \
+        --delete-retention-days 30 \
+        --enable-container-delete-retention true \
+        --container-delete-retention-days 30
+    
+    # Get storage account key
+    local storage_key
+    storage_key=$(az storage account keys list \
+        --account-name "${storage_account_name}" \
+        --resource-group "${resource_group}" \
+        --query '[0].value' -o tsv)
+    
+    # Create container if it doesn't exist
+    log_info "Ensuring container exists..."
+    if ! az storage container show \
+        --name "${container_name}" \
+        --account-name "${storage_account_name}" \
+        --account-key "${storage_key}" &> /dev/null; then
+        log_info "Creating container: ${container_name}"
+        az storage container create \
+            --name "${container_name}" \
+            --account-name "${storage_account_name}" \
+            --account-key "${storage_key}"
+    else
+        log_info "Container already exists: ${container_name}"
+    fi
+    
+    # Generate backend configuration
+    local backend_config="${SCRIPT_DIR}/../terraform/backend.tf"
+    local backend_tfvars="${SCRIPT_DIR}/../terraform/backend.tfvars"
+    
+    log_info "Backend configuration:"
+    cat << EOF
+
+Add the following to your ${backend_config}:
+
+terraform {
+  backend "azurerm" {
+    resource_group_name  = "${resource_group}"
+    storage_account_name = "${storage_account_name}"
+    container_name       = "${container_name}"
+    key                  = "${deployment_id}.tfstate"
+  }
+}
+
+Or create ${backend_tfvars} with:
+
+resource_group_name  = "${resource_group}"
+storage_account_name = "${storage_account_name}"
+container_name       = "${container_name}"
+key                  = "${deployment_id}.tfstate"
+
+Then run: terraform init -backend-config=backend.tfvars
+
+EOF
+    
+    # Create backend.tfvars file
+    log_info "Creating backend.tfvars file..."
+    cat > "${backend_tfvars}" << EOF
+resource_group_name  = "${resource_group}"
+storage_account_name = "${storage_account_name}"
+container_name       = "${container_name}"
+key                  = "${deployment_id}.tfstate"
+EOF
+    
+    log_info "Setup completed successfully!"
+    log_info "Storage backend ready for Terraform state"
+}
+
+main "$@"

@@ -1,0 +1,292 @@
+#!/usr/bin/env bash
+
+# Actuate script for AKS Terraform deployment
+# This script orchestrates the complete deployment lifecycle
+
+set -o errexit
+set -o nounset
+set -o pipefail
+
+# Get script directory
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TERRAFORM_DIR="${SCRIPT_DIR}/../terraform"
+
+# Source common functions
+# shellcheck source=./common
+source "${SCRIPT_DIR}/common"
+
+usage() {
+    cat << EOF
+Usage: $(basename "$0") [OPTIONS] COMMAND
+
+Actuate AKS cluster deployment with Terraform.
+
+COMMANDS:
+    plan        Generate and show execution plan
+    apply       Apply the Terraform configuration
+    destroy     Destroy the infrastructure
+    refresh     Refresh Terraform state
+    output      Show deployment outputs
+    validate    Validate configuration without applying
+
+OPTIONS:
+    -c, --config FILE       Path to YAML configuration file (required)
+    -a, --auto-approve      Skip interactive approval (use with caution)
+    -v, --verbose          Enable verbose output
+    -h, --help             Show this help message
+
+EXAMPLES:
+    $(basename "$0") -c ../configs/demo.yaml plan
+    $(basename "$0") -c ../configs/demo.yaml apply
+    $(basename "$0") -c ../configs/demo.yaml -a apply
+    $(basename "$0") -c ../configs/demo.yaml output
+    $(basename "$0") -c ../configs/demo.yaml destroy
+
+EOF
+}
+
+plan_deployment() {
+    local config_file=$1
+    local terraform_dir=$2
+    
+    log_info "Planning deployment..."
+    
+    cd "${terraform_dir}"
+    terraform plan \
+        -var="CONFIG_PATH=${config_file}" \
+        -out=tfplan
+    
+    log_info "Plan saved to tfplan"
+    log_info "Review the plan above before applying"
+}
+
+apply_deployment() {
+    local config_file=$1
+    local terraform_dir=$2
+    local auto_approve=$3
+    
+    log_info "Applying deployment..."
+    
+    cd "${terraform_dir}"
+    
+    if [ "${auto_approve}" = "true" ]; then
+        terraform apply -auto-approve \
+            -var="CONFIG_PATH=${config_file}"
+    else
+        # Check if plan exists
+        if [ -f "tfplan" ]; then
+            log_info "Applying saved plan..."
+            terraform apply tfplan
+            rm -f tfplan
+        else
+            terraform apply \
+                -var="CONFIG_PATH=${config_file}"
+        fi
+    fi
+    
+    log_info "Deployment completed successfully"
+    
+    # Show status
+    show_output "${terraform_dir}"
+}
+
+destroy_deployment() {
+    local config_file=$1
+    local terraform_dir=$2
+    local auto_approve=$3
+    
+    log_warn "This will destroy all resources!"
+    
+    if [ "${auto_approve}" != "true" ]; then
+        read -r -p "Are you sure you want to destroy? [y/N] " response
+        if [[ ! "${response}" =~ ^[Yy]$ ]]; then
+            log_info "Destroy cancelled"
+            return 0
+        fi
+    fi
+    
+    log_info "Destroying deployment..."
+    
+    cd "${terraform_dir}"
+    
+    if [ "${auto_approve}" = "true" ]; then
+        terraform destroy -auto-approve \
+            -var="CONFIG_PATH=${config_file}"
+    else
+        terraform destroy \
+            -var="CONFIG_PATH=${config_file}"
+    fi
+    
+    log_info "Destroy completed"
+}
+
+refresh_state() {
+    local config_file=$1
+    local terraform_dir=$2
+    
+    log_info "Refreshing Terraform state..."
+    
+    cd "${terraform_dir}"
+    terraform refresh \
+        -var="CONFIG_PATH=${config_file}"
+    
+    log_info "State refreshed successfully"
+}
+
+show_output() {
+    local terraform_dir=$1
+    
+    log_info "Deployment status:"
+    
+    cd "${terraform_dir}"
+    
+    if ! terraform output -json status &> /dev/null; then
+        log_warn "No outputs available (run apply first)"
+        return 0
+    fi
+    
+    local status
+    status=$(terraform output -json status)
+    
+    echo ""
+    echo "=================================================="
+    echo "  AKS CLUSTER DEPLOYMENT STATUS"
+    echo "=================================================="
+    echo ""
+    echo "Cluster Name:     $(echo "${status}" | jq -r '.cluster.name')"
+    echo "Cluster Version:  $(echo "${status}" | jq -r '.cluster.version')"
+    echo "Endpoint:         $(echo "${status}" | jq -r '.cluster.endpoint')"
+    echo "Resource Group:   $(echo "${status}" | jq -r '.deployment.resourceGroup')"
+    echo "Location:         $(echo "${status}" | jq -r '.deployment.location')"
+    echo "Deployment ID:    $(echo "${status}" | jq -r '.deployment.id')"
+    echo ""
+    echo "ACCESS COMMANDS:"
+    echo "  Admin:  $(echo "${status}" | jq -r '.access.kubeconfigAdmin')"
+    echo "  User:   $(echo "${status}" | jq -r '.access.kubeconfigUser')"
+    echo "  Portal: $(echo "${status}" | jq -r '.access.portal')"
+    echo ""
+    echo "Status File: $(echo "${status}" | jq -r '.statusFile')"
+    echo "=================================================="
+    echo ""
+}
+
+validate_deployment() {
+    local config_file=$1
+    local terraform_dir=$2
+    
+    log_info "Validating deployment configuration..."
+    
+    # Validate config file
+    validate_config "${config_file}"
+    
+    # Format Terraform
+    format_terraform "${terraform_dir}"
+    
+    # Validate Terraform
+    validate_terraform "${terraform_dir}"
+    
+    # Run plan in check mode
+    cd "${terraform_dir}"
+    terraform plan \
+        -var="CONFIG_PATH=${config_file}" \
+        -input=false
+    
+    log_info "Validation completed successfully"
+}
+
+main() {
+    local config_file=""
+    local command=""
+    local auto_approve="false"
+    local verbose="false"
+    
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            -c|--config)
+                config_file="$2"
+                shift 2
+                ;;
+            -a|--auto-approve)
+                auto_approve="true"
+                shift
+                ;;
+            -v|--verbose)
+                verbose="true"
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            plan|apply|destroy|refresh|output|validate)
+                command="$1"
+                shift
+                ;;
+            *)
+                log_error "Unknown option: $1"
+                usage
+                exit 1
+                ;;
+        esac
+    done
+    
+    # Validate required arguments
+    if [ -z "${config_file}" ]; then
+        log_error "Configuration file is required"
+        usage
+        exit 1
+    fi
+    
+    if [ -z "${command}" ]; then
+        log_error "Command is required"
+        usage
+        exit 1
+    fi
+    
+    # Enable verbose mode
+    if [ "${verbose}" = "true" ]; then
+        set -x
+    fi
+    
+    # Convert to absolute path
+    config_file="$(cd "$(dirname "${config_file}")" && pwd)/$(basename "${config_file}")"
+    
+    # Check prerequisites
+    check_prerequisites
+    check_azure_login
+    validate_config "${config_file}"
+    
+    # Initialize Terraform
+    init_terraform "${TERRAFORM_DIR}"
+    
+    # Execute command
+    case "${command}" in
+        plan)
+            plan_deployment "${config_file}" "${TERRAFORM_DIR}"
+            ;;
+        apply)
+            apply_deployment "${config_file}" "${TERRAFORM_DIR}" "${auto_approve}"
+            ;;
+        destroy)
+            destroy_deployment "${config_file}" "${TERRAFORM_DIR}" "${auto_approve}"
+            ;;
+        refresh)
+            refresh_state "${config_file}" "${TERRAFORM_DIR}"
+            show_output "${TERRAFORM_DIR}"
+            ;;
+        output)
+            show_output "${TERRAFORM_DIR}"
+            ;;
+        validate)
+            validate_deployment "${config_file}" "${TERRAFORM_DIR}"
+            ;;
+        *)
+            log_error "Unknown command: ${command}"
+            usage
+            exit 1
+            ;;
+    esac
+}
+
+main "$@"

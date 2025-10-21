@@ -1,0 +1,134 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: d1  # used to prefix all resources (must be unique per tenancy)
+  csp: Azure
+  tenancy: "00000000-0000-0000-0000-000000000000"  # Azure subscription ID
+  location: eastus
+  destroy: false
+  tags:
+    owner: mchmarny
+    env: dev
+  azure:
+    resourceGroup: "rg-aks-demo"  # Resource group name
+
+cluster:
+  name: demo
+  version: "1.30"  # AKS Kubernetes version
+  
+  # AKS-specific features
+  features:
+    workloadIdentity: true  # Enable workload identity federation
+    oidcIssuer: true  # Enable OIDC issuer
+    azureKeyVaultSecretsProvider: true  # CSI driver for Key Vault
+    azurePolicy: false  # Azure Policy for AKS
+    
+  addons:  # AKS managed addons
+    azureDiskCsiDriver: true
+    azureFileCsiDriver: true
+    httpApplicationRouting: false  # Not recommended for production
+    
+  controlPlane:
+    cidr: 172.20.0.0/16  # services CIDR
+    dnsServiceIp: 172.20.0.10  # DNS service IP (must be within service CIDR)
+    authorizedIpRanges:  # CIDRs allowed to access API server
+      - 1.2.3.4/32  # Replace with your CIDR
+  
+  # Private cluster configuration
+  private:
+    enabled: true
+    privateDnsZoneId: null  # null for system-managed, or provide custom private DNS zone ID
+    
+  # Maintenance window
+  maintenance:
+    allowed:
+      - day: Sunday
+        hours: [1, 2, 3, 4, 5]  # 1 AM - 6 AM UTC
+    notAllowed:
+      - start: "2024-12-24T00:00:00Z"
+        end: "2024-12-26T23:59:59Z"
+
+security:
+  networkPolicy: azure  # azure or calico
+  rbac: true
+  localAccounts: false  # Disable local accounts, use AAD only
+  defenderEnabled: false  # Microsoft Defender for Containers
+
+observability:
+  logAnalyticsWorkspaceId: null  # Provide Log Analytics workspace ID or null to create new
+  applicationInsights: false
+  prometheusEnabled: false
+
+network:
+  vnetAddressSpace: 10.0.0.0/16  # VNet CIDR
+  podCidr: 10.244.0.0/16  # Pod CIDR for Azure CNI Overlay or Kubenet
+  serviceCidr: 172.20.0.0/16  # Must match controlPlane.cidr
+  dnsServiceIp: 172.20.0.10  # Must match controlPlane.dnsServiceIp
+  networkPlugin: azure  # azure or kubenet
+  networkMode: transparent  # transparent or bridge
+  outboundType: loadBalancer  # loadBalancer, userDefinedRouting, or managedNATGateway
+  
+  subnets:
+    system:  # System node pool subnet
+      addressPrefix: 10.0.1.0/24
+    worker:  # User node pool subnet
+      addressPrefix: 10.0.2.0/24
+    pods:  # Pods subnet (for Azure CNI)
+      addressPrefix: 10.0.16.0/20
+    services:  # Internal load balancers
+      addressPrefix: 10.0.3.0/24
+    appgw:  # Application Gateway (optional)
+      addressPrefix: 10.0.4.0/24
+
+compute:
+  nodePools:
+    system:
+      type: system
+      mode: System  # System or User
+      vmSize: Standard_D4s_v5  # 4 vCPU, 16 GB RAM
+      osDiskSizeGb: 128
+      nodeCount: 3
+      enableAutoScaling: true
+      minCount: 2
+      maxCount: 10
+      maxPods: 30
+      availabilityZones: [1, 2, 3]
+      nodeLabels:
+        node-type: system
+      nodeTaints: []
+      
+    worker:
+      type: worker
+      mode: User
+      vmSize: Standard_D8s_v5  # 8 vCPU, 32 GB RAM
+      osDiskSizeGb: 256
+      nodeCount: 2
+      enableAutoScaling: true
+      minCount: 1
+      maxCount: 20
+      maxPods: 50
+      availabilityZones: [1, 2, 3]
+      nodeLabels:
+        node-type: worker
+      nodeTaints: []
+      
+    # Optional: GPU node pool
+    # gpu:
+    #   type: worker
+    #   mode: User
+    #   vmSize: Standard_NC6s_v3  # 6 vCPU, 112 GB RAM, 1x NVIDIA V100
+    #   osDiskSizeGb: 512
+    #   nodeCount: 0
+    #   enableAutoScaling: true
+    #   minCount: 0
+    #   maxCount: 5
+    #   maxPods: 20
+    #   availabilityZones: [1, 2, 3]
+    #   nodeLabels:
+    #     node-type: gpu
+    #     accelerator: nvidia-v100
+    #   nodeTaints:
+    #     - key: nvidia.com/gpu
+    #       value: "true"
+    #       effect: NoSchedule
