@@ -5,8 +5,6 @@ BRANCH          := $(shell git rev-parse --abbrev-ref HEAD)
 REMOTE 		    := $(shell git remote get-url origin)
 USER 		    := $(shell git config user.username)
 CHANGES         := $(shell git status --porcelain | wc -l | xargs)
-REGISTRY        := ghcr.io
-IMAGE           := $(REGISTRY)/$(USER)/$(PROJECT)
 SHELL           := bash
 .ONESHELL:
 .SHELLFLAGS     := -eu -o pipefail -c
@@ -36,8 +34,6 @@ info: ## Prints the current project info
 	@echo "  remote:            $(REMOTE)"
 	@echo "  user:              $(USER)"
 	@echo "  changes:           $(CHANGES)"
-	@echo "  registry:          $(REGISTRY)"
-	@echo "  image:             $(IMAGE)"
 
 .PHONY: dep-check
 dep-check: ## Run all dependency checks
@@ -97,22 +93,6 @@ scan: dep-check ## Run trivy security scan
 
 .PHONY: all
 all: tf-validate tf-lint tf-fmt scan  ## Run all validation checks (format, lint, security scan, terraform validate)
-
-.PHONY: base
-base: ## Builds and pushes the base image
-	@set -e; \
-	echo "$(GITHUB_TOKEN)" | docker login $(REGISTRY) -u oauthtoken --password-stdin; \
-	docker build --no-cache --force-rm --platform linux/amd64 \
-		-t "$(IMAGE):$(COMMIT)" \
-		-f img/base.docker \
-		--push .
-
-.PHONY: run
-run: ## Run tools image locally
-	@set -e; \
-	docker pull "$(IMAGE):latest"; \
-	docker run -it "$(IMAGE):latest" bash
-
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \
