@@ -1,10 +1,18 @@
 # Vars
-SHELL := bash
+PROJECT 		:= $(shell basename `git rev-parse --show-toplevel`)
+COMMIT          := $(shell git rev-parse --short HEAD)
+BRANCH          := $(shell git rev-parse --abbrev-ref HEAD)
+REMOTE 		    := $(shell git remote get-url origin)
+USER 		    := $(shell git config user.username)
+CHANGES         := $(shell git status --porcelain | wc -l | xargs)
+REGISTRY        := ghcr.io
+IMAGE           := $(REGISTRY)/$(USER)/$(PROJECT)
+SHELL           := bash
 .ONESHELL:
-.SHELLFLAGS      := -eu -o pipefail -c
-.DEFAULT_GOAL    := help
-YAML_FILES       := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
-SCAN_SEVERITY    := CRITICAL,HIGH
+.SHELLFLAGS     := -eu -o pipefail -c
+.DEFAULT_GOAL   := help
+YAML_FILES      := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
+SCAN_SEVERITY   := CRITICAL,HIGH
 
 # Tools
 TF ?= terraform
@@ -19,11 +27,25 @@ TF_DIRS := $(shell $(list_tf_dirs))
 
 # Commands
 
+.PHONY: info
+info: ## Prints the current project info
+	@echo "Project:"
+	@echo "  name:              $(PROJECT)"
+	@echo "  commit:            $(COMMIT)"
+	@echo "  branch:            $(BRANCH)"
+	@echo "  remote:            $(REMOTE)"
+	@echo "  user:              $(USER)"
+	@echo "  changes:           $(CHANGES)"
+	@echo "  registry:          $(REGISTRY)"
+	@echo "  image:             $(IMAGE)"
+
 .PHONY: dep-check
 dep-check: ## Run all dependency checks
 	@command -v $(TF) >/dev/null || { echo "Missing '$(TF)'. Install Terraform."; exit 127; }
 	@command -v $(TFLINT) >/dev/null || { echo "Missing '$(TFLINT)'. Install tflint."; exit 127; }
 	@command -v $(TRIVY) >/dev/null || { echo "Missing '$(TRIVY)'. Install trivy."; exit 127; }
+
+# Terraform Targets
 
 .PHONY: tf-init
 tf-init: dep-check ## Initialize Terraform in all directories
@@ -75,6 +97,22 @@ scan: dep-check ## Run trivy security scan
 
 .PHONY: all
 all: tf-validate tf-lint tf-fmt scan  ## Run all validation checks (format, lint, security scan, terraform validate)
+
+.PHONY: base
+base: ## Builds and pushes the base image
+	@set -e; \
+	echo "$(GITHUB_TOKEN)" | docker login $(REGISTRY) -u oauthtoken --password-stdin; \
+	docker build --no-cache --force-rm --platform linux/amd64 \
+		-t "$(IMAGE):$(COMMIT)" \
+		-f img/base.docker \
+		--push .
+
+.PHONY: run
+run: ## Run tools image locally
+	@set -e; \
+	docker pull "$(IMAGE):latest"; \
+	docker run -it "$(IMAGE):latest" bash
+
 
 help: ## Displays available commands
 	@echo "Available make targets:"; \
