@@ -2,10 +2,10 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: d1  # used to prefix all resources (must be unique per tenancy)
+  id: d2  # used to prefix all resources (must be unique per tenancy)
   csp: GCP
   tenancy: "my-project"  # GCP project ID, not name
-  location: europe-west4
+  location: us-central1
   destroy: false
   tags:
     owner: mchmarny
@@ -236,3 +236,64 @@ compute:
               
           oauthScopes:
             - https://www.googleapis.com/auth/cloud-platform
+
+      # GPU Worker Pool Example
+      # To enable GPU nodes:
+      #   1. Check GPU availability: gcloud compute accelerator-types list --filter="zone:us-east5"
+      #   2. Uncomment the section below and adjust GPU type/zones as needed
+      
+      - name: gpu-worker-3
+        machineType: a3-megagpu-8g  # H100 GPU instance
+        imageType: COS_CONTAINERD
+        diskType: pd-ssd
+        diskSizeGb: 500
+        
+        # Specific zones for this node pool (optional, defaults to all zones in region)
+        zones:
+          - europe-west4-b
+        
+        guestAccelerator:
+          type: nvidia-h100-mega-80gb  # GPU type (use: gcloud compute accelerator-types list)
+          count: 8
+          gpuDriverInstallation:
+            gpuDriverVersion: DEFAULT
+          
+        autoscaling:
+          enabled: false
+          minNodes: 1
+          maxNodes: 1
+          
+        autoUpgrade: true
+        autoRepair: true
+        
+        # Host maintenance policy - required for GPU nodes with capacity reservations
+        hostMaintenancePolicy:
+          maintenanceInterval: PERIODIC
+        
+        nodeConfig:
+          preemptible: false
+          spot: false
+
+          capacityReservations:
+            - "projects/<project-number>/reservations/gsc-a3-megagpu-8g-shared-res-2"
+          
+          tags:
+            - gke-node
+            - worker-node
+            - gpu-worker
+            
+          labels:
+            nodeGroup: gpu-worker
+            workload: ml
+            
+          taints:
+            - key: dedicated
+              value: gpu-workload
+              effect: NO_SCHEDULE
+              
+          oauthScopes:
+            - https://www.googleapis.com/auth/cloud-platform
+            
+          shieldedInstanceConfig:
+            enableSecureBoot: true
+            enableIntegrityMonitoring: true

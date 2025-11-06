@@ -36,8 +36,9 @@ override.tf.json
 .terraformrc
 terraform.rc
 *lock.hcl
-
-
+*.cache
+*.hcl
+*.out
 
 # certs
 *.pem
@@ -77,3 +78,5 @@ sbom.json
 *.kdbx
 *.gpg
 *.env
+
+

@@ -14,6 +14,9 @@ resource "google_container_node_pool" "pools" {
   cluster  = google_container_cluster.main.id
   project  = local.project
 
+  # Specific zones for this node pool (optional)
+  node_locations = try(each.value.zones, null)
+
   # Version management
   version = try(each.value.version, null)
 
@@ -58,7 +61,7 @@ resource "google_container_node_pool" "pools" {
       content {
         consume_reservation_type = "SPECIFIC_RESERVATION"
         key                      = "compute.googleapis.com/reservation-name"
-        values                   = each.value
+        values                   = [reservation_affinity.value]
       }
     }
 
@@ -118,6 +121,14 @@ resource "google_container_node_pool" "pools" {
       content {
         enable_secure_boot          = try(each.value.nodeConfig.shieldedInstanceConfig.enableSecureBoot, true)
         enable_integrity_monitoring = try(each.value.nodeConfig.shieldedInstanceConfig.enableIntegrityMonitoring, true)
+      }
+    }
+
+    # Host maintenance policy (required for GPU nodes with capacity reservations)
+    dynamic "host_maintenance_policy" {
+      for_each = try(each.value.hostMaintenancePolicy.maintenanceInterval, null) != null ? [1] : []
+      content {
+        maintenance_interval = each.value.hostMaintenancePolicy.maintenanceInterval
       }
     }
 

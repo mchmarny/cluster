@@ -100,7 +100,7 @@ gcloud auth login
 gcloud config set project YOUR_PROJECT_ID
 
 # Clone the repository and navigate to GKE terraform
-cd gcp/gke/tf
+cd gke/terraform
 
 # Create your configuration file
 cp configs/demo.yaml configs/my-cluster.yaml

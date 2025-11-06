@@ -22,8 +22,9 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 # Derived variables
-PROJECT_ID=$(yq -er '.deployment.project' "$CONFIG_FILE")
-REGION=$(yq -er '.deployment.region' "$CONFIG_FILE")
+msg "Reading configuration from ${CONFIG_FILE}..."
+PROJECT_ID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
+REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
 DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
 SA_NAME="${SA_NAME:-cluster-builder-sa}"
 CURRENT_PROJECT_ID="$(gcloud config get-value project 2>/dev/null || echo '')"
@@ -123,15 +124,18 @@ fi
 
 # Grant required roles to the service account
 REQUIRED_ROLES=(
-  "roles/compute.admin"
-  "roles/container.admin"
-  "roles/iam.serviceAccountAdmin"
-  "roles/iam.serviceAccountUser"
-  "roles/resourcemanager.projectIamAdmin"
   "roles/cloudkms.admin"
+  "roles/compute.admin"
+  "roles/compute.networkAdmin"
+  "roles/container.admin"
+  "roles/container.clusterAdmin"
+  "roles/container.defaultNodeServiceAccount"
+  "roles/iam.serviceAccountAdmin"
   "roles/logging.admin"
   "roles/monitoring.admin"
+  "roles/resourcemanager.projectIamAdmin"
   "roles/storage.admin"
+  "roles/storage.objectAdmin"
 )
 
 for role in "${REQUIRED_ROLES[@]}"; do
