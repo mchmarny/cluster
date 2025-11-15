@@ -53,7 +53,9 @@ resource "google_container_cluster" "main" {
   initial_node_count       = 1
 
   # Delete protection
-  deletion_protection = local.deletion_protection
+  deletion_protection      = local.deletion_protection
+  enable_shielded_nodes    = true
+  datapath_provider        = "ADVANCED_DATAPATH" # Dataplane V2
 
   network    = google_compute_network.main.id
   subnetwork = google_compute_subnetwork.main[keys(local.node_subnets)[0]].id
@@ -74,10 +76,34 @@ resource "google_container_cluster" "main" {
     services_secondary_range_name = try(local.secondary_ranges[keys(local.node_subnets)[0]].services.rangeName, null)
   }
 
+  # Logging and monitoring
+  logging_config {
+    enable_components = [
+      "SYSTEM_COMPONENTS",
+      "APISERVER",
+      "CONTROLLER_MANAGER",
+      "SCHEDULER",
+      "WORKLOADS"
+    ]
+  }
+
   # Network policy configuration
+  # Must be PROVIDER_UNSPECIFIED for Dataplane V2
   network_policy {
-    enabled  = true
+    enabled  = false
     provider = "PROVIDER_UNSPECIFIED" # Uses Calico as default provider
+  }
+
+  monitoring_config {
+    enable_components = ["SYSTEM_COMPONENTS"]
+    managed_prometheus {
+      enabled = false
+    }
+  }
+
+  # Enable GCP Secret Manager for cluster
+  secret_manager_config {
+    enabled = true
   }
 
   # Private cluster configuration
@@ -130,6 +156,13 @@ resource "google_container_cluster" "main" {
 
     gcs_fuse_csi_driver_config {
       enabled = local.gcs_fuse_csi_enabled
+    }
+
+    http_load_balancing {
+      disabled = false
+    }
+    horizontal_pod_autoscaling {
+      disabled = false
     }
   }
 
