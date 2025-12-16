@@ -1,7 +1,7 @@
 # GPU Operator Runtime Dependencies
 
 ```mermaid
-flowchart TB
+flowchart LR
   %% =========================================================
   %% GPU Operator Runtime Dependency Graph (with DRA + IMEX)
   %% =========================================================
