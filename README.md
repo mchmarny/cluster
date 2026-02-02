@@ -1,6 +1,6 @@
 # Cluster
 
-Production-ready Kubernetes cluster deployment toolkit for multiple cloud platforms. Provides Terraform configurations with sensible defaults and YAML-based customization.
+Kubernetes cluster deployment toolkit for multiple cloud platforms. Provides Terraform configurations with sensible defaults and YAML-based customization.
 
 ## Platforms
 
