@@ -8,8 +8,48 @@ This test plan validates the EKS cluster deployment with progressively more comp
 - Terraform >= 1.13.0
 - yq >= 4.0
 - kubectl >= 1.28
+- jq >= 1.6
 
-> Make sure to Run `tools/setup configs/test-system-only.yaml` before starting tests!
+> Make sure to run `tools/setup configs/<config>.yaml` before starting tests!
+
+## Automated Validation
+
+Use the `tools/validate` script to automatically verify cluster configuration:
+
+```bash
+./tools/validate configs/test-system-only.yaml
+```
+
+The script performs 30 automated checks and exits with code 0 on success, non-zero on failure.
+
+### Checks Performed
+
+| Category | Checks |
+|----------|--------|
+| **EKS Cluster** | Status (ACTIVE), version, service CIDR, endpoint |
+| **VPC** | VPC ID, subnet count, public/system/worker/pod subnets |
+| **VPC Endpoints** | s3, ssm, ssmmessages, ec2messages, logs availability |
+| **Nodes** | Count matches config, all Ready, taints applied |
+| **ASG** | Exists, desired capacity, multi-AZ spread |
+| **ENI Configs** | Custom networking configured per AZ |
+| **Core Components** | VPC CNI (aws-node), kube-proxy running |
+| **Security Groups** | System and worker security groups exist |
+| **IAM Roles** | EKS cluster, system nodes, worker nodes roles |
+
+### Example Output
+
+```
+[MSG] Validating cluster: test-system-only in us-west-2
+[MSG] Checking EKS cluster...
+[MSG] PASS: Cluster status is ACTIVE
+[MSG] PASS: Cluster version starts with 1.33
+...
+==============================================
+Validation Summary
+==============================================
+[MSG] Passed: 30
+[MSG] All checks passed!
+```
 
 ## Test Configurations
 
@@ -154,9 +194,17 @@ tools/actuate configs/test-system-only.yaml
 
 #### 1.2 Verify
 
+**Automated Validation (Recommended):**
+
+```bash
+./tools/validate configs/test-system-only.yaml
+```
+
+**Manual Verification:**
+
 ```bash
 # Configure kubectl
-aws eks update-kubeconfig --name demo --region us-east-1
+aws eks update-kubeconfig --name test-system-only --region us-west-2
 
 # Check nodes (expect 3 system nodes)
 kubectl get nodes
@@ -168,19 +216,20 @@ kubectl describe nodes | grep -A 3 Taints
 
 # Check system pods
 kubectl get pods -A
-# Expected: CoreDNS, VPC CNI, kube-proxy running
+# Expected: VPC CNI, kube-proxy running
 
-# Verify metrics
-kubectl top nodes
+# Verify VPC endpoints
+aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=<vpc-id>" \
+  --query 'VpcEndpoints[*].{Service:ServiceName,State:State}' --output table
 ```
 
 **Pass Criteria:**
+- [ ] `tools/validate` exits with code 0
 - [ ] 3 nodes in Ready state
 - [ ] System taints applied correctly
-- [ ] CoreDNS pods running (2 replicas)
 - [ ] VPC CNI daemonset running on all nodes
 - [ ] kube-proxy daemonset running on all nodes
-- [ ] Metrics server responding
+- [ ] 5 VPC endpoints available (s3, ssm, ssmmessages, ec2messages, logs)
 
 #### 1.3 Destroy
 
@@ -216,9 +265,17 @@ tools/actuate configs/test-cpu-workers.yaml
 
 #### 2.2 Verify
 
+**Automated Validation (Recommended):**
+
+```bash
+./tools/validate configs/test-cpu-workers.yaml
+```
+
+**Manual Verification:**
+
 ```bash
 # Configure kubectl
-aws eks update-kubeconfig --name demo --region us-east-1
+aws eks update-kubeconfig --name test2 --region us-east-1
 
 # Check all nodes (expect 3 system + 2 amd + 2 arm = 7 nodes)
 kubectl get nodes
@@ -246,6 +303,7 @@ kubectl delete pod test-amd test-arm
 ```
 
 **Pass Criteria:**
+- [ ] `tools/validate` exits with code 0
 - [ ] 7 nodes total in Ready state
 - [ ] 3 system nodes with system taints
 - [ ] 2 amd64 workers with worker taints and arch=amd64 label
@@ -281,9 +339,17 @@ tools/actuate configs/test-gpu-workers.yaml
 
 #### 3.2 Verify
 
+**Automated Validation (Recommended):**
+
+```bash
+./tools/validate configs/test-gpu-workers.yaml
+```
+
+**Manual Verification:**
+
 ```bash
 # Configure kubectl
-aws eks update-kubeconfig --name demo --region us-east-1
+aws eks update-kubeconfig --name test3 --region us-east-1
 
 # Check all nodes (expect 3 system + 2 cpu + 1 gpu = 6 nodes)
 kubectl get nodes
@@ -306,6 +372,7 @@ kubectl delete pod gpu-test
 ```
 
 **Pass Criteria:**
+- [ ] `tools/validate` exits with code 0
 - [ ] 6 nodes total in Ready state
 - [ ] GPU node has gpu=true label
 - [ ] EFA security group created (for EFA-capable instances)
@@ -421,9 +488,11 @@ aws eks delete-cluster --name demo --force
 
 ## Notes
 
+- **Automated Validation:** Use `tools/validate` for consistent, repeatable cluster verification. It performs 30 checks and exits with code 0 on success.
 - **Cost Warning:** GPU instances incur significant costs. Destroy promptly after testing.
 - **IP Auto-Addition:** Terraform automatically adds your current IP to the API server allowed CIDRs.
 - **Automatic AMI Selection:** When `imageId` is omitted, Terraform selects the latest Ubuntu EKS Worker AMI (x86_64) from Canonical. Requires `cluster.version` to be set.
 - **ARM64 Nodes:** Automatic AMI selection only supports x86_64. ARM64 nodes require explicit `imageId`.
 - **SSH Access:** `sshPublicKey` is optional. If omitted, nodes have no SSH access (use SSM Session Manager instead).
 - **Capacity Reservations:** For production GPU workloads, configure capacity reservations in the config.
+- **Minimal Config:** Network subnets and tags are optional. Terraform auto-computes default CIDRs from the VPC CIDR (10.0.0.0/16).
