@@ -4,6 +4,33 @@ data "http" "egress_ip" {
   request_headers = { Accept = "text/plain" }
 }
 
+# Ubuntu EKS Worker AMI lookup (used when imageId is not specified)
+# https://cloud-images.ubuntu.com/docs/aws/eks/
+data "aws_ami" "ubuntu_eks" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu-eks/k8s_${local.eks_version_for_ami}/images/*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+}
+
 locals {
   // Load configuration from YAML file
   config = yamldecode(file(var.CONFIG_PATH))
@@ -19,12 +46,15 @@ locals {
   // Extract required deployment settings
   prefix      = local.config.deployment.id
   region      = local.config.deployment.location
-  account     = local.config.deployment.tenancy  // AWS account ID (consistent with other CSPs)
+  account     = local.config.deployment.tenancy // AWS account ID (consistent with other CSPs)
   egress_cidr = "${trimspace(data.http.egress_ip.response_body)}/32"
 
   // Extract optional deployment settings with defaults
   eks_version  = try(local.config.cluster.version, null)
   cluster_name = try(local.config.cluster.name, "${local.prefix}-eks")
+
+  // EKS version for AMI lookup (must be specified for Ubuntu AMI auto-selection)
+  eks_version_for_ami = local.eks_version
 
   // Network defaults
   vpc_cidr     = try(local.config.network.cidrs.host, "10.0.0.0/16")

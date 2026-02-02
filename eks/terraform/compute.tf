@@ -65,6 +65,13 @@ locals {
       [for k, v in try(ng.labels, {}) : "${k}=${v}"]
     )
   }
+
+  # Compute effective image ID for each node group
+  # Uses provided imageId if specified, otherwise falls back to Ubuntu EKS AMI
+  node_group_image_ids = {
+    for ng in local.all_node_groups :
+    ng.name => try(ng.imageId, null) != null ? ng.imageId : data.aws_ami.ubuntu_eks.id
+  }
 }
 
 # SSH Key Pair
@@ -78,7 +85,7 @@ resource "aws_launch_template" "node_groups" {
   for_each = { for i, group in local.all_node_groups : "${local.prefix}-${group.name}" => group }
 
   name                   = each.key
-  image_id               = each.value.imageId
+  image_id               = local.node_group_image_ids[each.value.name]
   instance_type          = each.value.instanceType
   update_default_version = true
   key_name               = aws_key_pair.main.key_name

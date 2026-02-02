@@ -6,6 +6,7 @@
 
 - [Overview](#overview)
 - [Deployment](#deployment)
+- [Test Plan](#test-plan)
 - [Architecture](#architecture)
 - [Key Features](#key-features)
 - [Network Architecture](#network-architecture)
@@ -232,9 +233,8 @@ deployment:
   location: us-east-1
 
 cluster:
-  controlPlane:
-    allowedCidrs:
-      - 1.2.3.4/32           # Your IP for kubectl access
+  name: demo
+  version: "1.32"  # Required for automatic AMI selection
 
 compute:
   sshPublicKey: "ssh-ed25519 AAAA..."
@@ -242,12 +242,15 @@ compute:
   nodeGroups:
     system:
       instanceType: m6i.xlarge
-      imageId: ami-0b72f4a84c39bcd30  # Ubuntu EKS AMI
+      # imageId: ami-xxx  # Optional: defaults to Ubuntu EKS AMI (amd64)
       capacity:
         desired: 3
 ```
 
-**Note:** EKS requires explicit subnet zone assignments, so `network.subnets` must be specified. See the full configuration below.
+**Notes:**
+- Your current IP is automatically added to the API server allowed CIDRs during deployment
+- The `imageId` is optional - if omitted, Terraform automatically selects the latest Ubuntu EKS Worker AMI for x86_64 architecture from Canonical
+- When using automatic AMI selection, `cluster.version` must be specified to match the correct Ubuntu EKS image
 
 ### Defaults Applied by Terraform
 
@@ -258,6 +261,7 @@ compute:
 | Service CIDR | `172.20.0.0/16` |
 | VPC endpoints | s3, ssm, ec2messages, ssmmessages, logs |
 | Log retention | 7 days |
+| Node image | Ubuntu EKS Worker AMI (x86_64) from Canonical |
 | Workers | Optional (system-only cluster supported) |
 
 ### Full Configuration Example
@@ -842,6 +846,20 @@ Terraform will:
 - Compare current state with desired state
 - Show changes to be made
 - Apply only the necessary updates
+
+---
+
+## Test Plan
+
+A comprehensive test plan is available for validating cluster deployments. See [TEST_PLAN.md](TEST_PLAN.md) for:
+
+- **Test 1:** System-only cluster (deploy, verify, destroy)
+- **Test 2:** System + multiple CPU worker pools (amd64, arm64)
+- **Test 3:** System + CPU + GPU workers with EFA
+
+The test plan includes sample configurations, verification commands, and pass/fail checklists.
+
+---
 
 ### Destroying a Cluster
 
