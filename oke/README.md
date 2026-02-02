@@ -280,19 +280,52 @@ Service CIDR:     172.20.0.0/16   (65,536 IPs for Kubernetes services)
 
 ## ⚙️ Configuration Guide
 
-### Configuration File Structure
+### Minimal Configuration
+
+For a basic cluster with sensible defaults (`configs/minimal.yaml`):
 
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: d1                          # Unique deployment identifier
-  csp: OCI                        # Cloud Service Provider
+  id: demo
+  tenancy: "ocid1.tenancy.oc1..XXX"
+  location: us-ashburn-1
+  oci:
+    compartment: "ocid1.compartment.oc1..XXX"
+
+cluster:
+  controlPlane:
+    allowedCidrs:
+      - 1.2.3.4/32
+
+compute:
+  sshPublicKey: "ssh-ed25519 AAAA..."
+```
+
+### Defaults Applied by Terraform
+
+| Setting | Default |
+|---------|---------|
+| Kubernetes version | `v1.33.1` |
+| VCN CIDR | `10.0.0.0/16` |
+| Pod CIDR | `100.65.0.0/16` |
+| Service CIDR | `172.20.0.0/16` |
+| All subnets | Auto-computed from VCN CIDR |
+| System node pool | VM.Standard.E5.Flex, 2 OCPUs, 16GB, autoscaling 2-10 |
+
+### Full Configuration Example
+
+```yaml
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: d1
   tenancy: "ocid1.tenancy..."     # OCI Tenancy OCID
-  location: us-ashburn-1          # OCI Region
-  destroy: false                  # Destroy flag for teardown
-  tags:                           # Freeform tags
+  location: us-ashburn-1
+  tags:
     owner: username
     env: dev
   oci:

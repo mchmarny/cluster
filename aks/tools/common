@@ -111,8 +111,8 @@ validate_config() {
     # Check required fields
     local required_fields=(
         ".deployment.id"
-        ".deployment.subscription"
-        ".deployment.resourceGroup"
+        ".deployment.tenancy"
+        ".deployment.azure.resourceGroup"
         ".deployment.location"
     )
     

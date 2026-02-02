@@ -299,20 +299,53 @@ graph LR
 
 ## 📝 Configuration Guide
 
-### Configuration File Structure
+### Minimal Configuration
 
-The configuration is defined in a YAML file similar to the AWS EKS format:
+For a basic cluster with sensible defaults (`configs/minimal.yaml`):
 
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: d1                          # Prefix for all resources
-  csp: GCP
+  id: demo
+  tenancy: "my-project-id"  # GCP project ID
+  location: us-central1
+
+cluster:
+  controlPlane:
+    authorizedNetworks:
+      - cidr: 1.2.3.4/32
+        name: my-network
+```
+
+### Defaults Applied by Terraform
+
+| Setting | Default |
+|---------|---------|
+| Release channel | `STABLE` |
+| VPC CIDR | `10.0.0.0/16` |
+| System subnet | Auto-computed (`10.0.0.0/22`) |
+| Worker subnet | Auto-computed (`10.0.128.0/17`) |
+| Pod ranges | Auto-computed (system: `10.100.0.0/17`, worker: `10.100.128.0/17`) |
+| Service ranges | Auto-computed |
+| Private cluster | `true` |
+| Master CIDR | `172.16.0.0/28` |
+| Workload Identity | `true` |
+| Shielded Nodes | `true` (secure boot + integrity monitoring) |
+| Cloud NAT | `true` |
+| System node pool | e2-standard-4, autoscaling 1-3 |
+
+### Full Configuration Example
+
+```yaml
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: d1
   tenancy: "my-project-id"        # GCP project ID
   location: us-central1
-  destroy: false
   tags:
     owner: mchmarny
     env: dev

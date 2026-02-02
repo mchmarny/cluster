@@ -30,10 +30,10 @@ if [[ ! -d "${SRC_DIR}" ]]; then
   err "Error: SRC_DIR directory does not exist at the specified path: ${SRC_DIR}"
 fi
 
-# Config 
+# Config
 DEP_ID="$(yq -er '.deployment.id' $CONFIG_FILE)"
-DEP_REGION="$(yq -er '.deployment.region' $CONFIG_FILE)"
-ACCOUNT_ID="$(yq -er '.deployment.account' $CONFIG_FILE)"
+DEP_REGION="$(yq -er '.deployment.location' $CONFIG_FILE)"
+ACCOUNT_ID="$(yq -er '.deployment.tenancy' $CONFIG_FILE)"
 CLUSTER="$(yq -er '.cluster.name' $CONFIG_FILE)"
 DESTROY="$(yq -er '.deployment.destroy // "false"' "$CONFIG_FILE")"
 BUCKET_NAME="cluster-builder-state-${ACCOUNT_ID}"

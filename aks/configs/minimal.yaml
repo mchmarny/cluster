@@ -1,0 +1,17 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+# Minimal AKS configuration - only required fields
+# All other settings use sensible defaults from Terraform
+
+deployment:
+  id: demo
+  tenancy: "00000000-0000-0000-0000-000000000000"  # Azure subscription ID
+  location: eastus
+  azure:
+    resourceGroup: "rg-aks-demo"
+
+cluster:
+  controlPlane:
+    authorizedIpRanges:  # CIDRs allowed to access API server
+      - 1.2.3.4/32       # Replace with your IP

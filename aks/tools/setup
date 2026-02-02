@@ -95,8 +95,8 @@ main() {
     local location
     
     deployment_id=$(parse_config "${config_file}" ".deployment.id")
-    subscription_id=$(parse_config "${config_file}" ".deployment.subscription")
-    resource_group=$(parse_config "${config_file}" ".deployment.resourceGroup")
+    subscription_id=$(parse_config "${config_file}" ".deployment.tenancy")
+    resource_group=$(parse_config "${config_file}" ".deployment.azure.resourceGroup")
     location=$(parse_config "${config_file}" ".deployment.location")
     
     # Generate storage account name if not provided

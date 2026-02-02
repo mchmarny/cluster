@@ -22,9 +22,9 @@ if [[ ! -f "$CONFIG_FILE" ]]; then
 fi
 
 # Derived variables
-REGION=$(yq -er '.deployment.region' "$CONFIG_FILE")
+REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
 DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
-ACCOUNT_ID=$(yq -er '.deployment.account' "$CONFIG_FILE")
+ACCOUNT_ID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
 SA_NAME="${SA_NAME:-cluster-builder-sa}"
 CURRENT_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 POLICY_NAME="${POLICY_NAME:-cluster-builder-policy}"

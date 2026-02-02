@@ -1,0 +1,20 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+# Minimal OKE configuration - only required fields
+# All other settings use sensible defaults from Terraform
+
+deployment:
+  id: demo
+  tenancy: "ocid1.tenancy.oc1..aaaaaaaXXXXXXXX"  # OCI tenancy OCID
+  location: us-ashburn-1
+  oci:
+    compartment: "ocid1.compartment.oc1..aaaaaaaXXXXXXXX"  # OCI compartment OCID
+
+cluster:
+  controlPlane:
+    allowedCidrs:            # CIDRs allowed to access control plane
+      - 1.2.3.4/32           # Replace with your IP
+
+compute:
+  sshPublicKey: "ssh-ed25519 AAAA..."  # Replace with your SSH public key

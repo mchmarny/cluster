@@ -19,11 +19,21 @@ locals {
   // Extract required deployment settings
   prefix      = local.config.deployment.id
   region      = local.config.deployment.location
-  account     = data.aws_caller_identity.current.account_id
+  account     = local.config.deployment.tenancy  // AWS account ID (consistent with other CSPs)
   egress_cidr = "${trimspace(data.http.egress_ip.response_body)}/32"
 
   // Extract optional deployment settings with defaults
-  eks_version = try(local.config.cluster.version, null)
+  eks_version  = try(local.config.cluster.version, null)
+  cluster_name = try(local.config.cluster.name, "${local.prefix}-eks")
+
+  // Network defaults
+  vpc_cidr     = try(local.config.network.cidrs.host, "10.0.0.0/16")
+  pod_cidr     = try(local.config.network.cidrs.pod, "100.65.0.0/16")
+  service_cidr = try(local.config.cluster.controlPlane.cidr, "172.20.0.0/16")
+
+  // Default VPC endpoints for private clusters
+  default_endpoints = ["s3", "ssm", "ec2messages", "ssmmessages", "logs"]
+  vpc_endpoints     = try(local.config.network.endpoints, local.default_endpoints)
 
   // Observability
   logRetentionInDays        = try(local.config.observability.logRetentionInDays, 7)
@@ -64,7 +74,7 @@ locals {
 
 check "account_matches" {
   assert {
-    condition     = local.account == local.config.deployment.account
-    error_message = "Invalid AWS account (want: ${local.config.deployment.account}, got: ${local.account})."
+    condition     = data.aws_caller_identity.current.account_id == local.account
+    error_message = "Invalid AWS account (want: ${local.account}, got: ${data.aws_caller_identity.current.account_id})."
   }
 }

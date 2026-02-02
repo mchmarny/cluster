@@ -39,11 +39,11 @@ if [[ -z "${OCI_PRIVATE_KEY_PATH:-}" ]]; then
   err "Error: OCI_PRIVATE_KEY_PATH environment variable is not set."
 fi
 
-# Config 
+# Config
 DEP_ID="$(yq -er '.deployment.id' $CONFIG_FILE)"
-DEP_REGION="$(yq -er '.deployment.region' $CONFIG_FILE)"
+DEP_REGION="$(yq -er '.deployment.location' $CONFIG_FILE)"
 TENANCY_OCID="$(yq -er '.deployment.tenancy' $CONFIG_FILE)"
-COMPARTMENT_OCID="$(yq -er '.deployment.compartment' $CONFIG_FILE)"
+COMPARTMENT_OCID="$(yq -er '.deployment.oci.compartment' $CONFIG_FILE)"
 CLUSTER="$(yq -er '.cluster.name' $CONFIG_FILE)"
 DESTROY="$(yq -er '.deployment.destroy // "false"' "$CONFIG_FILE")"
 NAMESPACE="$(oci os ns get --query 'data' --raw-output)"

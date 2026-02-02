@@ -156,97 +156,104 @@ kubectl get pods -A
 
 ## Configuration
 
-The cluster is configured via YAML file. See `configs/demo.yaml` for a complete example.
+The cluster is configured via YAML file. Terraform applies sensible defaults for most settings.
 
-### Key Configuration Sections
+### Minimal Configuration
 
-#### Deployment
+For a basic cluster, only these fields are required (`configs/minimal.yaml`):
+
+```yaml
+deployment:
+  id: demo
+  tenancy: "00000000-0000-0000-0000-000000000000"  # Azure subscription ID
+  location: eastus
+  azure:
+    resourceGroup: "rg-aks-demo"
+
+cluster:
+  controlPlane:
+    authorizedIpRanges:
+      - 1.2.3.4/32  # Your IP for API access
+```
+
+### Defaults Applied by Terraform
+
+| Setting | Default |
+|---------|---------|
+| Cluster version | `1.30` |
+| VNet CIDR | `10.0.0.0/16` |
+| System subnet | Auto-computed (`10.0.1.0/24`) |
+| Worker subnet | Auto-computed (`10.0.2.0/24`) |
+| Pod subnet | Auto-computed (`10.0.16.0/20`) |
+| Service CIDR | `172.20.0.0/16` |
+| Network plugin | `azure` |
+| Private cluster | `true` |
+| Workload Identity | `true` |
+| OIDC Issuer | `true` |
+| Key Vault CSI | `true` |
+| RBAC | `true` |
+| System node pool | 3x Standard_D4s_v5, autoscaling 2-10 |
+
+### Full Configuration Example
+
+See `configs/demo.yaml` for all available options:
 
 ```yaml
 deployment:
   id: "my-aks"
-  csp: Azure
-  tenancy: "00000000-0000-0000-0000-000000000000"  # Azure subscription ID
+  tenancy: "00000000-0000-0000-0000-000000000000"
   location: "eastus"
-  destroy: false
   tags:
     environment: "production"
-    team: "platform"
   azure:
-    resourceGroup: "my-aks-rg"  # Resource group name
-```
+    resourceGroup: "my-aks-rg"
 
-#### Cluster
-
-```yaml
 cluster:
   name: "my-aks-cluster"
   version: "1.30"
-  skuTier: "Standard"  # Free or Standard
-  automaticUpgrade: "stable"
-  features:
-    workloadIdentity: true
-    oidcIssuer: true
-    azureKeyVaultSecretsProvider: true
-    azurePolicy: false
+  controlPlane:
+    authorizedIpRanges:
+      - "1.2.3.4/32"
   private:
     enabled: true
-    privateDnsZoneId: null
+  maintenance:
+    allowed:
+      - day: Sunday
+        hours: [1, 2, 3, 4, 5]
+
+compute:
+  nodePools:
+    system:
+      mode: System
+      vmSize: Standard_D4s_v5
+      nodeCount: 3
+      enableAutoScaling: true
+      minCount: 2
+      maxCount: 10
+    worker:
+      mode: User
+      vmSize: Standard_D8s_v5
+      nodeCount: 2
+      enableAutoScaling: true
+      minCount: 1
+      maxCount: 20
 ```
 
-#### Network
+### Optional: Custom Network
+
+Override network defaults if needed:
 
 ```yaml
 network:
   vnetAddressSpace: "10.0.0.0/16"
   systemSubnetCidr: "10.0.1.0/24"
   workerSubnetCidr: "10.0.2.0/24"
-  podSubnetCidr: "10.0.10.0/22"      # Optional for Azure CNI
-  podCidr: "10.244.0.0/16"
-  serviceCidr: "10.245.0.0/16"
-  dnsServiceIp: "10.245.0.10"
-  networkPlugin: "azure"              # azure or kubenet
-  outboundType: "loadBalancer"        # loadBalancer, natGateway, or userDefinedRouting
+  podSubnetCidr: "10.0.16.0/20"
+  networkPlugin: "azure"
+  outboundType: "loadBalancer"  # or natGateway, userDefinedRouting
 ```
 
-#### Node Pools
-
-```yaml
-compute:
-  nodePools:
-    system:
-      mode: "System"
-      vmSize: "Standard_D4s_v5"
-      autoscaling:
-        enabled: true
-        minSize: 2
-        maxSize: 5
-      availabilityZones: ["1", "2", "3"]
-      maxPods: 110
-      osDiskSizeGb: 128
-    
-    worker:
-      mode: "User"
-      vmSize: "Standard_D8s_v5"
-      autoscaling:
-        enabled: true
-        minSize: 3
-        maxSize: 10
-```
-
-#### Security
-
-```yaml
-security:
-  localAccounts: false
-  rbac: true
-  networkPolicy: "azure"
-  defenderEnabled: true
-  adminGroupObjectIds:
-    - "00000000-0000-0000-0000-000000000000"
-```
-
-#### IAM (Workload Identity)
+### Optional: Workload Identity
 
 ```yaml
 iam:

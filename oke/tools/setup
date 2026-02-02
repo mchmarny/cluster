@@ -23,8 +23,8 @@ fi
 
 # Derived variables
 TENANCY_OCID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
-COMPARTMENT_OCID=$(yq -er '.deployment.compartment' "$CONFIG_FILE")
-REGION=$(yq -er '.deployment.region' "$CONFIG_FILE")
+COMPARTMENT_OCID=$(yq -er '.deployment.oci.compartment' "$CONFIG_FILE")
+REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
 DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
 BUCKET_NAME="cluster-builder-state-${DEPLOYMENT_ID}"
 NAMESPACE="$(oci os ns get --query 'data' --raw-output)"

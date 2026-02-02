@@ -46,8 +46,9 @@ locals {
   secure_boot_enabled          = try(local.config.security.shieldedNodes.secureBoot, true)
   integrity_monitoring_enabled = try(local.config.security.shieldedNodes.integrityMonitoring, true)
 
-  // Network
+  // Network defaults
   vpc_name = try(local.config.network.name, "${local.prefix}-vpc")
+  vpc_cidr = try(local.config.network.cidr, "10.0.0.0/16")
 
   // NAT configuration
   nat_enabled                     = try(local.config.network.nat.enabled, true)
@@ -57,24 +58,95 @@ locals {
   // Maintenance window
   maintenance_start_time = try(local.config.cluster.maintenance.window.startTime, "03:00")
 
-  // Process node subnets
+  // Default subnet configuration (auto-computed from VPC CIDR)
+  default_node_subnets = [
+    {
+      name                  = "system-subnet"
+      cidr                  = cidrsubnet(local.vpc_cidr, 6, 0)  // 10.0.0.0/22
+      privateGoogleAccess   = true
+    },
+    {
+      name                  = "worker-subnet"
+      cidr                  = cidrsubnet(local.vpc_cidr, 1, 1)  // 10.0.128.0/17
+      privateGoogleAccess   = true
+    }
+  ]
+
+  // Default secondary ranges for pods and services
+  default_secondary_ranges = {
+    "system-subnet" = {
+      pods = {
+        rangeName = "system-pods"
+        cidr      = "10.100.0.0/17"
+      }
+      services = {
+        rangeName = "system-services"
+        cidr      = "172.20.0.0/22"
+      }
+    }
+    "worker-subnet" = {
+      pods = {
+        rangeName = "worker-pods"
+        cidr      = "10.100.128.0/17"
+      }
+      services = {
+        rangeName = "worker-services"
+        cidr      = "172.20.128.0/17"
+      }
+    }
+  }
+
+  // Process node subnets (use config or defaults)
   node_subnets = {
-    for subnet in local.config.network.subnets.nodes :
+    for subnet in try(local.config.network.subnets.nodes, local.default_node_subnets) :
     subnet.name => subnet
   }
 
-  // Process secondary ranges
+  // Process secondary ranges (use config or defaults)
   secondary_ranges = {
-    for subnet_name, ranges in try(local.config.network.subnets.secondary, {}) :
+    for subnet_name, ranges in try(local.config.network.subnets.secondary, local.default_secondary_ranges) :
     subnet_name => ranges
   }
 
+  // Default system node pool configuration
+  default_system_pool = {
+    machineType = "e2-standard-4"
+    imageType   = "COS_CONTAINERD"
+    diskType    = "pd-standard"
+    diskSizeGb  = 100
+    autoscaling = {
+      enabled        = true
+      minNodes       = 1
+      maxNodes       = 3
+      locationPolicy = "BALANCED"
+    }
+    autoUpgrade = true
+    autoRepair  = true
+    nodeConfig = {
+      preemptible = false
+      spot        = false
+      tags        = ["gke-node", "system-node"]
+      labels      = { nodeGroup = "system" }
+      taints = [
+        { key = "dedicated", value = "CriticalAddonsOnly", effect = "NO_SCHEDULE" }
+      ]
+      metadata    = { "disable-legacy-endpoints" = "true" }
+      oauthScopes = ["https://www.googleapis.com/auth/cloud-platform"]
+      shieldedInstanceConfig = {
+        enableSecureBoot          = true
+        enableIntegrityMonitoring = true
+      }
+    }
+  }
+
   // Flatten node pools structure: system object + workers array
+  system_pool_config = try(local.config.compute.nodePools.system, local.default_system_pool)
+
   all_node_pools = concat(
     # Add system node pool with name and type
     [
       merge(
-        local.config.compute.nodePools.system,
+        local.system_pool_config,
         {
           name = "system"
           type = "system"

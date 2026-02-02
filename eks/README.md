@@ -218,18 +218,58 @@ Private endpoints for AWS services (no internet egress required):
 
 ## 📖 Configuration Guide
 
-### Configuration File Structure
+### Minimal Configuration
+
+For a basic cluster with sensible defaults (`configs/minimal.yaml`):
 
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: d1  # used to prefix all resources (must be unique per tenancy)
-  csp: AWS
+  id: demo
+  tenancy: "123456789012"    # AWS account ID
+  location: us-east-1
+
+cluster:
+  controlPlane:
+    allowedCidrs:
+      - 1.2.3.4/32           # Your IP for kubectl access
+
+compute:
+  sshPublicKey: "ssh-ed25519 AAAA..."
+
+  nodeGroups:
+    system:
+      instanceType: m6i.xlarge
+      imageId: ami-0b72f4a84c39bcd30  # Ubuntu EKS AMI
+      capacity:
+        desired: 3
+```
+
+**Note:** EKS requires explicit subnet zone assignments, so `network.subnets` must be specified. See the full configuration below.
+
+### Defaults Applied by Terraform
+
+| Setting | Default |
+|---------|---------|
+| VPC CIDR | `10.0.0.0/16` |
+| Pod CIDR | `100.65.0.0/16` |
+| Service CIDR | `172.20.0.0/16` |
+| VPC endpoints | s3, ssm, ec2messages, ssmmessages, logs |
+| Log retention | 7 days |
+| Workers | Optional (system-only cluster supported) |
+
+### Full Configuration Example
+
+```yaml
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: d1
   tenancy: "123456789101"  # AWS account ID
   location: us-east-1
-  destroy: false
   tags:
     owner: mchmarny
     env: dev

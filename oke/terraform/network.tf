@@ -50,7 +50,7 @@ resource "oci_core_service_gateway" "main" {
 
 # Public Subnet for Load Balancers
 resource "oci_core_subnet" "public" {
-  for_each = { for idx, subnet in local.config.network.subnets.public : idx => subnet }
+  for_each = { for idx, subnet in local.subnets_public : idx => subnet }
 
   compartment_id             = local.compartment_ocid
   vcn_id                     = oci_core_vcn.main.id
@@ -68,7 +68,7 @@ resource "oci_core_subnet" "public" {
 
 # API Endpoint Subnet (Private)
 resource "oci_core_subnet" "api_endpoint" {
-  for_each = { for idx, subnet in local.config.network.subnets.apiEndpoint : idx => subnet }
+  for_each = { for idx, subnet in local.subnets_api : idx => subnet }
 
   compartment_id             = local.compartment_ocid
   vcn_id                     = oci_core_vcn.main.id
@@ -86,7 +86,7 @@ resource "oci_core_subnet" "api_endpoint" {
 
 # Node Pool Subnets (Private)
 resource "oci_core_subnet" "node_pools" {
-  for_each = { for idx, subnet in local.config.network.subnets.nodePools : idx => subnet }
+  for_each = { for idx, subnet in local.subnets_nodes : idx => subnet }
 
   compartment_id             = local.compartment_ocid
   vcn_id                     = oci_core_vcn.main.id
@@ -104,7 +104,7 @@ resource "oci_core_subnet" "node_pools" {
 
 # Pod Subnet (Private)
 resource "oci_core_subnet" "pods" {
-  for_each = { for idx, subnet in local.config.network.subnets.pods : idx => subnet }
+  for_each = { for idx, subnet in local.subnets_pods : idx => subnet }
 
   compartment_id             = local.compartment_ocid
   vcn_id                     = oci_core_vcn.main.id

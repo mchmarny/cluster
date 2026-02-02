@@ -12,7 +12,7 @@ resource "azurerm_subnet" "system" {
   name                 = "${local.cluster_name}-system-subnet"
   resource_group_name  = local.resource_group_name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [local.config.network.systemSubnetCidr]
+  address_prefixes     = [local.system_subnet_cidr]
 
   # Delegate to AKS
   service_endpoints = [
@@ -27,7 +27,7 @@ resource "azurerm_subnet" "worker" {
   name                 = "${local.cluster_name}-worker-subnet"
   resource_group_name  = local.resource_group_name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [local.config.network.workerSubnetCidr]
+  address_prefixes     = [local.worker_subnet_cidr]
 
   service_endpoints = [
     "Microsoft.Storage",
@@ -38,12 +38,12 @@ resource "azurerm_subnet" "worker" {
 
 // Subnet for pods (when using Azure CNI with pod subnet)
 resource "azurerm_subnet" "pods" {
-  count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
+  count = local.network_plugin == "azure" ? 1 : 0
 
   name                 = "${local.cluster_name}-pod-subnet"
   resource_group_name  = local.resource_group_name
   virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = [local.config.network.podSubnetCidr]
+  address_prefixes     = [local.pod_subnet_cidr]
 
   delegation {
     name = "aks-delegation"
@@ -249,7 +249,7 @@ resource "azurerm_network_security_rule" "worker_deny_inbound" {
 
 // Optional Network Security Group for pods
 resource "azurerm_network_security_group" "pods" {
-  count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
+  count = local.network_plugin == "azure" && try(local.pod_subnet_cidr, null) != null ? 1 : 0
 
   name                = "${local.cluster_name}-pod-nsg"
   location            = local.location
@@ -259,7 +259,7 @@ resource "azurerm_network_security_group" "pods" {
 
 // Pod NSG - Allow pod-to-pod communication
 resource "azurerm_network_security_rule" "pod_to_pod" {
-  count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
+  count = local.network_plugin == "azure" && try(local.pod_subnet_cidr, null) != null ? 1 : 0
 
   name                        = "AllowPodToPod"
   priority                    = 100
@@ -276,7 +276,7 @@ resource "azurerm_network_security_rule" "pod_to_pod" {
 
 // Pod NSG - Allow access from nodes
 resource "azurerm_network_security_rule" "pod_from_nodes" {
-  count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
+  count = local.network_plugin == "azure" && try(local.pod_subnet_cidr, null) != null ? 1 : 0
 
   name                        = "AllowFromNodes"
   priority                    = 110
@@ -294,7 +294,7 @@ resource "azurerm_network_security_rule" "pod_from_nodes" {
 // Pod NSG - ICMP for path MTU discovery
 // trivy:ignore:AVD-AZU-0047 ICMP must be allowed from any source for MTU path discovery (RFC 1191)
 resource "azurerm_network_security_rule" "pod_icmp" {
-  count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
+  count = local.network_plugin == "azure" && try(local.pod_subnet_cidr, null) != null ? 1 : 0
 
   name                        = "AllowICMP"
   priority                    = 120
@@ -321,7 +321,7 @@ resource "azurerm_subnet_network_security_group_association" "worker" {
 }
 
 resource "azurerm_subnet_network_security_group_association" "pods" {
-  count = local.network_plugin == "azure" && try(local.config.network.podSubnetCidr, null) != null ? 1 : 0
+  count = local.network_plugin == "azure" && try(local.pod_subnet_cidr, null) != null ? 1 : 0
 
   subnet_id                 = azurerm_subnet.pods[0].id
   network_security_group_id = azurerm_network_security_group.pods[0].id

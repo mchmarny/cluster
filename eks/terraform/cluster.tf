@@ -134,7 +134,7 @@ resource "aws_eks_access_entry" "admin_roles" {
   for_each = toset(try(local.config.cluster.adminRoles, []))
 
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = "arn:aws:iam::${local.config.deployment.account}:role/${each.value}"
+  principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
   type          = "STANDARD"
 
   tags = merge({ Name = "${local.prefix}-${each.value}-access" }, local.config.deployment.tags)
@@ -146,7 +146,7 @@ resource "aws_eks_access_policy_association" "admin_cluster_admin" {
 
   cluster_name  = aws_eks_cluster.main.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = "arn:aws:iam::${local.config.deployment.account}:role/${each.value}"
+  principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
 
   access_scope {
     type = "cluster"
@@ -160,7 +160,7 @@ resource "aws_eks_access_policy_association" "admin_eks_admin" {
 
   cluster_name  = aws_eks_cluster.main.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
-  principal_arn = "arn:aws:iam::${local.config.deployment.account}:role/${each.value}"
+  principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
 
   access_scope {
     type = "cluster"

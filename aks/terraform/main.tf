@@ -29,15 +29,25 @@ locals {
   cluster_name        = try(local.config.cluster.name, "${local.prefix}-aks")
   deletion_protection = try(local.config.deployment.deletionProtection, true)
 
-  // Network configuration
-  vnet_address_space = local.config.network.vnetAddressSpace
-  pod_cidr           = local.config.network.podCidr
-  service_cidr       = local.config.network.serviceCidr
-  dns_service_ip     = local.config.network.dnsServiceIp
-  network_plugin     = try(local.config.network.networkPlugin, "azure")
-  network_mode       = try(local.config.network.networkMode, "transparent")
-  network_policy     = try(local.config.security.networkPolicy, "azure")
-  outbound_type      = try(local.config.network.outboundType, "loadBalancer")
+  // Network configuration with defaults
+  // Default: 10.0.0.0/16 for VNet, auto-computed subnets
+  vnet_address_space = try(local.config.network.vnetAddressSpace, "10.0.0.0/16")
+
+  // Auto-compute subnet CIDRs from VNet CIDR if not specified
+  // Layout: system=/24, worker=/24, pods=/20, services=/24, appgw=/24
+  system_subnet_cidr  = try(local.config.network.systemSubnetCidr, cidrsubnet(local.vnet_address_space, 8, 1))   // 10.0.1.0/24
+  worker_subnet_cidr  = try(local.config.network.workerSubnetCidr, cidrsubnet(local.vnet_address_space, 8, 2))   // 10.0.2.0/24
+  pod_subnet_cidr     = try(local.config.network.podSubnetCidr, cidrsubnet(local.vnet_address_space, 4, 1))      // 10.0.16.0/20
+
+  // Service CIDR (non-overlapping with VNet)
+  service_cidr   = try(local.config.network.serviceCidr, try(local.config.cluster.controlPlane.cidr, "172.20.0.0/16"))
+  dns_service_ip = try(local.config.network.dnsServiceIp, try(local.config.cluster.controlPlane.dnsServiceIp, cidrhost(local.service_cidr, 10)))
+  pod_cidr       = try(local.config.network.podCidr, "10.244.0.0/16")
+
+  network_plugin = try(local.config.network.networkPlugin, "azure")
+  network_mode   = try(local.config.network.networkMode, "transparent")
+  network_policy = try(local.config.security.networkPolicy, "azure")
+  outbound_type  = try(local.config.network.outboundType, "loadBalancer")
 
   // Private cluster settings
   private_cluster_enabled      = try(local.config.cluster.private.enabled, true)
@@ -66,8 +76,26 @@ locals {
     }
   )
 
-  // Node pool configuration
-  node_pools = try(local.config.compute.nodePools, {})
+  // Default node pool configuration
+  default_system_pool = {
+    system = {
+      type               = "system"
+      mode               = "System"
+      vmSize             = "Standard_D4s_v5"
+      osDiskSizeGb       = 128
+      nodeCount          = 3
+      enableAutoScaling  = true
+      minCount           = 2
+      maxCount           = 10
+      maxPods            = 30
+      availabilityZones  = ["1", "2", "3"]
+      nodeLabels         = { "node-type" = "system" }
+      nodeTaints         = []
+    }
+  }
+
+  // Merge user-provided node pools with defaults
+  node_pools = length(try(local.config.compute.nodePools, {})) > 0 ? local.config.compute.nodePools : local.default_system_pool
 
   // Find system node pool (required for AKS)
   system_node_pool_key = [

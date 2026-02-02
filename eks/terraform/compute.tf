@@ -44,9 +44,9 @@ locals {
         }
       )
     ],
-    # Add workers array with type attribute
+    # Add workers array with type attribute (empty list if not defined)
     [
-      for worker in local.config.compute.nodeGroups.workers :
+      for worker in try(local.config.compute.nodeGroups.workers, []) :
       merge(
         worker,
         {
@@ -62,7 +62,7 @@ locals {
     for ng in local.all_node_groups :
     ng.name => join(
       ",",
-      [for k, v in ng.labels : "${k}=${v}"]
+      [for k, v in try(ng.labels, {}) : "${k}=${v}"]
     )
   }
 }
