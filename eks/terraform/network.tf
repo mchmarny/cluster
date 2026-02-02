@@ -259,15 +259,12 @@ resource "aws_route_table_association" "worker" {
 }
 
 # Ensure traffic for these services resolves to an endpoint in the VPC
+# VPC endpoints can only have one subnet per AZ, so use system subnets only
 locals {
-  endpoint_subnets = flatten([
-    for name, group in local.effective_subnets :
-    [
-      for i, cfg in group :
-      "${local.prefix}-${name}-${cfg.zone}"
-      if(name == "system" || (name == "worker" && try(cfg.disableEndpoints, false) != true))
-    ]
-  ])
+  endpoint_subnets = [
+    for cfg in local.effective_subnets.system :
+    "${local.prefix}-system-${cfg.zone}"
+  ]
 }
 
 resource "aws_vpc_endpoint" "services" {
