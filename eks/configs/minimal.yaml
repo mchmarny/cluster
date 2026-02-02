@@ -15,7 +15,7 @@ cluster:
   version: "1.32"  # Required for automatic AMI selection
 
 compute:
-  sshPublicKey: "ssh-ed25519 AAAA..."  # Replace with your SSH public key
+  # sshPublicKey: "ssh-ed25519 AAAA..."  # Optional: SSH public key for node access
 
   nodeGroups:
     system:

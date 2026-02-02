@@ -74,8 +74,10 @@ locals {
   }
 }
 
-# SSH Key Pair
+# SSH Key Pair (optional - only created if sshPublicKey is provided)
 resource "aws_key_pair" "main" {
+  count = try(local.config.compute.sshPublicKey, null) != null ? 1 : 0
+
   key_name   = "${local.prefix}-key"
   public_key = local.config.compute.sshPublicKey
 }
@@ -88,7 +90,7 @@ resource "aws_launch_template" "node_groups" {
   image_id               = local.node_group_image_ids[each.value.name]
   instance_type          = each.value.instanceType
   update_default_version = true
-  key_name               = aws_key_pair.main.key_name
+  key_name               = length(aws_key_pair.main) > 0 ? aws_key_pair.main[0].key_name : null
 
   # Only set vpc_security_group_ids if no network interfaces are specified
   vpc_security_group_ids = contains(keys(local.efa_network_interfaces), try(each.value.accelerator, "na")) ? null : [

@@ -237,7 +237,7 @@ cluster:
   version: "1.32"  # Required for automatic AMI selection
 
 compute:
-  sshPublicKey: "ssh-ed25519 AAAA..."
+  # sshPublicKey: "ssh-ed25519 AAAA..."  # Optional: for SSH access to nodes
 
   nodeGroups:
     system:
@@ -249,7 +249,8 @@ compute:
 
 **Notes:**
 - Your current IP is automatically added to the API server allowed CIDRs during deployment
-- The `imageId` is optional - if omitted, Terraform automatically selects the latest Ubuntu EKS Worker AMI for x86_64 architecture from Canonical
+- `sshPublicKey` is optional - if omitted, no SSH key pair is created (nodes will have no SSH access)
+- `imageId` is optional - if omitted, Terraform automatically selects the latest Ubuntu EKS Worker AMI for x86_64 architecture from Canonical
 - When using automatic AMI selection, `cluster.version` must be specified to match the correct Ubuntu EKS image
 
 ### Defaults Applied by Terraform
