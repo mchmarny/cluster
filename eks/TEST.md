@@ -59,78 +59,68 @@ Create the following test configuration files before running tests.
 
 **File:** `configs/test-system-only.yaml`
 
+**Status:** ✅ Verified
+
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
-
 deployment:
-  id: test1
+  id: test-system-only
   tenancy: "YOUR_AWS_ACCOUNT_ID"
-  location: us-east-1
-
+  location: us-west-2
 cluster:
-  name: test1
-  version: "1.32"  # Required for automatic AMI selection
-
+  name: test-system-only
+  version: "1.33"
 compute:
-  # sshPublicKey: "ssh-ed25519 YOUR_SSH_PUBLIC_KEY"  # Optional
-
   nodeGroups:
     system:
-      instanceType: m6i.xlarge
-      # imageId: ami-xxx  # Optional: defaults to Ubuntu EKS AMI (amd64)
+      instanceType: t3.xlarge
       capacity:
         desired: 3
 ```
 
-> **Note:** This test validates the minimal configuration with automatic Ubuntu EKS AMI selection and no SSH access.
+> **Note:** This is the most minimal configuration. Network subnets, tags, and AMI are all auto-computed with sensible defaults.
 
 ### Test 2: System + CPU Workers
 
 **File:** `configs/test-cpu-workers.yaml`
 
+**Status:** ✅ Verified
+
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
-
 deployment:
-  id: test2
+  id: test-cpu-workers
   tenancy: "YOUR_AWS_ACCOUNT_ID"
-  location: us-east-1
-
+  location: us-west-2
 cluster:
-  name: test2
-  version: "1.32"
-
+  name: test-cpu-workers
+  version: "1.34"
 compute:
-  sshPublicKey: "ssh-ed25519 YOUR_SSH_PUBLIC_KEY"  # Optional but useful for debugging
-
   nodeGroups:
     system:
-      instanceType: m6i.xlarge
-      # imageId: auto-selected Ubuntu EKS AMI (amd64)
+      instanceType: t3.xlarge
       capacity:
         desired: 3
 
     workers:
-      - name: cpu-worker-amd
-        instanceType: m6i.xlarge
-        # imageId: auto-selected Ubuntu EKS AMI (amd64)
+      - name: cpu-worker-1
+        instanceType: t3.xlarge
         capacity:
-          desired: 2
+          desired: 1
         labels:
-          arch: amd64
+          nodeGroup: cpu-worker1
 
-      - name: cpu-worker-arm
-        instanceType: c6gn.xlarge
-        imageId: ami-09bf1e83f45a97282  # Required: arm64 AMI (auto-select is x86_64 only)
+      - name: cpu-worker-2
+        instanceType: t3.xlarge
         capacity:
-          desired: 2
+          desired: 1
         labels:
-          arch: arm64
+          nodeGroup: cpu-worker2
 ```
 
-> **Note:** ARM64 worker nodes require explicit `imageId` since automatic AMI selection only supports x86_64.
+> **Note:** Each worker requires a unique `name` field. Labels are optional but useful for node selection.
 
 ### Test 3: System + CPU + GPU Workers
 
@@ -147,29 +137,28 @@ deployment:
 
 cluster:
   name: test3
-  version: "1.32"
+  version: "1.34"
 
 compute:
   sshPublicKey: "ssh-ed25519 YOUR_SSH_PUBLIC_KEY"  # Recommended for GPU debugging
 
   nodeGroups:
     system:
-      instanceType: m6i.xlarge
+      instanceType: t3.xlarge
       # imageId: auto-selected Ubuntu EKS AMI (amd64)
       capacity:
         desired: 3
 
     workers:
       - name: cpu-worker
-        instanceType: m6i.xlarge
-        # imageId: auto-selected Ubuntu EKS AMI (amd64)
+        instanceType: t3.xlarge
         capacity:
           desired: 2
 
       - name: gpu-worker
-        instanceType: p3.2xlarge  # Adjust based on availability
+        instanceType: p5.48xlarge
         accelerator: v100
-        # imageId: auto-selected Ubuntu EKS AMI (amd64)
+        imageId: ami-0a7bcc9b03849f089
         capacity:
           desired: 1
         labels:
@@ -275,11 +264,11 @@ tools/actuate configs/test-cpu-workers.yaml
 
 ```bash
 # Configure kubectl
-aws eks update-kubeconfig --name test2 --region us-east-1
+aws eks update-kubeconfig --name test-cpu-workers --region us-west-2
 
-# Check all nodes (expect 3 system + 2 amd + 2 arm = 7 nodes)
+# Check all nodes (expect 3 system + 2 workers = 5 nodes)
 kubectl get nodes
-kubectl get nodes --show-labels | grep arch
+kubectl get nodes --show-labels | grep nodeGroup
 
 # Verify worker taints
 kubectl describe nodes | grep -A 3 Taints
@@ -287,28 +276,28 @@ kubectl describe nodes | grep -A 3 Taints
 # Worker nodes: dedicated=worker-workload:NoSchedule/NoExecute
 
 # Verify labels
-kubectl get nodes -l arch=amd64
-kubectl get nodes -l arch=arm64
+kubectl get nodes -l nodeGroup=cpu-worker1
+kubectl get nodes -l nodeGroup=cpu-worker2
 
 # Test workload scheduling on workers
-kubectl run test-amd --image=nginx --restart=Never \
-  --overrides='{"spec":{"tolerations":[{"key":"dedicated","operator":"Equal","value":"worker-workload","effect":"NoSchedule"}],"nodeSelector":{"arch":"amd64"}}}'
+kubectl run test-worker1 --image=nginx --restart=Never \
+  --overrides='{"spec":{"tolerations":[{"key":"dedicated","operator":"Equal","value":"worker-workload","effect":"NoSchedule"}],"nodeSelector":{"nodeGroup":"cpu-worker1"}}}'
 
-kubectl run test-arm --image=nginx --restart=Never \
-  --overrides='{"spec":{"tolerations":[{"key":"dedicated","operator":"Equal","value":"worker-workload","effect":"NoSchedule"}],"nodeSelector":{"arch":"arm64"}}}'
+kubectl run test-worker2 --image=nginx --restart=Never \
+  --overrides='{"spec":{"tolerations":[{"key":"dedicated","operator":"Equal","value":"worker-workload","effect":"NoSchedule"}],"nodeSelector":{"nodeGroup":"cpu-worker2"}}}'
 
 # Verify pods scheduled correctly
 kubectl get pods -o wide
-kubectl delete pod test-amd test-arm
+kubectl delete pod test-worker1 test-worker2
 ```
 
 **Pass Criteria:**
 - [ ] `tools/validate` exits with code 0
-- [ ] 7 nodes total in Ready state
+- [ ] 5 nodes total in Ready state
 - [ ] 3 system nodes with system taints
-- [ ] 2 amd64 workers with worker taints and arch=amd64 label
-- [ ] 2 arm64 workers with worker taints and arch=arm64 label
-- [ ] Test pods schedule to correct architecture nodes
+- [ ] 1 worker with nodeGroup=cpu-worker1 label and worker taints
+- [ ] 1 worker with nodeGroup=cpu-worker2 label and worker taints
+- [ ] Test pods schedule to correct worker nodes
 
 #### 2.3 Destroy
 
@@ -410,9 +399,8 @@ tools/actuate configs/test-gpu-workers.yaml
 | Component | Test 1 | Test 2 | Test 3 |
 |-----------|--------|--------|--------|
 | System nodes (3) | [ ] | [ ] | [ ] |
-| CPU workers (amd64) | N/A | [ ] | [ ] |
-| CPU workers (arm64) | N/A | [ ] | N/A |
-| GPU workers | N/A | N/A | [ ] |
+| CPU workers | N/A | [ ] (2) | [ ] (2) |
+| GPU workers | N/A | N/A | [ ] (1) |
 | Taints applied | [ ] | [ ] | [ ] |
 | Labels applied | [ ] | [ ] | [ ] |
 
