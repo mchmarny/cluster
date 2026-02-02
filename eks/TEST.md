@@ -8,7 +8,8 @@ This test plan validates the EKS cluster deployment with progressively more comp
 - Terraform >= 1.13.0
 - yq >= 4.0
 - kubectl >= 1.28
-- Run `tools/setup configs/minimal.yaml` before starting tests
+
+> Make sure to Run `tools/setup configs/test-system-only.yaml` before starting tests!
 
 ## Test Configurations
 

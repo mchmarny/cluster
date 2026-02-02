@@ -124,10 +124,10 @@ The setup script will:
 [MSG] Project ID: my-project-id
 [MSG] Location:   us-central1
 [MSG] Service Account: cluster-builder-sa@my-project-id.iam.gserviceaccount.com
-[MSG] Bucket:     cluster-builder-state-my-project-id
+[MSG] Bucket:     cluster-state-my-project-id
 [MSG] Output:     /path/to/terraform
 [MSG] Enabling required GCP APIs...
-[MSG] Creating GCS bucket: cluster-builder-state-my-project-id in region us-central1
+[MSG] Creating GCS bucket: cluster-state-my-project-id in region us-central1
 [MSG] Created backend configuration in /path/to/terraform/backend.hcl
 [MSG] Creating service account: cluster-builder-sa
 [MSG] Granting roles/compute.admin to cluster-builder-sa

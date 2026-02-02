@@ -3,14 +3,9 @@ kind: Cluster
 
 # Minimal GKE configuration - only required fields
 # All other settings use sensible defaults from Terraform
+# Note: Your current IP is automatically added to authorized networks
 
 deployment:
   id: demo
   tenancy: "my-project-id"  # GCP project ID
   location: us-central1
-
-cluster:
-  controlPlane:
-    authorizedNetworks:      # CIDRs allowed to access control plane
-      - cidr: 1.2.3.4/32     # Replace with your IP
-        name: my-network

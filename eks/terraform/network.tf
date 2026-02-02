@@ -1,7 +1,7 @@
 locals {
   # Define subnets by type for easier processing in the VPC module
   subnets_by_type = {
-    for name, group in local.config.network.subnets :
+    for name, group in local.effective_subnets :
     name => {
       for _, cfg in group :
       "${local.prefix}-${name}-${cfg.zone}" => {
@@ -13,7 +13,7 @@ locals {
   }
 
   subnet_ids_by_type = {
-    for name, group in local.config.network.subnets :
+    for name, group in local.effective_subnets :
     name => [
       for i, cfg in group :
       aws_subnet.main["${local.prefix}-${name}-${cfg.zone}"].id
@@ -21,7 +21,7 @@ locals {
   }
 
   system_subnet_ids = [
-    for i, cfg in local.config.network.subnets.system :
+    for i, cfg in local.effective_subnets.system :
     aws_subnet.main["${local.prefix}-system-${cfg.zone}"].id
   ]
 
@@ -29,11 +29,11 @@ locals {
 
 # VPC
 resource "aws_vpc" "main" {
-  cidr_block           = local.config.network.cidrs.host
+  cidr_block           = local.vpc_cidr
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-vpc"
   })
 }
@@ -44,7 +44,7 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   retention_in_days = local.vpcFlowLogRetentionInDays
   kms_key_id        = aws_kms_key.eks.arn
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-vpc-flow-logs"
   })
 }
@@ -54,7 +54,7 @@ resource "aws_iam_role" "vpc_flow_logs" {
   name               = "${local.prefix}-vpc-flow-logs"
   assume_role_policy = data.aws_iam_policy_document.vpc_flow_logs_assume_role.json
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-vpc-flow-logs"
   })
 }
@@ -82,14 +82,14 @@ resource "aws_flow_log" "main" {
   traffic_type    = "ALL"
   vpc_id          = aws_vpc.main.id
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-vpc-flow-log"
   })
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "secondary_cidr" {
   vpc_id     = aws_vpc.main.id
-  cidr_block = local.config.network.cidrs.pod
+  cidr_block = local.pod_cidr
 }
 
 # Subnets
@@ -101,12 +101,12 @@ resource "aws_subnet" "main" {
   cidr_block              = each.value.cidr_block
   map_public_ip_on_launch = each.value.map_public_ip_on_launch
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${each.key}-subnet"
     # AWS Load Balancer Controller tags
-    "kubernetes.io/role/elb"                             = contains(split("-", each.key), "public") ? "1" : null
-    "kubernetes.io/role/internal-elb"                    = contains(split("-", each.key), "system") || contains(split("-", each.key), "worker") ? "1" : null
-    "kubernetes.io/cluster/${local.config.cluster.name}" = "shared"
+    "kubernetes.io/role/elb"                      = contains(split("-", each.key), "public") ? "1" : null
+    "kubernetes.io/role/internal-elb"             = contains(split("-", each.key), "system") || contains(split("-", each.key), "worker") ? "1" : null
+    "kubernetes.io/cluster/${local.cluster_name}" = "shared"
   })
 
   depends_on = [
@@ -118,7 +118,7 @@ resource "aws_subnet" "main" {
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-igw"
   })
 }
@@ -126,13 +126,13 @@ resource "aws_internet_gateway" "main" {
 # Elastic IPs for NAT Gateways
 resource "aws_eip" "nat" {
   for_each = {
-    for i, subnet in local.config.network.subnets.public :
+    for i, subnet in local.effective_subnets.public :
     "${local.prefix}-eip-${i}" => subnet
   }
 
   domain = "vpc"
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = each.key
   })
 }
@@ -140,7 +140,7 @@ resource "aws_eip" "nat" {
 # NAT Gateways
 resource "aws_nat_gateway" "main" {
   for_each = {
-    for i, subnet in local.config.network.subnets.public :
+    for i, subnet in local.effective_subnets.public :
     "${local.prefix}-nat-${i}" => {
       subnet_id     = aws_subnet.main["${local.prefix}-public-${subnet.zone}"].id
       allocation_id = aws_eip.nat["${local.prefix}-eip-${i}"].id
@@ -150,7 +150,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = each.value.subnet_id
   allocation_id = each.value.allocation_id
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = each.key
   })
 
@@ -160,7 +160,7 @@ resource "aws_nat_gateway" "main" {
 # Route Tables
 resource "aws_route_table" "public" {
   for_each = {
-    for i, subnet in local.config.network.subnets.public :
+    for i, subnet in local.effective_subnets.public :
     "${local.prefix}-public-rt-${i}" => subnet
   }
 
@@ -171,14 +171,14 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.main.id
   }
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = each.key
   })
 }
 
 resource "aws_route_table" "private_system" {
   for_each = {
-    for i, subnet in local.config.network.subnets.system :
+    for i, subnet in local.effective_subnets.system :
     "${local.prefix}-system-rt-${i}" => {
       subnet         = subnet
       nat_gateway_id = aws_nat_gateway.main["${local.prefix}-nat-${i}"].id
@@ -192,14 +192,14 @@ resource "aws_route_table" "private_system" {
     nat_gateway_id = each.value.nat_gateway_id
   }
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = each.key
   })
 }
 
 resource "aws_route_table" "private_worker" {
   for_each = {
-    for i, subnet in local.config.network.subnets.worker :
+    for i, subnet in local.effective_subnets.worker :
     "${local.prefix}-worker-rt-${i}" => {
       subnet         = subnet
       nat_gateway_id = aws_nat_gateway.main["${local.prefix}-nat-${i}"].id
@@ -213,7 +213,7 @@ resource "aws_route_table" "private_worker" {
     nat_gateway_id = each.value.nat_gateway_id
   }
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = each.key
   })
 }
@@ -221,7 +221,7 @@ resource "aws_route_table" "private_worker" {
 # Route Table Associations
 resource "aws_route_table_association" "public" {
   for_each = {
-    for i, subnet in local.config.network.subnets.public :
+    for i, subnet in local.effective_subnets.public :
     "${local.prefix}-public-${subnet.zone}" => {
       subnet_id      = aws_subnet.main["${local.prefix}-public-${subnet.zone}"].id
       route_table_id = aws_route_table.public["${local.prefix}-public-rt-${i}"].id
@@ -234,7 +234,7 @@ resource "aws_route_table_association" "public" {
 
 resource "aws_route_table_association" "system" {
   for_each = {
-    for i, subnet in local.config.network.subnets.system :
+    for i, subnet in local.effective_subnets.system :
     "${local.prefix}-system-${subnet.zone}" => {
       subnet_id      = aws_subnet.main["${local.prefix}-system-${subnet.zone}"].id
       route_table_id = aws_route_table.private_system["${local.prefix}-system-rt-${i}"].id
@@ -247,7 +247,7 @@ resource "aws_route_table_association" "system" {
 
 resource "aws_route_table_association" "worker" {
   for_each = {
-    for i, subnet in local.config.network.subnets.worker :
+    for i, subnet in local.effective_subnets.worker :
     "${local.prefix}-worker-${subnet.zone}" => {
       subnet_id      = aws_subnet.main["${local.prefix}-worker-${subnet.zone}"].id
       route_table_id = aws_route_table.private_worker["${local.prefix}-worker-rt-${i}"].id
@@ -261,7 +261,7 @@ resource "aws_route_table_association" "worker" {
 # Ensure traffic for these services resolves to an endpoint in the VPC
 locals {
   endpoint_subnets = flatten([
-    for name, group in local.config.network.subnets :
+    for name, group in local.effective_subnets :
     [
       for i, cfg in group :
       "${local.prefix}-${name}-${cfg.zone}"
@@ -271,7 +271,7 @@ locals {
 }
 
 resource "aws_vpc_endpoint" "services" {
-  for_each = { for service in local.config.network.endpoints : service => service }
+  for_each = { for service in local.vpc_endpoints : service => service }
 
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${local.region}.${each.value}"
@@ -292,7 +292,7 @@ resource "aws_vpc_endpoint" "services" {
     aws_security_group.main["${local.prefix}-worker"].id,
   ]
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-vpce-${each.value}"
   })
 }
@@ -302,7 +302,7 @@ resource "local_file" "eniconfig" {
   file_permission = "0644"
   content = templatefile("${path.module}/templates/eni-config.ytpl", {
     subnets = flatten([
-      for name, group in local.config.network.subnets : [
+      for name, group in local.effective_subnets : [
         for _, cfg in group : {
           name = cfg.zone # Use zone name directly to match ENI_CONFIG_LABEL_DEF
           sg   = aws_security_group.main["${local.prefix}-${name}"].id

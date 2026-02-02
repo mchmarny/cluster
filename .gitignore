@@ -80,3 +80,5 @@ sbom.json
 *.env
 
 
+# Tests
+test-*.yaml

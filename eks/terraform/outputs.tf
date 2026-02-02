@@ -93,7 +93,7 @@ locals {
       }
       subnets = {
         public = [
-          for i, subnet in local.config.network.subnets.public : {
+          for i, subnet in local.effective_subnets.public : {
             name = "public${i + 1}"
             id   = aws_subnet.main["${local.prefix}-public-${subnet.zone}"].id
             cidr = aws_subnet.main["${local.prefix}-public-${subnet.zone}"].cidr_block
@@ -101,7 +101,7 @@ locals {
           }
         ]
         system = [
-          for i, subnet in local.config.network.subnets.system : {
+          for i, subnet in local.effective_subnets.system : {
             name = "system${i + 1}"
             id   = aws_subnet.main["${local.prefix}-system-${subnet.zone}"].id
             cidr = aws_subnet.main["${local.prefix}-system-${subnet.zone}"].cidr_block
@@ -109,7 +109,7 @@ locals {
           }
         ]
         worker = [
-          for i, subnet in local.config.network.subnets.worker : {
+          for i, subnet in local.effective_subnets.worker : {
             name = "worker${i + 1}"
             id   = aws_subnet.main["${local.prefix}-worker-${subnet.zone}"].id
             cidr = aws_subnet.main["${local.prefix}-worker-${subnet.zone}"].cidr_block
@@ -117,7 +117,7 @@ locals {
           }
         ]
         pod = [
-          for i, subnet in local.config.network.subnets.pod : {
+          for i, subnet in local.effective_subnets.pod : {
             name = "pod${i + 1}"
             id   = aws_subnet.main["${local.prefix}-pod-${subnet.zone}"].id
             cidr = aws_subnet.main["${local.prefix}-pod-${subnet.zone}"].cidr_block
@@ -132,7 +132,7 @@ locals {
         pod     = aws_security_group.main["${local.prefix}-pod"].id
       }
       natGateways = [
-        for i, subnet in local.config.network.subnets.public : {
+        for i, subnet in local.effective_subnets.public : {
           name             = "nat${i + 1}"
           id               = aws_nat_gateway.main["${local.prefix}-nat-${i}"].id
           publicIp         = aws_eip.nat["${local.prefix}-eip-${i}"].public_ip

@@ -103,21 +103,21 @@ resource "aws_iam_policy" "flow_log" {
   name   = "${local.prefix}-flow-log"
   policy = data.aws_iam_policy_document.flow_log.json
 
-  tags = local.config.deployment.tags
+  tags = local.effective_tags
 }
 
 resource "aws_iam_policy" "monitoring" {
   name   = "${local.prefix}-monitoring"
   policy = data.aws_iam_policy_document.monitoring.json
 
-  tags = local.config.deployment.tags
+  tags = local.effective_tags
 }
 
 resource "aws_iam_policy" "api" {
   name   = "${local.prefix}-api"
   policy = data.aws_iam_policy_document.api.json
 
-  tags = local.config.deployment.tags
+  tags = local.effective_tags
 }
 
 # IAM Roles
@@ -125,7 +125,7 @@ resource "aws_iam_role" "eks_cluster" {
   name               = "${local.prefix}-eks"
   assume_role_policy = data.aws_iam_policy_document.eks_assume_role.json
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-eks"
   })
 }
@@ -134,7 +134,7 @@ resource "aws_iam_role" "system_nodes" {
   name               = "${local.prefix}-system-nodes"
   assume_role_policy = data.aws_iam_policy_document.system_nodes_assume_role.json
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-system-nodes"
   })
 }
@@ -143,7 +143,7 @@ resource "aws_iam_role" "worker_nodes" {
   name               = "${local.prefix}-worker-nodes"
   assume_role_policy = data.aws_iam_policy_document.worker_nodes_assume_role.json
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-worker-nodes"
   })
 }
@@ -259,7 +259,7 @@ resource "aws_iam_instance_profile" "system_nodes" {
   name = "${local.prefix}-system-nodes"
   role = aws_iam_role.system_nodes.name
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-system-nodes"
   })
 }
@@ -268,7 +268,7 @@ resource "aws_iam_instance_profile" "worker_nodes" {
   name = "${local.prefix}-worker-nodes"
   role = aws_iam_role.worker_nodes.name
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-worker-nodes"
   })
 }
@@ -302,7 +302,7 @@ resource "aws_iam_role" "cloudwatch_observability" {
   name               = "${local.prefix}-cloudwatch-observability"
   assume_role_policy = data.aws_iam_policy_document.cloudwatch_observability_assume_role.json
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-cloudwatch-observability"
   })
 }
@@ -346,7 +346,7 @@ resource "aws_iam_role" "ebs_csi_driver" {
   name               = "${local.prefix}-ebs-csi-driver"
   assume_role_policy = data.aws_iam_policy_document.ebs_csi_driver_assume_role.json
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-ebs-csi-driver"
   })
 }

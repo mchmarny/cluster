@@ -780,7 +780,7 @@ tools/setup configs/demo.yaml
 ```
 
 **What this does:**
-- Creates S3 bucket `cluster-builder-state-{account-id}` with versioning enabled
+- Creates S3 bucket `cluster-state-{account-id}` with versioning enabled
 - Configures bucket encryption and lifecycle policies
 - Creates IAM policy with required permissions
 - Validates AWS account matches configuration
@@ -790,7 +790,7 @@ tools/setup configs/demo.yaml
 [MSG] Account ID: <ACCOUNT_ID>
 [MSG] User:       cluster-builder-sa
 [MSG] Policy:     cluster-builder-policy
-[MSG] Bucket:     cluster-builder-state-<ACCOUNT_ID>
+[MSG] Bucket:     cluster-state-<ACCOUNT_ID>
 [MSG] Output:     /path/to/terraform
 ```
 
@@ -815,9 +815,9 @@ tools/actuate configs/demo.yaml
 [MSG]  deployment: d1
 [MSG]  location:   us-east-1
 [MSG]  tenancy:    <ACCOUNT_ID>
-[MSG]  bucket:     cluster-builder-state-<ACCOUNT_ID>
+[MSG]  bucket:     cluster-state-<ACCOUNT_ID>
 [MSG]  destroy:    no
-[MSG]  state:      s3://cluster-builder-state-<ACCOUNT_ID>/deployments/us-east-1/d1/terraform.tfstate
+[MSG]  state:      s3://cluster-state-<ACCOUNT_ID>/deployments/us-east-1/d1/terraform.tfstate
 ```
 
 **Deployment time:** Approximately 15-20 minutes for full cluster creation.
@@ -852,7 +852,7 @@ Terraform will:
 
 ## Test Plan
 
-A comprehensive test plan is available for validating cluster deployments. See [TEST_PLAN.md](TEST_PLAN.md) for:
+A comprehensive test plan is available for validating cluster deployments. See [TEST.md](TEST.md) for:
 
 - **Test 1:** System-only cluster (deploy, verify, destroy)
 - **Test 2:** System + multiple CPU worker pools (amd64, arm64)
@@ -953,7 +953,7 @@ Shared utility functions used by other tools.
 Terraform state is stored in S3 with the following structure:
 
 ```
-s3://cluster-builder-state-{account-id}/
+s3://cluster-state-{account-id}/
 └── deployments/
     └── {region}/
         └── {deployment-id}/
@@ -1404,7 +1404,7 @@ Error: Error acquiring the state lock
 # Check if lock exists
 aws dynamodb get-item \
   --table-name terraform-lock \
-  --key '{"LockID":{"S":"cluster-builder-state-{account}/deployments/{region}/{id}/terraform.tfstate"}}'
+  --key '{"LockID":{"S":"cluster-state-{account}/deployments/{region}/{id}/terraform.tfstate"}}'
 
 # If stale, force unlock (use with caution)
 cd terraform
@@ -1466,7 +1466,7 @@ cd terraform
 terraform show
 
 # Check S3 state bucket
-aws s3 ls s3://cluster-builder-state-{account-id}/deployments/{region}/{id}/
+aws s3 ls s3://cluster-state-{account-id}/deployments/{region}/{id}/
 
 # Validate configuration
 yq eval configs/simple.yaml
@@ -1479,7 +1479,7 @@ aws sts get-caller-identity
 
 ```bash
 # Check if setup was run
-aws s3 ls s3://cluster-builder-state-{account-id}/
+aws s3 ls s3://cluster-state-{account-id}/
 
 # Verify IAM policy exists
 aws iam get-policy --policy-arn arn:aws:iam::{account-id}:policy/cluster-builder-policy

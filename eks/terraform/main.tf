@@ -1,4 +1,13 @@
 data "aws_caller_identity" "current" {}
+
+# Query available AZs for default subnet generation
+data "aws_availability_zones" "available" {
+  state = "available"
+  filter {
+    name   = "opt-in-status"
+    values = ["opt-in-not-required"]
+  }
+}
 data "http" "egress_ip" {
   url             = "https://checkip.amazonaws.com"
   request_headers = { Accept = "text/plain" }
@@ -96,6 +105,34 @@ locals {
     system : local.system_node_taints
     worker : local.worker_node_taints
   }
+
+  // Use first 2 AZs for default subnets
+  available_azs = slice(data.aws_availability_zones.available.names, 0,
+  min(2, length(data.aws_availability_zones.available.names)))
+
+  // Default subnets (auto-computed from VPC CIDR)
+  default_subnets = {
+    public = [for i, az in local.available_azs : {
+      cidr = cidrsubnet(local.vpc_cidr, 11, i) # /27 (32 IPs)
+      zone = az
+    }]
+    system = [for i, az in local.available_azs : {
+      cidr = cidrsubnet(local.vpc_cidr, 6, i + 1) # /22 (1024 IPs)
+      zone = az
+    }]
+    worker = [for i, az in local.available_azs : {
+      cidr = cidrsubnet(local.vpc_cidr, 2, i + 2) # /18 (16384 IPs each)
+      zone = az
+    }]
+    pod = [for i, az in local.available_azs : {
+      cidr = cidrsubnet(local.pod_cidr, 2, i) # /18 from secondary CIDR
+      zone = az
+    }]
+  }
+
+  // Effective config: user config if provided, otherwise defaults
+  effective_subnets = try(local.config.network.subnets, null) != null ? local.config.network.subnets : local.default_subnets
+  effective_tags    = try(local.config.deployment.tags, {})
 }
 
 // =====================================================================================

@@ -34,7 +34,7 @@ DEP_REGION="$(yq -er '.deployment.location' $CONFIG_FILE)"
 PROJECT_ID="$(yq -er '.deployment.tenancy' $CONFIG_FILE)"
 CLUSTER="$(yq -er '.cluster.name' $CONFIG_FILE)"
 DESTROY="$(yq -er '.deployment.destroy // "false"' "$CONFIG_FILE")"
-BUCKET_NAME="cluster-builder-state-${PROJECT_ID}"
+BUCKET_NAME="cluster-state-${PROJECT_ID}"
 STATE_PREFIX="deployments/${DEP_REGION}/${DEP_ID}"
 
 msg "Using"

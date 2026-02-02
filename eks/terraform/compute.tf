@@ -177,13 +177,13 @@ resource "aws_launch_template" "node_groups" {
 
   tag_specifications {
     resource_type = "instance"
-    tags = merge(local.config.deployment.tags, {
+    tags = merge(local.effective_tags, {
       Name = each.key
       Role = each.value.type
     })
   }
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = each.key
   })
 }

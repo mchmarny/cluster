@@ -24,7 +24,7 @@ locals {
     # System nodes
     ("${local.prefix}-system") = {
       tags = {
-        "kubernetes.io/cluster/${local.config.cluster.name}" = "owned"
+        "kubernetes.io/cluster/${local.cluster_name}" = "owned"
       }
       ingress = [
         {
@@ -40,9 +40,9 @@ locals {
           to_port     = 443
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
-            local.config.cluster.controlPlane.cidr,
+            local.vpc_cidr,
+            local.pod_cidr,
+            local.service_cidr,
           ]
         },
         {
@@ -51,7 +51,7 @@ locals {
           to_port     = 10250
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.cluster.controlPlane.cidr,
+            local.service_cidr,
           ]
         },
         {
@@ -60,8 +60,8 @@ locals {
           to_port     = 10250
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -70,8 +70,8 @@ locals {
           to_port     = 53
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -80,8 +80,8 @@ locals {
           to_port     = 53
           protocol    = "udp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -90,8 +90,8 @@ locals {
           to_port     = 8080
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -100,7 +100,7 @@ locals {
           to_port     = 32767
           protocol    = "tcp"
           cidr_blocks = [
-            for subnet in local.config.network.subnets.public : subnet.cidr
+            for subnet in local.effective_subnets.public : subnet.cidr
           ]
         },
       ]
@@ -125,7 +125,7 @@ locals {
     # Pod
     ("${local.prefix}-pod") = {
       tags = {
-        "kubernetes.io/cluster/${local.config.cluster.name}" = "owned"
+        "kubernetes.io/cluster/${local.cluster_name}" = "owned"
       }
       ingress = [
         {
@@ -141,7 +141,7 @@ locals {
           to_port     = 65535
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
+            local.vpc_cidr,
           ]
         },
         {
@@ -150,7 +150,7 @@ locals {
           to_port     = 65535
           protocol    = "udp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
+            local.vpc_cidr,
           ]
         },
       ]
@@ -175,7 +175,7 @@ locals {
     # Worker
     ("${local.prefix}-worker") = {
       tags = {
-        "kubernetes.io/cluster/${local.config.cluster.name}" = "owned"
+        "kubernetes.io/cluster/${local.cluster_name}" = "owned"
       }
       ingress = [
         {
@@ -191,7 +191,7 @@ locals {
           to_port     = 0
           protocol    = "-1"
           cidr_blocks = [
-            for subnet in local.config.network.subnets.system : subnet.cidr
+            for subnet in local.effective_subnets.system : subnet.cidr
           ]
         },
         {
@@ -200,7 +200,7 @@ locals {
           to_port     = 10250
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.cluster.controlPlane.cidr,
+            local.service_cidr,
           ]
         },
         {
@@ -209,8 +209,8 @@ locals {
           to_port     = 10250
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -219,9 +219,9 @@ locals {
           to_port     = 443
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
-            local.config.cluster.controlPlane.cidr,
+            local.vpc_cidr,
+            local.pod_cidr,
+            local.service_cidr,
           ]
         },
         {
@@ -230,8 +230,8 @@ locals {
           to_port     = 53
           protocol    = "tcp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -240,8 +240,8 @@ locals {
           to_port     = 53
           protocol    = "udp"
           cidr_blocks = [
-            local.config.network.cidrs.host,
-            local.config.network.cidrs.pod,
+            local.vpc_cidr,
+            local.pod_cidr,
           ]
         },
         {
@@ -250,7 +250,7 @@ locals {
           to_port     = 32767
           protocol    = "tcp"
           cidr_blocks = [
-            for subnet in local.config.network.subnets.public : subnet.cidr
+            for subnet in local.effective_subnets.public : subnet.cidr
           ]
         },
       ]
@@ -310,7 +310,7 @@ resource "aws_security_group" "main" {
     }
   }
 
-  tags = merge(local.config.deployment.tags, try(each.value.tags, {}), {
+  tags = merge(local.effective_tags, try(each.value.tags, {}), {
     Name = each.key
   })
 }

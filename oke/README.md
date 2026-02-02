@@ -592,7 +592,7 @@ oci ce cluster delete --cluster-id <cluster-ocid>
 oci network vcn delete --vcn-id <vcn-ocid>
 
 # Delete Object Storage bucket
-oci os bucket delete --bucket-name cluster-builder-state-d1
+oci os bucket delete --bucket-name cluster-state-d1
 ```
 
 ---

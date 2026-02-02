@@ -3,6 +3,7 @@ kind: Cluster
 
 # Minimal OKE configuration - only required fields
 # All other settings use sensible defaults from Terraform
+# Note: Your current IP is automatically added to API server allowed CIDRs
 
 deployment:
   id: demo
@@ -10,11 +11,6 @@ deployment:
   location: us-ashburn-1
   oci:
     compartment: "ocid1.compartment.oc1..aaaaaaaXXXXXXXX"  # OCI compartment OCID
-
-cluster:
-  controlPlane:
-    allowedCidrs:            # CIDRs allowed to access control plane
-      - 1.2.3.4/32           # Replace with your IP
 
 compute:
   sshPublicKey: "ssh-ed25519 AAAA..."  # Replace with your SSH public key

@@ -29,7 +29,7 @@ SA_NAME="${SA_NAME:-cluster-builder-sa}"
 CURRENT_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 POLICY_NAME="${POLICY_NAME:-cluster-builder-policy}"
 POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${POLICY_NAME}"
-BUCKET_NAME="cluster-builder-state-${ACCOUNT_ID}"
+BUCKET_NAME="cluster-state-${ACCOUNT_ID}"
 
 # validate account
 if [[ "$ACCOUNT_ID" != "$CURRENT_ACCOUNT_ID" ]]; then
@@ -52,7 +52,13 @@ mkdir -p $OUT_DIR
 # create versioned bucket if it does not exist
 if ! aws s3api head-bucket --bucket "$BUCKET_NAME" --region "$REGION" 2>/dev/null; then
   echo "Creating S3 bucket: $BUCKET_NAME in region $REGION"
-  aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+  # us-east-1 doesn't accept LocationConstraint (AWS quirk)
+  if [[ "$REGION" == "us-east-1" ]]; then
+    aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION"
+  else
+    aws s3api create-bucket --bucket "$BUCKET_NAME" --region "$REGION" \
+      --create-bucket-configuration LocationConstraint="$REGION"
+  fi
 fi
 
 aws s3api put-bucket-versioning \
@@ -115,9 +121,11 @@ trap 'rm -f "${TMP_POLICY}"' EXIT
 printf '%s\n' "${POLICY_JSON}" > "${TMP_POLICY}"
 
 # Create IAM user if missing
+USER_CREATED=false
 if ! aws iam get-user --user-name "${SA_NAME}" >/dev/null 2>&1; then
   aws iam create-user --user-name "${SA_NAME}" >/dev/null
   msg "Created IAM user ${SA_NAME}"
+  USER_CREATED=true
 else
   msg "IAM user ${SA_NAME} already exists"
 fi
@@ -155,16 +163,15 @@ else
   msg "Policy already attached to user"
 fi
 
-# Create access key (ensure we don't exceed 2 keys)
-keys_count="$(aws iam list-access-keys --user-name "${SA_NAME}" --query 'length(AccessKeyMetadata)' --output text)"
-if [[ "${keys_count}" -ge 2 ]]; then
-  err "User already has ${keys_count} access keys (AWS limit is 2). Delete one before creating a new key."
+# Create access key only for newly created users
+if [[ "${USER_CREATED}" == "true" ]]; then
+  KEY_OUT="${ROOT}/.${ACCOUNT_ID}-key.json"
+  aws iam create-access-key --user-name "${SA_NAME}" > "${KEY_OUT}"
+  chmod 600 "${KEY_OUT}"
+  msg "Created access key. Saved to: ${KEY_OUT}"
+  msg "Export with:"
+  msg "  export AWS_ACCESS_KEY_ID=\$(jq -r .AccessKey.AccessKeyId ${KEY_OUT})"
+  msg "  export AWS_SECRET_ACCESS_KEY=\$(jq -r .AccessKey.SecretAccessKey ${KEY_OUT})"
+else
+  msg "Skipping access key creation (user already exists)"
 fi
-
-KEY_OUT="${ROOT}/.${ACCOUNT_ID}-key.json"
-aws iam create-access-key --user-name "${SA_NAME}" > "${KEY_OUT}"
-chmod 600 "${KEY_OUT}"
-msg "Created access key. Saved to: ${KEY_OUT}"
-msg "Export with:"
-msg "  export AWS_ACCESS_KEY_ID=\$(jq -r .AccessKey.AccessKeyId ${KEY_OUT})"
-msg "  export AWS_SECRET_ACCESS_KEY=\$(jq -r .AccessKey.SecretAccessKey ${KEY_OUT})"

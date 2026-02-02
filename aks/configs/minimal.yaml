@@ -3,6 +3,7 @@ kind: Cluster
 
 # Minimal AKS configuration - only required fields
 # All other settings use sensible defaults from Terraform
+# Note: Your current IP is automatically added to API server authorized ranges
 
 deployment:
   id: demo
@@ -10,8 +11,3 @@ deployment:
   location: eastus
   azure:
     resourceGroup: "rg-aks-demo"
-
-cluster:
-  controlPlane:
-    authorizedIpRanges:  # CIDRs allowed to access API server
-      - 1.2.3.4/32       # Replace with your IP

@@ -26,7 +26,7 @@ TENANCY_OCID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
 COMPARTMENT_OCID=$(yq -er '.deployment.oci.compartment' "$CONFIG_FILE")
 REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
 DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
-BUCKET_NAME="cluster-builder-state-${DEPLOYMENT_ID}"
+BUCKET_NAME="cluster-state-${DEPLOYMENT_ID}"
 NAMESPACE="$(oci os ns get --query 'data' --raw-output)"
 
 # Validate OCI CLI configuration

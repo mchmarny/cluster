@@ -28,7 +28,7 @@ REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
 DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
 SA_NAME="${SA_NAME:-cluster-builder-sa}"
 CURRENT_PROJECT_ID="$(gcloud config get-value project 2>/dev/null || echo '')"
-BUCKET_NAME="cluster-builder-state-${PROJECT_ID}"
+BUCKET_NAME="cluster-state-${PROJECT_ID}"
 PROJECT_NUMBER="$(curl -sS -H "Authorization: Bearer $(gcloud auth print-access-token)" \
     "https://cloudresourcemanager.googleapis.com/v1/projects/$PROJECT_ID" | jq -r '.projectNumber')"
 

@@ -40,7 +40,7 @@ resource "aws_kms_key" "eks" {
     ]
   })
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name           = "${local.prefix}-eks-secrets",
     LastReconciled = local.updateTime,
   })
@@ -57,7 +57,7 @@ resource "aws_cloudwatch_log_group" "eks_cluster" {
   retention_in_days = local.logRetentionInDays
   kms_key_id        = aws_kms_key.eks.arn
 
-  tags = merge(local.config.deployment.tags, {
+  tags = merge(local.effective_tags, {
     Name = "${local.prefix}-eks-control-plane-logs"
   })
 }
@@ -70,7 +70,7 @@ resource "aws_eks_cluster" "main" {
 
   enabled_cluster_log_types = ["api", "authenticator", "audit", "scheduler", "controllerManager"]
 
-  tags = merge({ Name = local.config.cluster.name }, local.config.deployment.tags)
+  tags = merge({ Name = local.config.cluster.name }, local.effective_tags)
 
   access_config {
     authentication_mode                         = "API_AND_CONFIG_MAP"
@@ -85,7 +85,7 @@ resource "aws_eks_cluster" "main" {
   }
 
   kubernetes_network_config {
-    service_ipv4_cidr = local.config.cluster.controlPlane.cidr
+    service_ipv4_cidr = local.service_cidr
   }
 
   vpc_config {
@@ -94,7 +94,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = local.system_subnet_ids
 
     public_access_cidrs = concat(
-      local.config.cluster.controlPlane.allowedCidrs,
+      try(local.config.cluster.controlPlane.allowedCidrs, []),
       [local.egress_cidr],
     )
 
@@ -118,7 +118,7 @@ resource "aws_eks_access_entry" "system_nodes" {
   principal_arn = aws_iam_role.system_nodes.arn
   type          = "EC2_LINUX"
 
-  tags = merge({ Name = "${local.prefix}-system-nodes-access" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-system-nodes-access" }, local.effective_tags)
 }
 
 resource "aws_eks_access_entry" "worker_nodes" {
@@ -126,7 +126,7 @@ resource "aws_eks_access_entry" "worker_nodes" {
   principal_arn = aws_iam_role.worker_nodes.arn
   type          = "EC2_LINUX"
 
-  tags = merge({ Name = "${local.prefix}-worker-nodes-access" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-worker-nodes-access" }, local.effective_tags)
 }
 
 # EKS Access Entries for Admin Roles
@@ -137,7 +137,7 @@ resource "aws_eks_access_entry" "admin_roles" {
   principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
   type          = "STANDARD"
 
-  tags = merge({ Name = "${local.prefix}-${each.value}-access" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-${each.value}-access" }, local.effective_tags)
 }
 
 # EKS Access Policy Associations
@@ -220,7 +220,7 @@ resource "aws_eks_addon" "coredns" {
 EOT
   })
 
-  tags = merge({ Name = "${local.prefix}-coredns" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-coredns" }, local.effective_tags)
 
   depends_on = [
     aws_eks_cluster.main
@@ -288,7 +288,7 @@ resource "aws_eks_addon" "vpc_cni" {
     local_file.eniconfig
   ]
 
-  tags = merge({ Name = "${local.prefix}-vpc-cni" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-vpc-cni" }, local.effective_tags)
 }
 
 resource "aws_eks_addon" "kube_proxy" {
@@ -304,7 +304,7 @@ resource "aws_eks_addon" "kube_proxy" {
     aws_eks_cluster.main
   ]
 
-  tags = merge({ Name = "${local.prefix}-kube-proxy" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-kube-proxy" }, local.effective_tags)
 }
 
 resource "aws_eks_addon" "cloudwatch_observability" {
@@ -376,7 +376,7 @@ resource "aws_eks_addon" "cloudwatch_observability" {
     aws_iam_role.cloudwatch_observability
   ]
 
-  tags = merge({ Name = "${local.prefix}-cloudwatch-observability" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-cloudwatch-observability" }, local.effective_tags)
 }
 
 resource "aws_eks_addon" "metrics_server" {
@@ -412,7 +412,7 @@ resource "aws_eks_addon" "metrics_server" {
     aws_eks_cluster.main
   ]
 
-  tags = merge({ Name = "${local.prefix}-metrics-server" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-metrics-server" }, local.effective_tags)
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
@@ -452,7 +452,7 @@ resource "aws_eks_addon" "ebs_csi_driver" {
     aws_iam_role.ebs_csi_driver
   ]
 
-  tags = merge({ Name = "${local.prefix}-ebs-csi-driver" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-ebs-csi-driver" }, local.effective_tags)
 }
 
 
@@ -467,7 +467,7 @@ resource "aws_iam_openid_connect_provider" "oidc_provider" {
 
   thumbprint_list = [data.tls_certificate.oidc_provider.certificates[0].sha1_fingerprint]
 
-  tags = merge({ Name = "${local.prefix}-oidc-provider" }, local.config.deployment.tags)
+  tags = merge({ Name = "${local.prefix}-oidc-provider" }, local.effective_tags)
 
   depends_on = [
     aws_eks_cluster.main
