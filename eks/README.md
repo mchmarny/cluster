@@ -332,13 +332,13 @@ network:
     - logs
 
 compute:
-  sshPublicKey: "ssh-ed25519 AAA..."
+  sshPublicKey: "ssh-ed25519 AAA..."  # Optional: omit for no SSH access
 
   nodeGroups:
 
     system:
       instanceType: t3.xlarge
-      imageId: ami-0ad0f739ba9218571
+      imageId: ami-0ad0f739ba9218571  # Optional: omit for auto-selected Ubuntu EKS AMI (x86_64)
       capacity:
         desired: 3
         min: 3
@@ -353,7 +353,7 @@ compute:
     workers:
       - name: amd-cpu-worker-1
         instanceType: m6i.xlarge
-        imageId: ami-0ad0f739ba9218571
+        # imageId: optional for x86_64, auto-selects Ubuntu EKS AMI
         capacity:
           desired: 1  # min/max are inferred from desired
         blockDevice:
@@ -365,7 +365,7 @@ compute:
 
       - name: arm-cpu-worker-1  # example of multiple node groups of the same type, block device omitted to use defaults
         instanceType: c6gn.xlarge
-        imageId: ami-09bf1e83f45a97282
+        imageId: ami-09bf1e83f45a97282  # Required for arm64 (auto-select is x86_64 only)
         capacity:
           desired: 1
         labels:
@@ -631,13 +631,13 @@ network:
     - logs
 
 compute:
-  sshPublicKey: "ssh-ed25519 AAA..."
+  sshPublicKey: "ssh-ed25519 AAA..."  # Optional: omit for no SSH access
 
   nodeGroups:
 
     system:
       instanceType: t3.xlarge
-      imageId: ami-0ad0f739ba9218571
+      # imageId: optional, auto-selects Ubuntu EKS AMI (x86_64)
       capacity:
         desired: 3
         min: 3
@@ -652,7 +652,7 @@ compute:
     workers:
       - name: amd-cpu-worker-1
         instanceType: m6i.xlarge
-        imageId: ami-0ad0f739ba9218571
+        # imageId: optional for x86_64
         capacity:
           desired: 2
         blockDevice:
@@ -662,9 +662,9 @@ compute:
         labels:
           nodeGroup: arm-cpu-worker
 
-      - name: arm-cpu-worker-1 
+      - name: arm-cpu-worker-1
         instanceType: c6gn.xlarge
-        imageId: ami-09bf1e83f45a97282
+        imageId: ami-09bf1e83f45a97282  # Required for arm64 (auto-select is x86_64 only)
         capacity:
           desired: 2
         labels:
