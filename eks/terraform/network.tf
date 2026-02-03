@@ -311,7 +311,8 @@ resource "local_file" "eniconfig" {
   })
 
   provisioner "local-exec" {
-    command = <<-EOC
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOC
       set -euo pipefail
       aws eks update-kubeconfig --region ${local.region} --name ${aws_eks_cluster.main.name}
       kubectl apply -f ${self.filename}
