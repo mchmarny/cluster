@@ -1,0 +1,67 @@
+#!/bin/bash
+
+# Common functions for cluster deployment tools
+# Source this file in other scripts: . "${DIR}/common"
+
+set -euo pipefail
+
+# Colors for output
+COLOR_GREEN='\033[0;32m'
+COLOR_RED='\033[0;31m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_RESET='\033[0m'
+
+# Logging functions
+msg() {
+  local message=$1
+  printf "${COLOR_GREEN}[MSG]${COLOR_RESET} %s\n" "$message" >&2
+}
+
+warn() {
+  local message=$1
+  printf "${COLOR_YELLOW}[WARN]${COLOR_RESET} %s\n" "$message" >&2
+}
+
+err() {
+  local message=$1
+  printf "${COLOR_RED}[ERR]${COLOR_RESET} %s\n" "$message" >&2
+  exit 1
+}
+
+# Check if required tools are installed
+has_tools() {
+  local tools=("$@")
+  for tool in "${tools[@]}"; do
+    if ! command -v "$tool" &>/dev/null; then
+      err "Required tool ($tool) is not installed."
+    fi
+  done
+}
+
+# Validate YAML configuration file
+validate_config() {
+  local config_file=$1
+
+  if [[ ! -f "$config_file" ]]; then
+    err "Config file not found: $config_file"
+  fi
+
+  # Check required fields
+  local required_fields=("deployment.id" "deployment.location" "deployment.tenancy")
+  for field in "${required_fields[@]}"; do
+    if ! yq -e ".$field" "$config_file" &>/dev/null; then
+      err "Missing required field in config: $field"
+    fi
+  done
+}
+
+# Get value from config with optional default
+config_get() {
+  local config_file=$1
+  local key=$2
+  local default="${3:-}"
+
+  local value
+  value=$(yq -er ".$key // \"$default\"" "$config_file" 2>/dev/null || echo "$default")
+  echo "$value"
+}

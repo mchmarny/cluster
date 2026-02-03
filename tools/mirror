@@ -1,0 +1,114 @@
+#!/bin/bash
+
+# Mirror Terraform dependencies for offline container builds
+# Usage: ./tools/mirror <csp>
+# Example: ./tools/mirror eks
+
+set -euo pipefail
+
+# Colors for output
+COLOR_GREEN='\033[0;32m'
+COLOR_RED='\033[0;31m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_RESET='\033[0m'
+
+msg() { printf "${COLOR_GREEN}[INFO]${COLOR_RESET} %s\n" "$1" >&2; }
+warn() { printf "${COLOR_YELLOW}[WARN]${COLOR_RESET} %s\n" "$1" >&2; }
+err() { printf "${COLOR_RED}[ERROR]${COLOR_RESET} %s\n" "$1" >&2; exit 1; }
+
+# Validate arguments
+CSP="${1:-}"
+if [[ -z "$CSP" ]]; then
+  err "Usage: $0 <csp> (e.g., eks, gke, aks, oke)"
+fi
+
+# Paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+TERRAFORM_DIR="${ROOT_DIR}/${CSP}/terraform"
+MIRROR_DIR="${ROOT_DIR}/mirror"
+
+# Validate Terraform directory exists
+if [[ ! -d "$TERRAFORM_DIR" ]]; then
+  err "Terraform directory not found: $TERRAFORM_DIR"
+fi
+
+msg "Mirroring Terraform dependencies for $CSP"
+msg "  Source: $TERRAFORM_DIR"
+msg "  Target: $MIRROR_DIR"
+
+# Clean previous mirror
+msg "Cleaning previous mirror..."
+rm -rf "$MIRROR_DIR"
+mkdir -p "$MIRROR_DIR"/{providers,modules,terraform}
+
+# Clean Terraform state from source
+msg "Cleaning Terraform state from source..."
+rm -rf "$TERRAFORM_DIR/.terraform" \
+       "$TERRAFORM_DIR/.terraform.lock.hcl" \
+       "$TERRAFORM_DIR/plan.cache" \
+       "$TERRAFORM_DIR/*.tfstate*"
+
+# Initialize Terraform (without backend to avoid network calls)
+msg "Initializing Terraform..."
+terraform -chdir="$TERRAFORM_DIR" init -backend=false
+
+# Lock providers for linux/amd64 platform
+msg "Locking providers for linux/amd64..."
+terraform -chdir="$TERRAFORM_DIR" providers lock -platform=linux_amd64
+
+# Mirror providers to local directory
+msg "Mirroring providers..."
+terraform -chdir="$TERRAFORM_DIR" providers mirror -platform=linux_amd64 "$MIRROR_DIR/providers"
+
+# Copy modules from Terraform cache
+msg "Copying modules..."
+if [[ -d "$TERRAFORM_DIR/.terraform/modules" ]]; then
+  cp -r "$TERRAFORM_DIR/.terraform/modules/"* "$MIRROR_DIR/modules/" 2>/dev/null || true
+else
+  warn "No modules found in .terraform/modules"
+fi
+
+# Copy Terraform source (excluding .terraform directory)
+msg "Copying Terraform source..."
+rsync -a --exclude='.terraform' --exclude='*.tfstate*' --exclude='plan.cache' \
+  "$TERRAFORM_DIR/" "$MIRROR_DIR/terraform/"
+
+# Create terraformrc for offline mode
+msg "Creating terraformrc..."
+cat > "$MIRROR_DIR/terraformrc" <<'EOF'
+# Terraform configuration for offline provider installation
+# All providers are pre-downloaded and stored in /opt/mirror/providers
+
+provider_installation {
+  filesystem_mirror {
+    path    = "/opt/mirror/providers"
+    include = ["*/*"]
+  }
+  direct {
+    exclude = ["*/*"]
+  }
+}
+EOF
+
+# Copy the lock file to mirror
+if [[ -f "$TERRAFORM_DIR/.terraform.lock.hcl" ]]; then
+  cp "$TERRAFORM_DIR/.terraform.lock.hcl" "$MIRROR_DIR/terraform/"
+fi
+
+# Create metadata file
+msg "Creating metadata..."
+cat > "$MIRROR_DIR/metadata.json" <<EOF
+{
+  "csp": "$CSP",
+  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "terraform_version": "$(terraform version -json | jq -r '.terraform_version')",
+  "source_dir": "$TERRAFORM_DIR"
+}
+EOF
+
+# Summary
+msg "Mirror complete!"
+msg "  Providers: $(find "$MIRROR_DIR/providers" -name "*.zip" 2>/dev/null | wc -l | tr -d ' ') packages"
+msg "  Modules: $(find "$MIRROR_DIR/modules" -maxdepth 1 -type d 2>/dev/null | wc -l | tr -d ' ') modules"
+msg "  Terraform files: $(find "$MIRROR_DIR/terraform" -name "*.tf" 2>/dev/null | wc -l | tr -d ' ') files"

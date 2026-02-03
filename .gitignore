@@ -83,3 +83,6 @@ sbom.json
 # Tests
 test-*.yaml
 test-*.json
+
+# Mirror directory (build artifact)
+mirror/

@@ -111,6 +111,125 @@ cd <platform>  # aks, eks, gke, or oke
 ./tools/actuate configs/minimal.yaml
 ```
 
+## Container Images
+
+Self-contained actuator images with pre-mirrored Terraform providers are built automatically on tag push. These images enable offline, reproducible deployments without runtime dependency downloads.
+
+### Available Images
+
+| Platform | Image |
+|----------|-------|
+| EKS | `ghcr.io/mchmarny/cluster/eks:<version>` |
+| GKE | `ghcr.io/mchmarny/cluster/gke:<version>` |
+| AKS | `ghcr.io/mchmarny/cluster/aks:<version>` |
+| OKE | `ghcr.io/mchmarny/cluster/oke:<version>` |
+
+### Building Images
+
+Images are built automatically when tags matching `v*-<csp>` are pushed:
+
+```bash
+# Tag and push to trigger build
+git tag v1.0.0-eks
+git push origin v1.0.0-eks
+```
+
+### Configuration Methods
+
+The actuator supports multiple configuration input methods (in priority order):
+
+| Priority | Method | Environment Variable | Description |
+|----------|--------|---------------------|-------------|
+| 1 | File path | `CONFIG_PATH` | Path to YAML config file |
+| 2 | Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML |
+| 3 | Remote URL | `CONFIG_URL` | S3, GCS, HTTPS, Azure, OCI URLs |
+| 4 | Inline JSON | `CONFIG_JSON` | JSON converted to YAML |
+
+### Usage Examples
+
+**Docker with base64 config:**
+```bash
+docker run \
+  -e CONFIG_CONTENT="$(base64 < config.yaml)" \
+  -e AUTO_APPROVE=true \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  ghcr.io/mchmarny/cluster/eks:v1.0.0 apply
+```
+
+**Docker with mounted config:**
+```bash
+docker run \
+  -v $(pwd)/config.yaml:/config.yaml \
+  -e CONFIG_PATH=/config.yaml \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  ghcr.io/mchmarny/cluster/eks:v1.0.0 plan
+```
+
+**Docker with remote config (S3):**
+```bash
+docker run \
+  -e CONFIG_URL=s3://my-bucket/configs/prod.yaml \
+  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  ghcr.io/mchmarny/cluster/eks:v1.0.0 apply
+```
+
+**Kubernetes Job:**
+```yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: cluster-deploy
+spec:
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: actuator
+          image: ghcr.io/mchmarny/cluster/eks:v1.0.0
+          args: ["apply"]
+          env:
+            - name: CONFIG_CONTENT
+              valueFrom:
+                secretKeyRef:
+                  name: cluster-config
+                  key: config.yaml.b64
+            - name: AUTO_APPROVE
+              value: "true"
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: access-key-id
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: secret-access-key
+```
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `plan` | Generate and show execution plan |
+| `apply` | Apply the Terraform configuration (default) |
+| `destroy` | Destroy the infrastructure |
+| `output` | Show deployment outputs |
+
+### Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `CONFIG_PATH` | Path to YAML configuration file |
+| `CONFIG_CONTENT` | Base64-encoded YAML configuration |
+| `CONFIG_URL` | Remote URL (s3://, gs://, https://, az://, oci://) |
+| `CONFIG_JSON` | Inline JSON configuration |
+| `AUTO_APPROVE` | Set to "true" to skip interactive approval |
+| `TERRAFORM_DIR` | Override Terraform directory (default: /builder/terraform) |
+
 ## Configuration Schema
 
 All platforms use a unified YAML configuration schema:

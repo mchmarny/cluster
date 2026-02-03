@@ -1,0 +1,360 @@
+#!/bin/bash
+
+# Unified actuate script for container-based Terraform deployments
+# Works with pre-mirrored Terraform dependencies
+# Supports: EKS (S3), GKE (GCS), AKS (Azure Blob), OKE (OCI Object Storage)
+
+set -euo pipefail
+
+# Colors
+COLOR_GREEN='\033[0;32m'
+COLOR_RED='\033[0;31m'
+COLOR_YELLOW='\033[0;33m'
+COLOR_RESET='\033[0m'
+
+msg() { printf "${COLOR_GREEN}[INFO]${COLOR_RESET} %s\n" "$1" >&2; }
+warn() { printf "${COLOR_YELLOW}[WARN]${COLOR_RESET} %s\n" "$1" >&2; }
+err() { printf "${COLOR_RED}[ERROR]${COLOR_RESET} %s\n" "$1" >&2; exit 1; }
+
+# Check required tools
+check_tools() {
+  local tools=("$@")
+  for tool in "${tools[@]}"; do
+    if ! command -v "$tool" &>/dev/null; then
+      err "Required tool not found: $tool"
+    fi
+  done
+}
+
+usage() {
+  cat <<EOF
+Usage: $(basename "$0") [OPTIONS] [COMMAND]
+
+Actuate infrastructure deployment with Terraform.
+
+COMMANDS:
+    plan        Generate and show execution plan
+    apply       Apply the Terraform configuration (default)
+    destroy     Destroy the infrastructure
+    output      Show deployment outputs
+
+OPTIONS:
+    -c, --config FILE    Path to YAML configuration file
+    -a, --auto-approve   Skip interactive approval
+    -h, --help           Show this help message
+
+CONFIGURATION (priority order):
+    1. -c/--config flag or CONFIG_PATH env var (file path)
+    2. CONFIG_CONTENT env var (base64-encoded YAML)
+    3. CONFIG_URL env var (remote URL: s3://, gs://, https://)
+    4. CONFIG_JSON env var (inline JSON, converted to YAML)
+
+ENVIRONMENT VARIABLES:
+    CONFIG_PATH          Path to YAML configuration file
+    CONFIG_CONTENT       Base64-encoded YAML configuration
+    CONFIG_URL           Remote URL to fetch configuration from
+    CONFIG_JSON          Inline JSON configuration
+    TERRAFORM_DIR        Override Terraform directory (default: /builder/terraform)
+    AUTO_APPROVE         Set to "true" to skip interactive approval
+
+EXAMPLES:
+    # Using config file
+    $(basename "$0") -c /configs/demo.yaml plan
+    $(basename "$0") -c /configs/demo.yaml -a apply
+
+    # Using environment variables
+    CONFIG_PATH=/configs/demo.yaml $(basename "$0") apply
+    CONFIG_CONTENT=\$(base64 < config.yaml) $(basename "$0") apply
+    CONFIG_URL=s3://bucket/config.yaml $(basename "$0") apply
+    CONFIG_JSON='{"deployment":{"id":"test"}}' $(basename "$0") plan
+
+    # Docker examples
+    docker run -e CONFIG_CONTENT="\$(base64 < config.yaml)" image:tag apply
+    docker run -v ./config.yaml:/config.yaml -e CONFIG_PATH=/config.yaml image:tag
+
+    # Kubernetes Job example
+    env:
+      - name: CONFIG_CONTENT
+        value: <base64-encoded-yaml>
+      - name: AUTO_APPROVE
+        value: "true"
+
+EOF
+}
+
+# Resolve configuration from multiple sources (priority order)
+# Returns path to config file (may be temp file)
+resolve_config() {
+  local config_file="${1:-}"
+  local resolved_config=""
+  local config_source=""
+
+  # Priority 1: Explicit file path (-c flag or CONFIG_PATH)
+  if [[ -n "$config_file" ]]; then
+    if [[ ! -f "$config_file" ]]; then
+      err "Config file not found: $config_file"
+    fi
+    resolved_config="$config_file"
+    config_source="file ($config_file)"
+
+  # Priority 2: Base64-encoded content (CONFIG_CONTENT)
+  elif [[ -n "${CONFIG_CONTENT:-}" ]]; then
+    resolved_config="/tmp/config-content.yaml"
+    if ! echo "$CONFIG_CONTENT" | base64 -d > "$resolved_config" 2>/dev/null; then
+      err "Failed to decode CONFIG_CONTENT (invalid base64)"
+    fi
+    config_source="CONFIG_CONTENT (base64)"
+
+  # Priority 3: Remote URL (CONFIG_URL)
+  elif [[ -n "${CONFIG_URL:-}" ]]; then
+    resolved_config="/tmp/config-url.yaml"
+    config_source="CONFIG_URL ($CONFIG_URL)"
+
+    case "$CONFIG_URL" in
+      s3://*)
+        msg "Fetching config from S3..."
+        if ! aws s3 cp "$CONFIG_URL" "$resolved_config" 2>/dev/null; then
+          err "Failed to fetch config from S3: $CONFIG_URL"
+        fi
+        ;;
+      gs://*)
+        msg "Fetching config from GCS..."
+        if ! gcloud storage cp "$CONFIG_URL" "$resolved_config" 2>/dev/null; then
+          err "Failed to fetch config from GCS: $CONFIG_URL"
+        fi
+        ;;
+      https://*|http://*)
+        msg "Fetching config from URL..."
+        if ! curl -fsSL "$CONFIG_URL" -o "$resolved_config" 2>/dev/null; then
+          err "Failed to fetch config from URL: $CONFIG_URL"
+        fi
+        ;;
+      az://*)
+        msg "Fetching config from Azure Blob..."
+        # az:// format: az://container/path
+        local az_path="${CONFIG_URL#az://}"
+        if ! az storage blob download --container-name "${az_path%%/*}" \
+             --name "${az_path#*/}" --file "$resolved_config" 2>/dev/null; then
+          err "Failed to fetch config from Azure: $CONFIG_URL"
+        fi
+        ;;
+      oci://*)
+        msg "Fetching config from OCI Object Storage..."
+        local oci_path="${CONFIG_URL#oci://}"
+        if ! oci os object get --bucket-name "${oci_path%%/*}" \
+             --name "${oci_path#*/}" --file "$resolved_config" 2>/dev/null; then
+          err "Failed to fetch config from OCI: $CONFIG_URL"
+        fi
+        ;;
+      *)
+        err "Unsupported URL scheme: $CONFIG_URL (supported: s3://, gs://, https://, az://, oci://)"
+        ;;
+    esac
+
+  # Priority 4: Inline JSON (CONFIG_JSON)
+  elif [[ -n "${CONFIG_JSON:-}" ]]; then
+    resolved_config="/tmp/config-json.yaml"
+    config_source="CONFIG_JSON (inline)"
+
+    # Convert JSON to YAML using yq
+    if ! echo "$CONFIG_JSON" | yq -P > "$resolved_config" 2>/dev/null; then
+      err "Failed to parse CONFIG_JSON (invalid JSON)"
+    fi
+
+  else
+    err "No configuration provided. Use -c flag or set CONFIG_PATH, CONFIG_CONTENT, CONFIG_URL, or CONFIG_JSON"
+  fi
+
+  # Validate the config file has required fields
+  if ! yq -e '.deployment.id' "$resolved_config" &>/dev/null; then
+    err "Invalid config: missing required field 'deployment.id'"
+  fi
+  if ! yq -e '.deployment.location' "$resolved_config" &>/dev/null; then
+    err "Invalid config: missing required field 'deployment.location'"
+  fi
+  if ! yq -e '.deployment.tenancy' "$resolved_config" &>/dev/null; then
+    err "Invalid config: missing required field 'deployment.tenancy'"
+  fi
+
+  msg "Config source: $config_source"
+  echo "$resolved_config"
+}
+
+# Detect CSP from Terraform files
+detect_csp() {
+  local tf_dir="$1"
+
+  if grep -q "aws_eks_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "eks"
+  elif grep -q "google_container_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "gke"
+  elif grep -q "azurerm_kubernetes_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "aks"
+  elif grep -q "oci_containerengine_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "oke"
+  else
+    err "Unable to detect CSP from Terraform files"
+  fi
+}
+
+# Initialize Terraform with CSP-specific backend
+init_terraform() {
+  local tf_dir="$1"
+  local csp="$2"
+  local config_file="$3"
+
+  local dep_id dep_region tenancy bucket_name
+  dep_id="$(yq -er '.deployment.id' "$config_file")"
+  dep_region="$(yq -er '.deployment.location' "$config_file")"
+  tenancy="$(yq -er '.deployment.tenancy' "$config_file")"
+
+  msg "Initializing Terraform for $csp..."
+
+  case "$csp" in
+    eks)
+      bucket_name="cluster-state-${tenancy}"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="bucket=$bucket_name" \
+        -backend-config="region=$dep_region" \
+        -backend-config="encrypt=true" \
+        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
+      ;;
+    gke)
+      bucket_name="cluster-state-${tenancy}"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="bucket=$bucket_name" \
+        -backend-config="prefix=deployments/${dep_region}/${dep_id}"
+      ;;
+    aks)
+      # AKS uses Azure Blob Storage
+      local resource_group storage_account container_name
+      resource_group="tfstate-${tenancy}"
+      storage_account="tfstate${tenancy:0:10}"
+      container_name="tfstate"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="resource_group_name=$resource_group" \
+        -backend-config="storage_account_name=$storage_account" \
+        -backend-config="container_name=$container_name" \
+        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
+      ;;
+    oke)
+      bucket_name="cluster-state-${tenancy}"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="bucket=$bucket_name" \
+        -backend-config="namespace=$tenancy" \
+        -backend-config="prefix=deployments/${dep_region}/${dep_id}"
+      ;;
+    *)
+      err "Unknown CSP: $csp"
+      ;;
+  esac
+}
+
+# Execute Terraform command
+run_terraform() {
+  local tf_dir="$1"
+  local config_file="$2"
+  local command="$3"
+  local auto_approve="$4"
+
+  local approve_flag=""
+  if [[ "$auto_approve" == "true" ]]; then
+    approve_flag="-auto-approve"
+  fi
+
+  case "$command" in
+    plan)
+      msg "Planning deployment..."
+      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" plan -out="plan.cache"
+      ;;
+    apply)
+      if [[ -f "$tf_dir/plan.cache" ]]; then
+        msg "Applying saved plan..."
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply $approve_flag "plan.cache"
+        rm -f "$tf_dir/plan.cache"
+      else
+        msg "Applying deployment..."
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply $approve_flag
+      fi
+      ;;
+    destroy)
+      msg "Destroying deployment..."
+      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy $approve_flag
+      ;;
+    output)
+      msg "Deployment outputs:"
+      terraform -chdir="$tf_dir" output
+      ;;
+    *)
+      err "Unknown command: $command"
+      ;;
+  esac
+}
+
+main() {
+  local config_arg=""
+  local command=""
+  local auto_approve="${AUTO_APPROVE:-false}"
+  local terraform_dir="${TERRAFORM_DIR:-/builder/terraform}"
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -c|--config)
+        config_arg="$2"
+        shift 2
+        ;;
+      -a|--auto-approve)
+        auto_approve="true"
+        shift
+        ;;
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      plan|apply|destroy|output)
+        command="$1"
+        shift
+        ;;
+      *)
+        err "Unknown option: $1"
+        ;;
+    esac
+  done
+
+  # Use CONFIG_PATH env var if -c not provided
+  if [[ -z "$config_arg" ]] && [[ -n "${CONFIG_PATH:-}" ]]; then
+    config_arg="$CONFIG_PATH"
+  fi
+
+  # Default command is apply
+  if [[ -z "$command" ]]; then
+    command="apply"
+  fi
+
+  # Check required tools
+  check_tools terraform yq
+
+  # Resolve configuration (handles all input methods)
+  local config_file
+  config_file=$(resolve_config "$config_arg")
+
+  # Detect CSP
+  local csp
+  csp=$(detect_csp "$terraform_dir")
+
+  msg "Configuration:"
+  msg "  CSP: $csp"
+  msg "  Config: $config_file"
+  msg "  Terraform: $terraform_dir"
+  msg "  Command: $command"
+  msg "  Auto-approve: $auto_approve"
+
+  # Initialize and run
+  init_terraform "$terraform_dir" "$csp" "$config_file"
+  run_terraform "$terraform_dir" "$config_file" "$command" "$auto_approve"
+
+  msg "Done"
+}
+
+main "$@"
