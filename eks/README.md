@@ -250,7 +250,8 @@ compute:
 **Notes:**
 - Your current IP is automatically added to the API server allowed CIDRs during deployment
 - `sshPublicKey` is optional - if omitted, no SSH key pair is created (nodes will have no SSH access)
-- `imageId` is optional - if omitted, Terraform automatically selects the latest Ubuntu EKS Worker AMI for x86_64 architecture from Canonical
+- `imageId` is optional - if omitted, Terraform automatically selects the latest Ubuntu EKS Worker AMI based on the `architecture` property (defaults to x86_64)
+- `architecture` is optional - set to `arm64` for Graviton instance types (m8g, c8g, r8g, etc.), defaults to `x86_64`
 - When using automatic AMI selection, `cluster.version` must be specified to match the correct Ubuntu EKS image
 
 ### Defaults Applied by Terraform
@@ -262,7 +263,8 @@ compute:
 | Service CIDR | `172.20.0.0/16` |
 | VPC endpoints | s3, ssm, ec2messages, ssmmessages, logs |
 | Log retention | 7 days |
-| Node image | Ubuntu EKS Worker AMI (x86_64) from Canonical |
+| Node image | Ubuntu EKS Worker AMI from Canonical |
+| Node architecture | x86_64 (set `architecture: arm64` for Graviton) |
 | Workers | Optional (system-only cluster supported) |
 
 ### Full Configuration Example
@@ -294,8 +296,10 @@ cluster:
     allowedCidrs: # CIDRs allowed to access control plane (e.g. kubectl)
       - 20.30.40.50/27
       - 2.3.4.5/32
-  adminRoles:
-    - ClusterAdmins
+  adminRoles:  # Run tools/disco to get your role name
+    - ClusterAdmins                    # Simple IAM role name
+    # - AWSReservedSSO_Admin_abc123    # AWS SSO role (auto-detected)
+    # - arn:aws:iam::123:role/MyRole   # Full ARN (used as-is)
 
 observability:
   logRetentionInDays: 7
@@ -365,7 +369,8 @@ compute:
 
       - name: arm-cpu-worker-1  # example of multiple node groups of the same type, block device omitted to use defaults
         instanceType: c6gn.xlarge
-        imageId: ami-09bf1e83f45a97282  # Required for arm64 (auto-select is x86_64 only)
+        architecture: arm64  # Required for Graviton/ARM instances (enables auto-select of ARM64 AMI)
+        # imageId: ami-xxx  # Optional: explicit AMI overrides architecture-based auto-select
         capacity:
           desired: 1
         labels:
@@ -390,14 +395,16 @@ compute:
 #### System Nodes
 - **Purpose**: Run cluster-critical workloads (CoreDNS, metrics-server, etc.)
 - **Taint**: `dedicated=system-workload:NoSchedule,NoExecute`
-- **Instance Type**: General-purpose (e.g. t3.xlarge)
+- **Instance Type**: General-purpose (e.g. t3.xlarge for x86_64, m8g.medium for ARM64)
+- **Architecture**: Supports both x86_64 (default) and arm64 (set `architecture: arm64`)
 - **Tolerations**: Required for system pods
 
 #### Worker Nodes
 - **Purpose**: Run application workloads
 - **Taint**: `dedicated=worker-workload:NoSchedule,NoExecute`
-- **Instance Types**: 
-  - CPU: `m6i.xlarge` (general compute)
+- **Instance Types**:
+  - CPU (x86_64): `m6i.xlarge` (general compute)
+  - CPU (ARM64): `m8g.xlarge`, `c6gn.xlarge` (Graviton - set `architecture: arm64`)
   - GPU: `p6e-gb200.36xlarge` (AI/ML with GB200 GPUs)
   - EFA: Automatically configured for GPU instances
 
@@ -639,8 +646,8 @@ cluster:
     allowedCidrs: # CIDRs allowed to access control plane (e.g. kubectl)
       - 1.2.3.4/27
       - 5.6.7.8/32
-  adminRoles:
-    - AWSOS-AD-Admin
+  adminRoles:  # Run tools/disco to get your role name
+    - My-Admin-Role                   # SSO roles auto-detected
 
 observability:
   logRetentionInDays: 7
@@ -710,11 +717,11 @@ compute:
 
       - name: arm-cpu-worker-1
         instanceType: c6gn.xlarge
-        imageId: ami-09bf1e83f45a97282  # Required for arm64 (auto-select is x86_64 only)
+        architecture: arm64  # Required for Graviton/ARM instances
         capacity:
           desired: 2
         labels:
-          nodeGroup: amd-cpu-worker
+          nodeGroup: arm-cpu-worker
 
       - name: gpu-worker-1
         instanceType: p6e-gb200.36xlarge
@@ -987,7 +994,7 @@ tools/actuate configs/simple.yaml
 
 #### `tools/disco`
 
-Discovery tool for EKS versions and add-on compatibility.
+Discovery tool for EKS versions, add-on compatibility, and current IAM identity.
 
 **Usage:**
 ```shell
@@ -996,6 +1003,7 @@ tools/disco -r us-west-2  # Specify region
 ```
 
 **Output includes:**
+- Current IAM identity (account, ARN, role name for `adminRoles` config)
 - Supported Kubernetes versions for EKS
 - Latest 5 versions for each add-on:
   - coredns
@@ -1007,6 +1015,18 @@ tools/disco -r us-west-2  # Specify region
 
 **Example output:**
 ```
+Current IAM Identity:
+---------------------
+  Account:  123456789012
+  ARN:      arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Admin_abc123/user@example.com
+  Role:     AWSReservedSSO_Admin_abc123
+  Type:     AWS SSO (auto-detected)
+
+  [TIP] Add this to your config for admin access:
+        cluster:
+          adminRoles:
+            - AWSReservedSSO_Admin_abc123
+
 Supported Kubernetes Versions:
 ------------------------------
   - 1.35
@@ -1021,6 +1041,8 @@ Available Add-on Versions:
     - v1.12.4-eksbuild.6
   ...
 ```
+
+**Note:** AWS SSO roles (starting with `AWSReservedSSO_`) are auto-detected. Use the role name directly in `cluster.adminRoles` - the correct ARN path is constructed automatically.
 
 #### `tools/validate`
 

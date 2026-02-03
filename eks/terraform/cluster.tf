@@ -130,23 +130,43 @@ resource "aws_eks_access_entry" "worker_nodes" {
 }
 
 # EKS Access Entries for Admin Roles
+# Supports two formats:
+#   - Full ARN: arn:aws:iam::ACCOUNT:role/path/ROLE_NAME (used as-is)
+#   - Role name: MyRole or AWSReservedSSO_* (looked up via IAM data source)
+data "aws_iam_role" "admin_roles" {
+  for_each = {
+    for role in try(local.config.cluster.adminRoles, []) :
+    role => role if !startswith(role, "arn:")
+  }
+  name = each.value
+}
+
+locals {
+  admin_role_arns = merge(
+    # Roles looked up via data source (by name)
+    { for k, v in data.aws_iam_role.admin_roles : k => v.arn },
+    # Roles provided as full ARNs (used as-is)
+    { for role in try(local.config.cluster.adminRoles, []) : role => role if startswith(role, "arn:") }
+  )
+}
+
 resource "aws_eks_access_entry" "admin_roles" {
-  for_each = toset(try(local.config.cluster.adminRoles, []))
+  for_each = local.admin_role_arns
 
   cluster_name  = aws_eks_cluster.main.name
-  principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
+  principal_arn = each.value
   type          = "STANDARD"
 
-  tags = merge({ Name = "${local.prefix}-${each.value}-access" }, local.effective_tags)
+  tags = merge({ Name = "${local.prefix}-${replace(each.key, "/[^a-zA-Z0-9-]/", "-")}-access" }, local.effective_tags)
 }
 
 # EKS Access Policy Associations
 resource "aws_eks_access_policy_association" "admin_cluster_admin" {
-  for_each = toset(try(local.config.cluster.adminRoles, []))
+  for_each = local.admin_role_arns
 
   cluster_name  = aws_eks_cluster.main.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
-  principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
+  principal_arn = each.value
 
   access_scope {
     type = "cluster"
@@ -156,11 +176,11 @@ resource "aws_eks_access_policy_association" "admin_cluster_admin" {
 }
 
 resource "aws_eks_access_policy_association" "admin_eks_admin" {
-  for_each = toset(try(local.config.cluster.adminRoles, []))
+  for_each = local.admin_role_arns
 
   cluster_name  = aws_eks_cluster.main.name
   policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
-  principal_arn = "arn:aws:iam::${local.account}:role/${each.value}"
+  principal_arn = each.value
 
   access_scope {
     type = "cluster"

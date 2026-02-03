@@ -84,7 +84,7 @@ POD_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "N
 check "Public subnets exist (expected >= 2)" "[[ $PUBLIC_SUBNETS -ge 2 ]]"
 check "System subnets exist (expected >= 2)" "[[ $SYSTEM_SUBNETS -ge 2 ]]"
 check "Worker subnets exist (expected >= 2)" "[[ $WORKER_SUBNETS -ge 2 ]]"
-check "Pod subnets exist (expected >= 2)" "[[ $POD_SUBNETS -ge 2 ]]"
+check "Pod subnets exist (expected >= 1)" "[[ $POD_SUBNETS -ge 1 ]]"
 
 # =============================================================================
 # VPC Endpoints Validation

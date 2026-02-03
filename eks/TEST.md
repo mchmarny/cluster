@@ -55,6 +55,18 @@ Use the discovery tool to find supported Kubernetes and add-on versions:
 
 **Example output:**
 ```
+Current IAM Identity:
+---------------------
+  Account:  123456789012
+  ARN:      arn:aws:sts::123456789012:assumed-role/AWSReservedSSO_Admin_abc123/user@example.com
+  Role:     AWSReservedSSO_Admin_abc123
+  Type:     AWS SSO (auto-detected)
+
+  [TIP] Add this to your config for admin access:
+        cluster:
+          adminRoles:
+            - AWSReservedSSO_Admin_abc123
+
 Supported Kubernetes Versions:
 ------------------------------
   - 1.35
@@ -69,6 +81,8 @@ Available Add-on Versions:
     - v1.12.4-eksbuild.6
   ...
 ```
+
+> **Note:** The `tools/disco` output includes your current IAM role name. Use this value in `cluster.adminRoles` to grant yourself admin access to the cluster. AWS SSO roles (starting with `AWSReservedSSO_`) are auto-detected and the correct ARN path is constructed automatically.
 
 ---
 
@@ -249,33 +263,65 @@ deployment:
   location: us-east-1
 cluster:
   name: test-cpu-gpu-workers
-  version: "1.34"
+  version: "1.34"  # From tools/disco output
+  addOns:
+    coreDns: ""  # Latest version
+    vpcCni: "v1.21.1-eksbuild.3"  # From tools/disco output
+    kubeProxy: ""
+    metricsServer: ""
+    cloudwatchObservability: ""
+    ebsCsi: ""
+  adminRoles:
+    - "YOUR_AWS_ADMIN_ROLE_NAME"  # From tools/disco output
+network:
+  cidrs:
+    host: 10.0.0.0/16
+    pod: 100.65.0.0/16
+  subnets:
+    public:
+      - cidr: 10.0.1.0/27
+        zone: us-east-1a
+      - cidr: 10.0.2.0/27
+        zone: us-east-1c
+    system:
+      - cidr: 10.0.4.0/22
+        zone: us-east-1a
+      - cidr: 10.0.8.0/22
+        zone: us-east-1c
+    worker:
+      - cidr: 10.0.128.0/17
+        zone: us-east-1e
+        disableEndpoints: true
+    pod:
+      - cidr: 100.65.0.0/16
+        zone: us-east-1e
+        disableEndpoints: true
 compute:
-  sshPublicKey: "ssh-ed25519 YOUR_SSH_PUBLIC_KEY"  # Recommended for GPU debugging
-
+  sshPublicKey: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDyFLVzUVJEuxDY2cDFnlwe13QaARa5yOumNNVVM2SFp mchmarny@nvidia.com"
   nodeGroups:
     system:
       instanceType: t3.xlarge
       capacity:
         desired: 3
-
     workers:
       - name: cpu-worker
-        instanceType: t3.xlarge
+        instanceType: m4.16xlarge
         capacity:
           desired: 1
+          min: 0
+          max: 3
         labels:
-          nodeGroup: cpu-worker
-
+          nodeGroup: cpu-worker1
       - name: gpu-worker
         instanceType: p5.48xlarge
+        architecture: arm64
         accelerator: h100
-        imageId: ami-0a7bcc9b03849f089
+        imageId: ami-12c586949b8b85f12
         capacity:
           desired: 1
           reservation:
             preference: capacity-reservations-only
-            target: cr-0cbe491320188dfa6  # Your ODCR ID
+            target: cr-0cbe491456188d123
         labels:
           gpu: "true"
 ```
@@ -300,7 +346,58 @@ tools/actuate configs/test-cpu-gpu-workers.yaml
 ### 4.3 Validate
 
 ```bash
-./tools/validate configs/test-cpu-gpu-workers.yaml
+tools/validate configs/test-cpu-gpu-workers.yaml
+```
+
+Output will look something like this: 
+
+```shell
+[MSG] Validating cluster: test-cpu-gpu-workers in us-east-1
+[MSG] Checking EKS cluster...
+[MSG] PASS: Cluster status is ACTIVE
+[MSG] PASS: Cluster version starts with 1.34
+[MSG] PASS: Service CIDR is configured
+[MSG] PASS: Cluster endpoint is configured
+[MSG] Checking VPC configuration...
+[MSG] PASS: VPC ID is set
+[MSG] PASS: VPC has subnets (expected >= 4)
+[MSG] PASS: Public subnets exist (expected >= 2)
+[MSG] PASS: System subnets exist (expected >= 2)
+[MSG] PASS: Worker subnets exist (expected >= 2)
+[MSG] PASS: Pod subnets exist (expected >= 1)
+[MSG] Checking VPC endpoints...
+[MSG] PASS: VPC endpoints exist (expected >= 5)
+[MSG] PASS: VPC endpoint s3 is available
+[MSG] PASS: VPC endpoint ssm is available
+[MSG] PASS: VPC endpoint ssmmessages is available
+[MSG] PASS: VPC endpoint ec2messages is available
+[MSG] PASS: VPC endpoint logs is available
+[MSG] Checking nodes...
+[MSG] PASS: Nodes exist (expected >= 3)
+[MSG] PASS: All nodes are Ready
+[MSG] PASS: System nodes have dedicated taint
+[MSG] Checking autoscaling groups...
+[MSG] PASS: System ASG exists
+[MSG] PASS: ASG desired capacity matches config (3)
+[MSG] PASS: ASG spans multiple AZs (expected >= 2)
+[MSG] Checking custom networking (ENI configs)...
+[MSG] PASS: ENI configs exist (expected >= 2)
+[MSG] Checking core components...
+[MSG] PASS: VPC CNI pods running (expected >= 5)
+[MSG] PASS: kube-proxy pods running (expected >= 5)
+[MSG] Checking security groups...
+[MSG] PASS: System security group exists
+[MSG] PASS: Worker security group exists
+[MSG] Checking IAM roles...
+[MSG] PASS: EKS cluster role exists
+[MSG] PASS: System nodes role exists
+[MSG] PASS: Worker nodes role exists
+
+==============================================
+Validation Summary
+==============================================
+[MSG] Passed: 30
+[MSG] All checks passed!
 ```
 
 **Manual Verification:**
@@ -309,7 +406,7 @@ tools/actuate configs/test-cpu-gpu-workers.yaml
 # Configure kubectl
 aws eks update-kubeconfig --name test-cpu-gpu-workers --region us-east-1
 
-# Check all nodes (expect 3 system + 1 cpu + 1 gpu = 5 nodes)
+# Check all nodes (expect 3 system + 1 cpu + 1 arm-cpu + 1 gpu = 6 nodes)
 kubectl get nodes
 kubectl get nodes -l gpu=true
 
@@ -321,12 +418,8 @@ kubectl describe node <gpu-node-name> | grep -A 5 Labels
 aws ec2 describe-security-groups --filters "Name=group-name,Values=*efa*" \
   --query 'SecurityGroups[].GroupId'
 
-# Test GPU workload (optional - requires NVIDIA device plugin)
-kubectl run gpu-test --image=nvidia/cuda:12.0-base --restart=Never \
-  --overrides='{"spec":{"tolerations":[{"key":"dedicated","operator":"Equal","value":"worker-workload","effect":"NoSchedule"}],"nodeSelector":{"gpu":"true"},"containers":[{"name":"gpu-test","image":"nvidia/cuda:12.0-base","command":["nvidia-smi"]}]}}'
-
-kubectl logs gpu-test
-kubectl delete pod gpu-test
+# List all pods and ensure all are in running state
+kubectl get pods -A
 ```
 
 ### 4.4 Delete
@@ -391,8 +484,8 @@ tools/setup configs/<config>.yaml
 - **Automated Validation:** Use `tools/validate` for consistent, repeatable cluster verification.
 - **Cost Warning:** GPU instances incur significant costs. Destroy promptly after testing.
 - **IP Auto-Addition:** Terraform automatically adds your current IP to the API server allowed CIDRs.
-- **Automatic AMI Selection:** When `imageId` is omitted, Terraform selects the latest Ubuntu EKS Worker AMI (x86_64). Requires `cluster.version` to be set.
-- **ARM64 Nodes:** Automatic AMI selection only supports x86_64. ARM64 nodes require explicit `imageId`.
+- **Automatic AMI Selection:** When `imageId` is omitted, Terraform selects the latest Ubuntu EKS Worker AMI based on the `architecture` property (defaults to x86_64). Requires `cluster.version` to be set.
+- **ARM64 Nodes:** Set `architecture: arm64` on node groups using Graviton instance types (m8g, c8g, r8g, etc.) for automatic ARM64 AMI selection, or provide explicit `imageId`.
 - **SSH Access:** `sshPublicKey` is optional. If omitted, nodes have no SSH access (use SSM Session Manager instead).
 - **Capacity Reservations:** For GPU workloads, configure capacity reservations using the `target` field.
 - **Minimal Config:** Network subnets and tags are optional. Terraform auto-computes default CIDRs from the VPC CIDR (10.0.0.0/16).

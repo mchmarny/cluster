@@ -68,9 +68,14 @@ locals {
 
   # Compute effective image ID for each node group
   # Uses provided imageId if specified, otherwise falls back to Ubuntu EKS AMI
+  # based on architecture (defaults to x86_64 if not specified)
   node_group_image_ids = {
     for ng in local.all_node_groups :
-    ng.name => try(ng.imageId, null) != null ? ng.imageId : data.aws_ami.ubuntu_eks.id
+    ng.name => (
+      try(ng.imageId, null) != null ? ng.imageId :
+      try(ng.architecture, "x86_64") == "arm64" ? data.aws_ami.ubuntu_eks_arm64.id :
+      data.aws_ami.ubuntu_eks_x86_64.id
+    )
   }
 }
 

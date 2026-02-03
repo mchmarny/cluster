@@ -15,7 +15,7 @@ data "http" "egress_ip" {
 
 # Ubuntu EKS Worker AMI lookup (used when imageId is not specified)
 # https://cloud-images.ubuntu.com/docs/aws/eks/
-data "aws_ami" "ubuntu_eks" {
+data "aws_ami" "ubuntu_eks_x86_64" {
   most_recent = true
   owners      = ["099720109477"] # Canonical
 
@@ -27,6 +27,31 @@ data "aws_ami" "ubuntu_eks" {
   filter {
     name   = "architecture"
     values = ["x86_64"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  filter {
+    name   = "state"
+    values = ["available"]
+  }
+}
+
+data "aws_ami" "ubuntu_eks_arm64" {
+  most_recent = true
+  owners      = ["099720109477"] # Canonical
+
+  filter {
+    name   = "name"
+    values = ["ubuntu-eks/k8s_${local.eks_version_for_ami}/images/*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["arm64"]
   }
 
   filter {

@@ -30,6 +30,54 @@ echo "[INFO] Discovering EKS information in region: ${REGION}"
 echo ""
 
 # =============================================================================
+# Current IAM Identity
+# =============================================================================
+echo "Current IAM Identity:"
+echo "---------------------"
+
+CALLER_IDENTITY=$(aws sts get-caller-identity --output json 2>/dev/null)
+ACCOUNT_ID=$(echo "$CALLER_IDENTITY" | jq -r '.Account')
+USER_ARN=$(echo "$CALLER_IDENTITY" | jq -r '.Arn')
+
+echo "  Account:  $ACCOUNT_ID"
+echo "  ARN:      $USER_ARN"
+
+# Extract role name if using assumed role (for cluster.adminRoles config)
+if [[ "$USER_ARN" == *":assumed-role/"* ]]; then
+  # Format: arn:aws:sts::ACCOUNT:assumed-role/ROLE_NAME/SESSION_NAME
+  ROLE_NAME=$(echo "$USER_ARN" | sed 's|.*:assumed-role/\([^/]*\)/.*|\1|')
+  echo "  Role:     $ROLE_NAME"
+
+  # Check if it's an SSO role
+  if [[ "$ROLE_NAME" == AWSReservedSSO_* ]]; then
+    echo "  Type:     AWS SSO (auto-detected)"
+  fi
+
+  echo ""
+  echo "  [TIP] Add this to your config for admin access:"
+  echo "        cluster:"
+  echo "          adminRoles:"
+  echo "            - $ROLE_NAME"
+elif [[ "$USER_ARN" == *":user/"* ]]; then
+  # Format: arn:aws:iam::ACCOUNT:user/USER_NAME
+  USER_NAME=$(echo "$USER_ARN" | sed 's|.*:user/||')
+  echo "  User:     $USER_NAME"
+  echo ""
+  echo "  [TIP] IAM users don't need adminRoles config - use IAM access entries directly"
+elif [[ "$USER_ARN" == *":role/"* ]]; then
+  # Format: arn:aws:iam::ACCOUNT:role/ROLE_NAME
+  ROLE_NAME=$(echo "$USER_ARN" | sed 's|.*:role/||')
+  echo "  Role:     $ROLE_NAME"
+  echo ""
+  echo "  [TIP] Add this to your config for admin access:"
+  echo "        cluster:"
+  echo "          adminRoles:"
+  echo "            - $ROLE_NAME"
+fi
+
+echo ""
+
+# =============================================================================
 # Supported Kubernetes Versions
 # =============================================================================
 echo "Supported Kubernetes Versions:"
