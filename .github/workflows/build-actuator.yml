@@ -56,7 +56,19 @@ jobs:
 
       - name: Validate mirrored Terraform
         run: |
-          export TF_CLI_CONFIG_FILE=$(pwd)/mirror/terraformrc
+          # Create local terraformrc pointing to actual provider path
+          cat > /tmp/terraformrc <<EOF
+          provider_installation {
+            filesystem_mirror {
+              path    = "$(pwd)/mirror/providers"
+              include = ["*/*"]
+            }
+            direct {
+              exclude = ["*/*"]
+            }
+          }
+          EOF
+          export TF_CLI_CONFIG_FILE=/tmp/terraformrc
           cd mirror/terraform
           terraform init -backend=false
           terraform validate
