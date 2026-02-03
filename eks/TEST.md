@@ -2,7 +2,11 @@
 
 This test plan validates the EKS cluster deployment with progressively more complex configurations.
 
-## Prerequisites
+---
+
+## Step 1: Setup
+
+### Prerequisites
 
 - AWS CLI configured with appropriate credentials
 - Terraform >= 1.13.0
@@ -10,56 +14,71 @@ This test plan validates the EKS cluster deployment with progressively more comp
 - kubectl >= 1.28
 - jq >= 1.6
 
-> Make sure to run `tools/setup configs/<config>.yaml` before starting tests!
-
-## Automated Validation
-
-Use the `tools/validate` script to automatically verify cluster configuration:
+### Verify AWS Authentication
 
 ```bash
-./tools/validate configs/test-system-only.yaml
+aws sts get-caller-identity
 ```
 
-The script performs 30 automated checks and exits with code 0 on success, non-zero on failure.
+### Initialize Backend
 
-### Checks Performed
+Run setup with any config file to initialize the S3 backend and IAM resources:
 
-| Category | Checks |
-|----------|--------|
-| **EKS Cluster** | Status (ACTIVE), version, service CIDR, endpoint |
-| **VPC** | VPC ID, subnet count, public/system/worker/pod subnets |
-| **VPC Endpoints** | s3, ssm, ssmmessages, ec2messages, logs availability |
-| **Nodes** | Count matches config, all Ready, taints applied |
-| **ASG** | Exists, desired capacity, multi-AZ spread |
-| **ENI Configs** | Custom networking configured per AZ |
-| **Core Components** | VPC CNI (aws-node), kube-proxy running |
-| **Security Groups** | System and worker security groups exist |
-| **IAM Roles** | EKS cluster, system nodes, worker nodes roles |
-
-### Example Output
-
-```
-[MSG] Validating cluster: test-system-only in us-west-2
-[MSG] Checking EKS cluster...
-[MSG] PASS: Cluster status is ACTIVE
-[MSG] PASS: Cluster version starts with 1.33
-...
-==============================================
-Validation Summary
-==============================================
-[MSG] Passed: 30
-[MSG] All checks passed!
+```bash
+tools/setup configs/minimal.yaml
 ```
 
-## Test Configurations
+> **Note:** If you see an error about stale Terraform cache, run:
+> ```bash
+> rm -rf terraform/.terraform terraform/.terraform.lock.hcl
+> ```
 
-Create the following test configuration files before running tests.
+### Export Credentials
 
-### Test 1: System-Only Cluster (Minimal)
+After setup, export the service account credentials:
 
-**File:** `configs/test-system-only.yaml`
+```bash
+export AWS_ACCESS_KEY_ID=$(jq -r .AccessKey.AccessKeyId ./<ACCOUNT_ID>-key.json)
+export AWS_SECRET_ACCESS_KEY=$(jq -r .AccessKey.SecretAccessKey ./<ACCOUNT_ID>-key.json)
+```
 
-**Status:** ✅ Verified
+### Discover Available Versions
+
+Use the discovery tool to find supported Kubernetes and add-on versions:
+
+```bash
+./tools/disco
+
+# Or specify a region
+./tools/disco -r us-west-2
+```
+
+**Example output:**
+```
+Supported Kubernetes Versions:
+------------------------------
+  - 1.35
+  - 1.34
+  - 1.33
+  ...
+
+Available Add-on Versions:
+--------------------------
+  coredns:
+    - v1.13.1-eksbuild.1
+    - v1.12.4-eksbuild.6
+  ...
+```
+
+---
+
+## Step 2: System-Only Cluster
+
+**Objective:** Validate basic cluster creation with only system nodes.
+
+### 2.1 Create Config
+
+Create `configs/test-system-only.yaml`:
 
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
@@ -81,11 +100,50 @@ compute:
 
 > **Note:** This is the most minimal configuration. Network subnets, tags, and AMI are all auto-computed with sensible defaults.
 
-### Test 2: System + CPU Workers
+### 2.2 Actuate
 
-**File:** `configs/test-cpu-workers.yaml`
+```bash
+tools/actuate configs/test-system-only.yaml
+```
 
-**Status:** ✅ Verified
+### 2.3 Validate
+
+```bash
+./tools/validate configs/test-system-only.yaml
+```
+
+**Manual Verification:**
+
+```bash
+# Configure kubectl
+aws eks update-kubeconfig --name test-system-only --region us-west-2
+
+# Check nodes (expect 3 system nodes)
+kubectl get nodes
+
+# Verify taints
+kubectl describe nodes | grep -A 3 Taints
+# Expected: dedicated=system-workload:NoSchedule, dedicated=system-workload:NoExecute
+
+# Check system pods
+kubectl get pods -A
+# Expected: VPC CNI, kube-proxy running
+```
+
+### 2.4 Delete
+
+```bash
+yq -i '.deployment.destroy = true' configs/test-system-only.yaml
+tools/actuate configs/test-system-only.yaml
+```
+
+## Step 3: System + CPU Workers
+
+**Objective:** Validate cluster with system nodes and multiple CPU worker pools.
+
+### 3.1 Create Config
+
+Create `configs/test-cpu-workers.yaml`:
 
 ```yaml
 apiVersion: github.com/mchmarny/cluster/v1alpha1
@@ -122,139 +180,13 @@ compute:
 
 > **Note:** Each worker requires a unique `name` field. Labels are optional but useful for node selection.
 
-### Test 3: System + CPU + GPU Workers
-
-**File:** `configs/test-gpu-workers.yaml`
-
-```yaml
-apiVersion: github.com/mchmarny/cluster/v1alpha1
-kind: Cluster
-
-deployment:
-  id: test3
-  tenancy: "YOUR_AWS_ACCOUNT_ID"
-  location: us-east-1
-
-cluster:
-  name: test3
-  version: "1.34"
-
-compute:
-  sshPublicKey: "ssh-ed25519 YOUR_SSH_PUBLIC_KEY"  # Recommended for GPU debugging
-
-  nodeGroups:
-    system:
-      instanceType: t3.xlarge
-      # imageId: auto-selected Ubuntu EKS AMI (amd64)
-      capacity:
-        desired: 3
-
-    workers:
-      - name: cpu-worker
-        instanceType: t3.xlarge
-        capacity:
-          desired: 2
-
-      - name: gpu-worker
-        instanceType: p5.48xlarge
-        accelerator: v100
-        imageId: ami-0a7bcc9b03849f089
-        capacity:
-          desired: 1
-        labels:
-          gpu: "true"
-```
-
----
-
-## Test Execution
-
-### Test 1: System-Only Cluster
-
-**Objective:** Validate basic cluster creation with only system nodes.
-
-#### 1.1 Deploy
-
-```bash
-tools/actuate configs/test-system-only.yaml
-```
-
-**Expected duration:** ~15-20 minutes
-
-#### 1.2 Verify
-
-**Automated Validation (Recommended):**
-
-```bash
-./tools/validate configs/test-system-only.yaml
-```
-
-**Manual Verification:**
-
-```bash
-# Configure kubectl
-aws eks update-kubeconfig --name test-system-only --region us-west-2
-
-# Check nodes (expect 3 system nodes)
-kubectl get nodes
-kubectl get nodes -o wide
-
-# Verify taints
-kubectl describe nodes | grep -A 3 Taints
-# Expected: dedicated=system-workload:NoSchedule, dedicated=system-workload:NoExecute
-
-# Check system pods
-kubectl get pods -A
-# Expected: VPC CNI, kube-proxy running
-
-# Verify VPC endpoints
-aws ec2 describe-vpc-endpoints --filters "Name=vpc-id,Values=<vpc-id>" \
-  --query 'VpcEndpoints[*].{Service:ServiceName,State:State}' --output table
-```
-
-**Pass Criteria:**
-- [ ] `tools/validate` exits with code 0
-- [ ] 3 nodes in Ready state
-- [ ] System taints applied correctly
-- [ ] VPC CNI daemonset running on all nodes
-- [ ] kube-proxy daemonset running on all nodes
-- [ ] 5 VPC endpoints available (s3, ssm, ssmmessages, ec2messages, logs)
-
-#### 1.3 Destroy
-
-```bash
-# Update config to set destroy: true
-yq -i '.deployment.destroy = true' configs/test-system-only.yaml
-
-# Destroy cluster
-tools/actuate configs/test-system-only.yaml
-```
-
-**Expected duration:** ~10-15 minutes
-
-**Pass Criteria:**
-- [ ] All EC2 instances terminated
-- [ ] EKS cluster deleted
-- [ ] VPC and subnets removed
-- [ ] No orphaned resources in AWS console
-
----
-
-### Test 2: System + CPU Workers
-
-**Objective:** Validate cluster with system nodes and multiple CPU worker pools.
-
-#### 2.1 Deploy
+### 3.2 Actuate
 
 ```bash
 tools/actuate configs/test-cpu-workers.yaml
 ```
 
-**Expected duration:** ~20-25 minutes
-
-#### 2.2 Verify
-
-**Automated Validation (Recommended):**
+### 3.3 Validate
 
 ```bash
 ./tools/validate configs/test-cpu-workers.yaml
@@ -270,7 +202,7 @@ aws eks update-kubeconfig --name test-cpu-workers --region us-west-2
 kubectl get nodes
 kubectl get nodes --show-labels | grep nodeGroup
 
-# Verify worker taints
+# Verify taints
 kubectl describe nodes | grep -A 3 Taints
 # System nodes: dedicated=system-workload:NoSchedule/NoExecute
 # Worker nodes: dedicated=worker-workload:NoSchedule/NoExecute
@@ -291,64 +223,101 @@ kubectl get pods -o wide
 kubectl delete pod test-worker1 test-worker2
 ```
 
-**Pass Criteria:**
-- [ ] `tools/validate` exits with code 0
-- [ ] 5 nodes total in Ready state
-- [ ] 3 system nodes with system taints
-- [ ] 1 worker with nodeGroup=cpu-worker1 label and worker taints
-- [ ] 1 worker with nodeGroup=cpu-worker2 label and worker taints
-- [ ] Test pods schedule to correct worker nodes
-
-#### 2.3 Destroy
+### 3.4 Delete
 
 ```bash
 yq -i '.deployment.destroy = true' configs/test-cpu-workers.yaml
 tools/actuate configs/test-cpu-workers.yaml
 ```
 
-**Pass Criteria:**
-- [ ] All resources cleaned up
-- [ ] No orphaned ASGs, launch templates, or security groups
-
----
-
-### Test 3: System + CPU + GPU Workers
+## Step 4: System + CPU + GPU Workers
 
 **Objective:** Validate cluster with GPU node pool and EFA networking.
 
-> **Note:** GPU instances have limited availability and higher cost. Ensure account limits and budget before running.
+> **Warning:** GPU instances have limited availability and higher cost. Ensure account limits and budget before running.
 
-#### 3.1 Deploy
+### 4.1 Create Config
 
-```bash
-tools/actuate configs/test-gpu-workers.yaml
+Create `configs/test-cpu-gpu-workers.yaml`:
+
+```yaml
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+deployment:
+  id: test-cpu-gpu-workers
+  tenancy: "YOUR_AWS_ACCOUNT_ID"
+  location: us-east-1
+cluster:
+  name: test-cpu-gpu-workers
+  version: "1.34"
+compute:
+  sshPublicKey: "ssh-ed25519 YOUR_SSH_PUBLIC_KEY"  # Recommended for GPU debugging
+
+  nodeGroups:
+    system:
+      instanceType: t3.xlarge
+      capacity:
+        desired: 3
+
+    workers:
+      - name: cpu-worker
+        instanceType: t3.xlarge
+        capacity:
+          desired: 1
+        labels:
+          nodeGroup: cpu-worker
+
+      - name: gpu-worker
+        instanceType: p5.48xlarge
+        accelerator: h100
+        imageId: ami-0a7bcc9b03849f089
+        capacity:
+          desired: 1
+          reservation:
+            preference: capacity-reservations-only
+            target: cr-0cbe491320188dfa6  # Your ODCR ID
+        labels:
+          gpu: "true"
 ```
 
-**Expected duration:** ~25-30 minutes (GPU instances may take longer)
+#### Capacity Reservation Types
 
-#### 3.2 Verify
+| Type | `marketType` | `target` format | Example |
+|------|--------------|-----------------|---------|
+| **On-Demand Capacity Reservation (ODCR)** | Not needed | `cr-xxx` | `cr-0cbe491320188dfa6` |
+| **Capacity Block for ML** | `capacity-block` | ARN | `arn:aws:ec2:region:account:capacity-block/...` |
+| **Spot Instances** | `spot` | Not needed | N/A |
+| **Resource Group (shared)** | Optional | ARN or name | `my-resource-group` |
 
-**Automated Validation (Recommended):**
+> **Note:** For On-Demand Capacity Reservations (most common), only `preference` and `target` are needed. Do NOT set `marketType` for ODCRs.
+
+### 4.2 Actuate
 
 ```bash
-./tools/validate configs/test-gpu-workers.yaml
+tools/actuate configs/test-cpu-gpu-workers.yaml
+```
+
+### 4.3 Validate
+
+```bash
+./tools/validate configs/test-cpu-gpu-workers.yaml
 ```
 
 **Manual Verification:**
 
 ```bash
 # Configure kubectl
-aws eks update-kubeconfig --name test3 --region us-east-1
+aws eks update-kubeconfig --name test-cpu-gpu-workers --region us-east-1
 
-# Check all nodes (expect 3 system + 2 cpu + 1 gpu = 6 nodes)
+# Check all nodes (expect 3 system + 1 cpu + 1 gpu = 5 nodes)
 kubectl get nodes
 kubectl get nodes -l gpu=true
 
 # Verify GPU node has correct labels
 kubectl describe node <gpu-node-name> | grep -A 5 Labels
-# Expected: gpu=true, nodeGroup=gpu-worker
+# Expected: gpu=true
 
-# Verify EFA security group (if applicable)
+# Verify EFA security group
 aws ec2 describe-security-groups --filters "Name=group-name,Values=*efa*" \
   --query 'SecurityGroups[].GroupId'
 
@@ -360,78 +329,12 @@ kubectl logs gpu-test
 kubectl delete pod gpu-test
 ```
 
-**Pass Criteria:**
-- [ ] `tools/validate` exits with code 0
-- [ ] 6 nodes total in Ready state
-- [ ] GPU node has gpu=true label
-- [ ] EFA security group created (for EFA-capable instances)
-- [ ] GPU workload can detect GPU device (if NVIDIA plugin installed)
-
-#### 3.3 Destroy
+### 4.4 Delete
 
 ```bash
-yq -i '.deployment.destroy = true' configs/test-gpu-workers.yaml
-tools/actuate configs/test-gpu-workers.yaml
+yq -i '.deployment.destroy = true' configs/test-cpu-gpu-workers.yaml
+tools/actuate configs/test-cpu-gpu-workers.yaml
 ```
-
-**Pass Criteria:**
-- [ ] All resources cleaned up including GPU instances
-- [ ] No orphaned capacity reservations
-
----
-
-## Validation Checklist Summary
-
-### Infrastructure
-
-| Component | Test 1 | Test 2 | Test 3 |
-|-----------|--------|--------|--------|
-| VPC created | [ ] | [ ] | [ ] |
-| Subnets (public, system, worker, pod) | [ ] | [ ] | [ ] |
-| NAT Gateways | [ ] | [ ] | [ ] |
-| Security Groups | [ ] | [ ] | [ ] |
-| KMS Key | [ ] | [ ] | [ ] |
-| EKS Cluster | [ ] | [ ] | [ ] |
-| OIDC Provider | [ ] | [ ] | [ ] |
-
-### Node Groups
-
-| Component | Test 1 | Test 2 | Test 3 |
-|-----------|--------|--------|--------|
-| System nodes (3) | [ ] | [ ] | [ ] |
-| CPU workers | N/A | [ ] (2) | [ ] (2) |
-| GPU workers | N/A | N/A | [ ] (1) |
-| Taints applied | [ ] | [ ] | [ ] |
-| Labels applied | [ ] | [ ] | [ ] |
-
-### Add-ons
-
-| Component | Test 1 | Test 2 | Test 3 |
-|-----------|--------|--------|--------|
-| CoreDNS | [ ] | [ ] | [ ] |
-| VPC CNI | [ ] | [ ] | [ ] |
-| kube-proxy | [ ] | [ ] | [ ] |
-| Metrics Server | [ ] | [ ] | [ ] |
-
-### Security
-
-| Component | Test 1 | Test 2 | Test 3 |
-|-----------|--------|--------|--------|
-| API server accessible | [ ] | [ ] | [ ] |
-| User IP auto-added | [ ] | [ ] | [ ] |
-| KMS encryption | [ ] | [ ] | [ ] |
-| VPC Flow Logs | [ ] | [ ] | [ ] |
-
-### Cleanup
-
-| Component | Test 1 | Test 2 | Test 3 |
-|-----------|--------|--------|--------|
-| All EC2 terminated | [ ] | [ ] | [ ] |
-| EKS deleted | [ ] | [ ] | [ ] |
-| VPC removed | [ ] | [ ] | [ ] |
-| No orphan resources | [ ] | [ ] | [ ] |
-
----
 
 ## Troubleshooting
 
@@ -454,7 +357,7 @@ sudo journalctl -u kubelet -f
 
 ```bash
 # Verify your IP was added
-aws eks describe-cluster --name demo \
+aws eks describe-cluster --name <cluster-name> \
   --query 'cluster.resourcesVpcConfig.publicAccessCidrs'
 
 # Check current egress IP
@@ -465,22 +368,31 @@ curl -s https://checkip.amazonaws.com
 
 ```bash
 # Check for dependencies
-aws eks list-nodegroups --cluster-name demo
-aws eks list-fargate-profiles --cluster-name demo
+aws eks list-nodegroups --cluster-name <cluster-name>
+aws eks list-fargate-profiles --cluster-name <cluster-name>
 
 # Force delete stuck resources (use with caution)
-aws eks delete-cluster --name demo --force
+aws eks delete-cluster --name <cluster-name> --force
+```
+
+### Stale Terraform State
+
+If switching AWS accounts or seeing backend errors:
+
+```bash
+rm -rf terraform/.terraform terraform/.terraform.lock.hcl
+tools/setup configs/<config>.yaml
 ```
 
 ---
 
 ## Notes
 
-- **Automated Validation:** Use `tools/validate` for consistent, repeatable cluster verification. It performs 30 checks and exits with code 0 on success.
+- **Automated Validation:** Use `tools/validate` for consistent, repeatable cluster verification.
 - **Cost Warning:** GPU instances incur significant costs. Destroy promptly after testing.
 - **IP Auto-Addition:** Terraform automatically adds your current IP to the API server allowed CIDRs.
-- **Automatic AMI Selection:** When `imageId` is omitted, Terraform selects the latest Ubuntu EKS Worker AMI (x86_64) from Canonical. Requires `cluster.version` to be set.
+- **Automatic AMI Selection:** When `imageId` is omitted, Terraform selects the latest Ubuntu EKS Worker AMI (x86_64). Requires `cluster.version` to be set.
 - **ARM64 Nodes:** Automatic AMI selection only supports x86_64. ARM64 nodes require explicit `imageId`.
 - **SSH Access:** `sshPublicKey` is optional. If omitted, nodes have no SSH access (use SSM Session Manager instead).
-- **Capacity Reservations:** For production GPU workloads, configure capacity reservations in the config.
+- **Capacity Reservations:** For GPU workloads, configure capacity reservations using the `target` field.
 - **Minimal Config:** Network subnets and tags are optional. Terraform auto-computes default CIDRs from the VPC CIDR (10.0.0.0/16).

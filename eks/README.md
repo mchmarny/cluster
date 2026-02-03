@@ -380,7 +380,7 @@ compute:
           reservation:  # example of capacity reservation usage
             marketType: capacity-block
             preference: capacity-reservations-only
-            resourceGroup: demo-gb200-rg  # arn derived form account id and region
+            target: demo-gb200-rg  # supports: cr-xxx, arn:..., or group name
         labels:
           nodeGroup: gpu-worker
 ```
@@ -403,18 +403,64 @@ compute:
 
 ### Capacity Reservations
 
-For GPU instances, use capacity reservations:
+For GPU instances, use capacity reservations with the unified `target` field:
 
 ```yaml
 capacity:
-  desired: 0
+  desired: 1
   reservation:
-    marketType: capacity-block           # or spot
     preference: capacity-reservations-only
-    resourceGroup: demo-gb200-rg         # Resource group name
+    target: cr-0cbe491320188dfa6          # See formats below
 ```
 
-ARN is constructed as: `arn:aws:resource-groups:{region}:{account}:group/{resourceGroup}`
+#### Reservation Types
+
+| Type | `marketType` | `target` format | Example |
+|------|--------------|-----------------|---------|
+| **On-Demand Capacity Reservation (ODCR)** | Not needed | `cr-xxx` | `cr-0cbe491320188dfa6` |
+| **Capacity Block for ML** | `capacity-block` | ARN | `arn:aws:ec2:region:account:capacity-block/...` |
+| **Spot Instances** | `spot` | Not needed | N/A |
+| **Resource Group (shared)** | Optional | ARN or name | `my-resource-group` |
+
+#### Target Field Formats
+
+The `target` field supports three formats:
+
+| Format | Example | Description |
+|--------|---------|-------------|
+| **Direct CR ID** | `cr-0cbe491320188dfa6` | Uses `capacity_reservation_id` directly |
+| **Full ARN** | `arn:aws:resource-groups:us-west-2:123456789:group/my-group` | Uses ARN as-is |
+| **Group name** | `demo-gb200-rg` | Auto-constructs ARN from account/region |
+
+#### Configuration Examples
+
+**On-Demand Capacity Reservation (most common):**
+```yaml
+reservation:
+  preference: capacity-reservations-only
+  target: cr-0cbe491320188dfa6
+```
+
+**Capacity Block for ML:**
+```yaml
+reservation:
+  marketType: capacity-block
+  preference: capacity-reservations-only
+  target: arn:aws:ec2:us-east-1:123456789:capacity-block/cr-xxx
+```
+
+**Spot Instances (no reservation):**
+```yaml
+reservation:
+  marketType: spot
+```
+
+**Shared Resource Group:**
+```yaml
+reservation:
+  preference: capacity-reservations-only
+  target: my-shared-gpu-group
+```
 
 ### Operational Parameters (Optional)
 
@@ -679,7 +725,7 @@ compute:
           reservation:
             marketType: capacity-block
             preference: capacity-reservations-only
-            resourceGroup: demo-gb200-rg  # arn derived form account id and region
+            target: demo-gb200-rg  # supports: cr-xxx, arn:..., or group name
         labels:
           nodeGroup: gpu-worker
 
@@ -938,6 +984,63 @@ tools/actuate configs/simple.yaml
 - Checks required tools (terraform, yq)
 - Verifies S3 bucket accessibility
 - Exits on any error (via `set -euo pipefail`)
+
+#### `tools/disco`
+
+Discovery tool for EKS versions and add-on compatibility.
+
+**Usage:**
+```shell
+tools/disco           # Uses default region (us-east-1)
+tools/disco -r us-west-2  # Specify region
+```
+
+**Output includes:**
+- Supported Kubernetes versions for EKS
+- Latest 5 versions for each add-on:
+  - coredns
+  - vpc-cni
+  - kube-proxy
+  - amazon-cloudwatch-observability
+  - metrics-server
+  - aws-ebs-csi-driver
+
+**Example output:**
+```
+Supported Kubernetes Versions:
+------------------------------
+  - 1.35
+  - 1.34
+  - 1.33
+  ...
+
+Available Add-on Versions:
+--------------------------
+  coredns:
+    - v1.13.1-eksbuild.1
+    - v1.12.4-eksbuild.6
+  ...
+```
+
+#### `tools/validate`
+
+Cluster validation tool that performs automated checks.
+
+**Usage:**
+```shell
+tools/validate configs/test-system-only.yaml
+```
+
+**Checks performed:**
+- EKS cluster status, version, endpoint
+- VPC configuration and subnets
+- VPC endpoints availability
+- Node count and readiness
+- ASG configuration
+- ENI configs for custom networking
+- Core components (VPC CNI, kube-proxy)
+- Security groups
+- IAM roles
 
 #### `tools/common`
 

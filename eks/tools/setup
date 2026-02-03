@@ -42,7 +42,13 @@ msg "Policy:     ${POLICY_NAME}"
 msg "Bucket:     ${BUCKET_NAME}"
 msg "Output:     ${OUT_DIR}"
 
-# prep 
+# Check for stale Terraform state from previous account
+if [[ -d "${OUT_DIR}/.terraform" ]] || [[ -f "${OUT_DIR}/.terraform.lock.hcl" ]]; then
+  err "Stale Terraform cache detected. Remove before setup:
+  rm -rf ${OUT_DIR}/.terraform ${OUT_DIR}/.terraform.lock.hcl"
+fi
+
+# prep
 mkdir -p $OUT_DIR
 
 # =========================================================================================

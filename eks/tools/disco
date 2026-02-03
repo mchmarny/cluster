@@ -1,0 +1,87 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Paths
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+# Check for required tools
+REQUIRED_TOOLS=(aws jq)
+has_tools "${REQUIRED_TOOLS[@]}"
+
+# Default region (can be overridden with -r flag)
+REGION="${AWS_DEFAULT_REGION:-us-east-1}"
+
+# Parse arguments
+while getopts "r:h" opt; do
+  case $opt in
+    r) REGION="$OPTARG" ;;
+    h)
+      echo "Usage: $0 [-r region]"
+      echo "  -r region    AWS region (default: us-east-1)"
+      exit 0
+      ;;
+    *) err "Invalid option: -$OPTARG" ;;
+  esac
+done
+
+echo "[INFO] Discovering EKS information in region: ${REGION}"
+echo ""
+
+# =============================================================================
+# Supported Kubernetes Versions
+# =============================================================================
+echo "Supported Kubernetes Versions:"
+echo "------------------------------"
+
+# Get unique K8s versions from kube-proxy addon (most comprehensive list)
+K8S_VERSIONS=$(aws eks describe-addon-versions \
+  --region "$REGION" \
+  --addon-name kube-proxy \
+  --query 'addons[0].addonVersions[*].compatibilities[*].clusterVersion' \
+  --output text 2>/dev/null | tr '\t' '\n' | sort -Vru)
+
+for version in $K8S_VERSIONS; do
+  echo "  - $version"
+done
+
+echo ""
+
+# =============================================================================
+# Add-on Versions
+# =============================================================================
+ADDONS=(
+  "coredns"
+  "vpc-cni"
+  "kube-proxy"
+  "amazon-cloudwatch-observability"
+  "metrics-server"
+  "aws-ebs-csi-driver"
+)
+
+echo "Available Add-on Versions:"
+echo "--------------------------"
+
+for addon in "${ADDONS[@]}"; do
+  echo ""
+  echo "  ${addon}:"
+
+  # Get the latest 5 versions for each addon
+  VERSIONS=$(aws eks describe-addon-versions \
+    --region "$REGION" \
+    --addon-name "$addon" \
+    --query 'addons[0].addonVersions[0:5].addonVersion' \
+    --output text 2>/dev/null | tr '\t' '\n')
+
+  if [[ -z "$VERSIONS" ]]; then
+    echo "    (not available in this region)"
+  else
+    for v in $VERSIONS; do
+      echo "    - $v"
+    done
+  fi
+done
+
+echo ""
+echo "[INFO] Done"

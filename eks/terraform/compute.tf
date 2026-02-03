@@ -121,6 +121,7 @@ resource "aws_launch_template" "node_groups" {
   }
 
   # EFA network interfaces for supported instance types
+  # EFA instances must be in the same subnet, so we use the first subnet of the appropriate type
   dynamic "network_interfaces" {
     for_each = contains(keys(local.efa_network_interfaces), try(each.value.accelerator, "na")) ? local.efa_network_interfaces[each.value.accelerator] : []
     content {
@@ -130,26 +131,37 @@ resource "aws_launch_template" "node_groups" {
       interface_type              = network_interfaces.value.interface_type
       network_card_index          = network_interfaces.value.network_card_index
       security_groups             = network_interfaces.value.security_groups
-      subnet_id                   = aws_subnet.main["${local.prefix}-${group.name}-subnet"].id
+      subnet_id                   = local.subnet_ids_by_type[each.value.subnet][0]
     }
   }
 
-  # Capacity Reservation and Spot options
+  # Capacity Reservation options
+  # Supports three target formats:
+  #   - Direct capacity reservation ID: cr-0cbe491320188dfa6
+  #   - Full resource group ARN: arn:aws:resource-groups:us-west-2:123456789:group/my-group
+  #   - Resource group name only: my-group (auto-constructs full ARN)
   dynamic "capacity_reservation_specification" {
-    for_each = try(each.value.capacity.reservation.preference, null) != null && try(each.value.capacity.reservation.marketType, null) == null ? [1] : []
+    for_each = try(each.value.capacity.reservation.preference, null) != null ? [1] : []
     content {
       capacity_reservation_preference = each.value.capacity.reservation.preference
       dynamic "capacity_reservation_target" {
-        for_each = try(each.value.capacity.reservation.resourceGroupArn, null) != null ? [1] : []
+        for_each = try(each.value.capacity.reservation.target, null) != null ? [1] : []
         content {
-          capacity_reservation_resource_group_arn = "arn:aws:resource-groups:${local.config.deployment.region}:${data.aws_caller_identity.current.account_id}:group/${each.value.capacity.reservation.resourceGroupArn}"
+          capacity_reservation_id = startswith(each.value.capacity.reservation.target, "cr-") ? each.value.capacity.reservation.target : null
+          capacity_reservation_resource_group_arn = (
+            startswith(each.value.capacity.reservation.target, "arn:") ? each.value.capacity.reservation.target :
+            startswith(each.value.capacity.reservation.target, "cr-") ? null :
+            "arn:aws:resource-groups:${local.region}:${data.aws_caller_identity.current.account_id}:group/${each.value.capacity.reservation.target}"
+          )
         }
       }
     }
   }
 
+  # Instance market options (spot, capacity-block)
+  # Can be used together with capacity_reservation_specification for capacity blocks
   dynamic "instance_market_options" {
-    for_each = try(each.value.capacity.reservation.marketType, null) != null && try(each.value.capacity.reservation.preference, null) != "capacity-reservations-only" ? [1] : []
+    for_each = try(each.value.capacity.reservation.marketType, null) != null ? [1] : []
     content {
       market_type = each.value.capacity.reservation.marketType
     }
