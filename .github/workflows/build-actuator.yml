@@ -11,6 +11,8 @@ on:
 env:
   REGISTRY: ghcr.io
   TERRAFORM_VERSION: "1.13.0"
+  # Platforms to build for
+  PLATFORMS: "linux/amd64,linux/arm64"
 
 jobs:
   build:
@@ -54,13 +56,13 @@ jobs:
           chmod +x ./tools/mirror
           ./tools/mirror ${{ steps.parse.outputs.csp }}
 
-      - name: Validate mirrored Terraform
+      - name: Validate mirrored Terraform (amd64)
         run: |
-          # Create local terraformrc pointing to actual provider path
+          # Create local terraformrc pointing to amd64 providers
           cat > /tmp/terraformrc <<EOF
           provider_installation {
             filesystem_mirror {
-              path    = "$(pwd)/mirror/providers"
+              path    = "$(pwd)/mirror/providers/amd64"
               include = ["*/*"]
             }
             direct {
@@ -72,6 +74,9 @@ jobs:
           cd mirror/terraform
           terraform init -backend=false
           terraform validate
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
@@ -98,11 +103,15 @@ jobs:
         with:
           context: .
           file: images/${{ steps.parse.outputs.csp }}.dockerfile
+          platforms: ${{ env.PLATFORMS }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Build args for reproducibility tracking
+          build-args: |
+            TERRAFORM_VERSION=${{ env.TERRAFORM_VERSION }}
 
       - name: Generate attestation
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
@@ -120,4 +129,6 @@ jobs:
           echo "| CSP | ${{ steps.parse.outputs.csp }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Version | ${{ steps.parse.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Image | ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Platforms | ${{ env.PLATFORMS }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Digest | ${{ steps.push.outputs.digest }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Terraform | ${{ env.TERRAFORM_VERSION }} |" >> $GITHUB_STEP_SUMMARY
