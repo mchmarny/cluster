@@ -260,6 +260,10 @@ resource "aws_autoscaling_group" "node_groups" {
     ignore_changes        = [desired_capacity] # Allow cluster autoscaler to manage
   }
 
+  timeouts {
+    delete = local.asgDeleteTimeout
+  }
+
   tag {
     key                 = "kubernetes.io/cluster/${aws_eks_cluster.main.name}"
     value               = "owned"
