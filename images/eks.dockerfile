@@ -4,7 +4,7 @@
 
 # Pin base image by digest for reproducibility
 # debian:bookworm-slim as of 2024-01-15
-FROM debian:bookworm-slim@sha256:1537a6a1cbc4b4fd401da800ee9480207e7dc1f23560c21b2a31c09e745250e3
+FROM debian:bookworm-slim@sha256:98f4b71de414932439ac6ac690d7060df1f27161073c5036a7553723881bffbe
 
 # Build arguments
 ARG TARGETARCH
