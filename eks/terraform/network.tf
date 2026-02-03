@@ -38,6 +38,20 @@ resource "aws_vpc" "main" {
   })
 }
 
+# Clean up any orphaned log group from previous deployments
+resource "null_resource" "cleanup_vpc_flow_logs" {
+  triggers = {
+    log_group_name = "/aws/vpc/${local.prefix}-flow-logs"
+  }
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOC
+      aws logs delete-log-group --log-group-name "${self.triggers.log_group_name}" --region ${local.region} 2>/dev/null || true
+    EOC
+  }
+}
+
 # CloudWatch Log Group for VPC Flow Logs
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   name              = "/aws/vpc/${local.prefix}-flow-logs"
@@ -47,6 +61,8 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   tags = merge(local.effective_tags, {
     Name = "${local.prefix}-vpc-flow-logs"
   })
+
+  depends_on = [null_resource.cleanup_vpc_flow_logs]
 }
 
 # IAM Role for VPC Flow Logs
