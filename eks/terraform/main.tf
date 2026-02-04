@@ -114,7 +114,7 @@ locals {
   // ASG Configuration
   asgHealthCheckGracePeriod = try(local.config.compute.autoscaling.healthCheck.gracePeriod, 300)
   asgCapacityTimeout        = try(local.config.compute.autoscaling.capacityTimeout, "10m")
-  asgDeleteTimeout          = try(local.config.compute.autoscaling.deleteTimeout, "20m")
+  asgDeleteTimeout          = try(local.config.compute.autoscaling.deleteTimeout, "30m")
   asgMinHealthyPercentage   = try(local.config.compute.autoscaling.instanceRefresh.minHealthyPercentage, 90)
   asgInstanceWarmup         = try(local.config.compute.autoscaling.instanceRefresh.instanceWarmup, 300)
   asgCheckpointPercentages  = try(local.config.compute.autoscaling.instanceRefresh.checkpointPercentages, [50, 100])

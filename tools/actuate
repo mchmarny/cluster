@@ -278,6 +278,8 @@ run_terraform() {
       fi
       ;;
     destroy)
+      msg "Refreshing state before destroy..."
+      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" refresh
       msg "Destroying deployment..."
       TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy $approve_flag
       ;;
