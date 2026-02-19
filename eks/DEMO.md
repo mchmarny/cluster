@@ -17,15 +17,16 @@ export CLUSTER_CONFIG="configs/test-demo.yaml"
 Account:
 
 ```shell
-eks/tools/setup $CLUSTER_CONFIG
+tools/setup $CLUSTER_CONFIG
 ```
 
 Variables:
 
 ```shell
 export AWS_ACCOUNT=$(yq .deployment.tenancy $CLUSTER_CONFIG)
-export AWS_ACCESS_KEY_ID=$(jq -r .AccessKey.AccessKeyId "eks/.${AWS_ACCOUNT}-key.json")
-export AWS_SECRET_ACCESS_KEY=$(jq -r .AccessKey.SecretAccessKey "eks/.${AWS_ACCOUNT}-key.json")
+export DEP_ID=$(yq .deployment.id $CLUSTER_CONFIG)
+export AWS_ACCESS_KEY_ID=$(jq -r .AccessKey.AccessKeyId ".${DEP_ID}-${AWS_ACCOUNT}-key.json")
+export AWS_SECRET_ACCESS_KEY=$(jq -r .AccessKey.SecretAccessKey ".${DEP_ID}-${AWS_ACCOUNT}-key.json")
 ```
 
 ## Plan

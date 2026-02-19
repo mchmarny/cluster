@@ -25,9 +25,9 @@ fi
 REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
 DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
 ACCOUNT_ID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
-SA_NAME="${SA_NAME:-cluster-builder-sa}"
+SA_NAME="${SA_NAME:-${DEPLOYMENT_ID}-builder-sa}"
 CURRENT_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-POLICY_NAME="${POLICY_NAME:-cluster-builder-policy}"
+POLICY_NAME="${POLICY_NAME:-${DEPLOYMENT_ID}-builder-policy}"
 POLICY_ARN="arn:aws:iam::${ACCOUNT_ID}:policy/${POLICY_NAME}"
 BUCKET_NAME="cluster-state-${ACCOUNT_ID}"
 
@@ -171,7 +171,7 @@ fi
 
 # Create access key only for newly created users
 if [[ "${USER_CREATED}" == "true" ]]; then
-  KEY_OUT="${ROOT}/.${ACCOUNT_ID}-key.json"
+  KEY_OUT="${ROOT}/.${DEPLOYMENT_ID}-${ACCOUNT_ID}-key.json"
   aws iam create-access-key --user-name "${SA_NAME}" > "${KEY_OUT}"
   chmod 600 "${KEY_OUT}"
   msg "Created access key. Saved to: ${KEY_OUT}"

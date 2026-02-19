@@ -45,7 +45,7 @@ resource "null_resource" "cleanup_vpc_flow_logs" {
   }
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
+    interpreter = ["/bin/sh", "-c"]
     command     = <<-EOC
       aws logs delete-log-group --log-group-name "${self.triggers.log_group_name}" --region ${local.region} 2>/dev/null || true
     EOC
@@ -327,9 +327,9 @@ resource "local_file" "eniconfig" {
   })
 
   provisioner "local-exec" {
-    interpreter = ["/bin/bash", "-c"]
+    interpreter = ["/bin/sh", "-c"]
     command     = <<-EOC
-      set -euo pipefail
+      set -eu
       aws eks update-kubeconfig --region ${local.region} --name ${aws_eks_cluster.main.name}
       kubectl apply -f ${self.filename}
       rm -f ${self.filename}
