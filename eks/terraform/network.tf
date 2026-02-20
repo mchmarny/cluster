@@ -41,13 +41,13 @@ resource "aws_vpc" "main" {
 # Clean up any orphaned log group from previous deployments
 resource "null_resource" "cleanup_vpc_flow_logs" {
   triggers = {
-    log_group_name = "/aws/vpc/${local.prefix}-flow-logs"
+    always = timestamp()
   }
 
   provisioner "local-exec" {
     interpreter = ["/bin/sh", "-c"]
     command     = <<-EOC
-      aws logs delete-log-group --log-group-name "${self.triggers.log_group_name}" --region ${local.region} 2>/dev/null || true
+      aws logs delete-log-group --log-group-name "/aws/vpc/${local.prefix}-flow-logs" --region ${local.region} 2>/dev/null || true
     EOC
   }
 }

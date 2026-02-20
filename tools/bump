@@ -1,0 +1,103 @@
+#!/bin/bash
+set -euo pipefail
+
+# Dir setup
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+CSPS="aks eks gke oke"
+
+# Check if required tools are installed
+has_tools git
+
+# Bump git tag version for a specific CSP
+bump_version() {
+  local bump_type=$1
+  local csp=$2
+
+  # Validate CSP
+  if ! echo "$CSPS" | grep -qw "$csp"; then
+    err "Invalid CSP '$csp'. Use: $CSPS"
+  fi
+
+  # Check if git working directory is clean
+  if ! git diff-index --quiet HEAD --; then
+    err "Working directory is not clean. Commit and push all changes first."
+  fi
+
+  # Check if there are unpushed commits
+  if [ "$(git rev-list @{u}..HEAD --count 2>/dev/null || echo 0)" -gt 0 ]; then
+    err "There are unpushed commits. Push all changes first."
+  fi
+
+  # Get current version for this CSP (latest v*-<csp> tag)
+  local current_version
+  current_version=$(git tag -l "v*-${csp}" | sed "s/-${csp}$//" | sort -V | tail -1 || echo "")
+  if [[ -z "$current_version" ]]; then
+    current_version="v0.0.0"
+  fi
+
+  msg "Current ${csp} version: ${current_version}-${csp}"
+
+  # Parse version components
+  local version_without_v=${current_version#v}
+  local IFS='.'
+  read -ra version_parts <<< "$version_without_v"
+  local major=${version_parts[0]:-0}
+  local minor=${version_parts[1]:-0}
+  local patch=${version_parts[2]:-0}
+
+  # Bump version based on type
+  case "$bump_type" in
+    major)
+      major=$((major + 1))
+      minor=0
+      patch=0
+      ;;
+    minor)
+      minor=$((minor + 1))
+      patch=0
+      ;;
+    patch)
+      patch=$((patch + 1))
+      ;;
+    *)
+      err "Invalid bump type '$bump_type'. Use: major, minor, or patch"
+      ;;
+  esac
+
+  local new_tag="v${major}.${minor}.${patch}-${csp}"
+
+  # Check if tag already exists locally
+  if git tag -l | grep -q "^${new_tag}$"; then
+    err "Tag '${new_tag}' already exists locally."
+  fi
+
+  # Check if tag already exists on remote
+  if git ls-remote --tags origin | grep -q "refs/tags/${new_tag}$"; then
+    err "Tag '${new_tag}' already exists on remote."
+  fi
+
+  msg "Bumping ${csp} ${bump_type}: ${current_version}-${csp} → ${new_tag}"
+
+  git tag -a "$new_tag" -m "Release $new_tag"
+  git push origin "$new_tag"
+
+  msg "Pushed $new_tag"
+}
+
+# Show usage if insufficient arguments
+if [ $# -lt 2 ]; then
+  echo "Usage: $0 <bump_type> <csp>"
+  echo ""
+  echo "Bump types: major, minor, patch"
+  echo "CSPs:       $CSPS"
+  echo ""
+  echo "Examples:"
+  echo "  $0 patch eks   # v0.2.5-eks → v0.2.6-eks"
+  echo "  $0 minor gke   # v0.1.0-gke → v0.2.0-gke"
+  echo "  $0 major aks   # v1.2.3-aks → v2.0.0-aks"
+  exit 1
+fi
+
+bump_version "$1" "$2"

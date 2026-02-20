@@ -94,8 +94,28 @@ scan: dep-check ## Run trivy security scan
 .PHONY: all
 all: tf-validate tf-lint tf-fmt scan  ## Run all validation checks (format, lint, security scan, terraform validate)
 
+# Version Bump Targets
+
+CSPS := aks eks gke oke
+BUMP_TYPES := major minor patch
+
+define bump_target
+.PHONY: bump-$(1)-$(2)
+bump-$(1)-$(2): ## Bump $(1) version for $(2) image
+	@./tools/bump $(1) $(2)
+endef
+
+$(foreach csp,$(CSPS),$(foreach bump,$(BUMP_TYPES),$(eval $(call bump_target,$(bump),$(csp)))))
+
 help: ## Displays available commands
 	@echo "Available make targets:"; \
 	grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk \
-		'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+		'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'; \
+	echo ""; \
+	echo "Version bump targets (bump-{major|minor|patch}-{csp}):"; \
+	for csp in $(CSPS); do \
+		for bump in $(BUMP_TYPES); do \
+			printf "\033[36m%-30s\033[0m Bump %s version for %s image\n" "bump-$$bump-$$csp" "$$bump" "$$csp"; \
+		done; \
+	done
 
