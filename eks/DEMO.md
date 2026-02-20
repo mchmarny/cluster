@@ -45,6 +45,7 @@ docker run \
 ```shell
 docker run \
   -e CONFIG_CONTENT="$(base64 < $CLUSTER_CONFIG)" \
+  -e AUTO_APPROVE=true \
   -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
   -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
   ghcr.io/mchmarny/cluster/eks:latest destroy
