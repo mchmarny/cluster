@@ -168,14 +168,7 @@ resource "aws_eks_cluster" "main" {
 }
 
 # EKS Access Entries
-resource "aws_eks_access_entry" "system_nodes" {
-  cluster_name  = aws_eks_cluster.main.name
-  principal_arn = aws_iam_role.system_nodes.arn
-  type          = "EC2_LINUX"
-
-  tags = { Name = "${local.prefix}-system-nodes-access" }
-}
-
+# System nodes use an EKS managed node group — access entry auto-created
 resource "aws_eks_access_entry" "worker_nodes" {
   cluster_name  = aws_eks_cluster.main.name
   principal_arn = aws_iam_role.worker_nodes.arn

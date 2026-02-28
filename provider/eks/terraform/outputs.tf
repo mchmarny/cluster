@@ -145,8 +145,19 @@ locals {
       }
     }
     compute = {
-      nodeGroups = [
-        for ng in local.all_node_groups : {
+      systemNodeGroup = {
+        name            = "system"
+        nodeGroupName   = aws_eks_node_group.system.node_group_name
+        nodeGroupArn    = aws_eks_node_group.system.arn
+        instanceTypes   = aws_eks_node_group.system.instance_types
+        desiredCapacity = aws_eks_node_group.system.scaling_config[0].desired_size
+        minSize         = aws_eks_node_group.system.scaling_config[0].min_size
+        maxSize         = aws_eks_node_group.system.scaling_config[0].max_size
+        status          = aws_eks_node_group.system.status
+        amiType         = aws_eks_node_group.system.ami_type
+      }
+      workerNodeGroups = [
+        for ng in local.worker_node_groups : {
           name                  = ng.name
           type                  = ng.type
           instanceType          = aws_launch_template.node_groups["${local.prefix}-${ng.name}"].instance_type
@@ -171,7 +182,6 @@ locals {
         vpcFlowLogs = aws_iam_role.vpc_flow_logs.arn
       }
       instanceProfiles = {
-        systemNodes = aws_iam_instance_profile.system_nodes.arn
         workerNodes = aws_iam_instance_profile.worker_nodes.arn
       }
     }

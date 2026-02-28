@@ -18,7 +18,7 @@ data "http" "egress_ip" {
 # Only looks up architectures that are actually needed by node groups
 locals {
   needed_architectures = toset([
-    for ng in local.all_node_groups :
+    for ng in local.worker_node_groups :
     try(ng.architecture, "x86_64")
     if try(ng.imageId, null) == null
   ])

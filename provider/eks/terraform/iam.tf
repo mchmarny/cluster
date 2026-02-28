@@ -291,14 +291,8 @@ resource "aws_iam_role_policy_attachment" "worker_nodes_extra" {
   role       = aws_iam_role.worker_nodes.name
 }
 
-# Instance Type Profiles for EC2 instances
-resource "aws_iam_instance_profile" "system_nodes" {
-  name = "${local.prefix}-system-nodes"
-  role = aws_iam_role.system_nodes.name
-
-  tags = { Name = "${local.prefix}-system-nodes" }
-}
-
+# Instance Profile for Worker Nodes (self-managed ASG)
+# System nodes use an EKS managed node group — no instance profile needed
 resource "aws_iam_instance_profile" "worker_nodes" {
   name = "${local.prefix}-worker-nodes"
   role = aws_iam_role.worker_nodes.name

@@ -76,7 +76,6 @@ type NodeGroups struct {
 
 type SystemNodeGroup struct {
 	InstanceType string   `yaml:"instanceType"`
-	ImageID      string   `yaml:"imageId,omitempty"`
 	Capacity     Capacity `yaml:"capacity"`
 }
 

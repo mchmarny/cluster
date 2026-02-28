@@ -31,35 +31,16 @@ locals {
     ]
   }
 
-  # Flatten nodeGroups structure: system object + workers array
-  all_node_groups = concat(
-    # Add system node group with name and type
-    [
-      merge(
-        local.config.compute.nodeGroups.system,
-        {
-          name   = "system"
-          type   = "system"
-          subnet = "system"
-        }
-      )
-    ],
-    # Add workers array with type attribute (empty list if not defined)
-    [
-      for worker in try(local.config.compute.nodeGroups.workers, []) :
-      merge(
-        worker,
-        {
-          type   = "worker"
-          subnet = "worker"
-        }
-      )
-    ]
-  )
+  # Worker node groups (self-managed via launch template + ASG)
+  # System nodes use an EKS managed node group — see aws_eks_node_group.system
+  worker_node_groups = [
+    for worker in try(local.config.compute.nodeGroups.workers, []) :
+    merge(worker, { type = "worker", subnet = "worker" })
+  ]
 
   # Prepare node group labels and taints for use in user data scripts
   node_group_labels = {
-    for ng in local.all_node_groups :
+    for ng in local.worker_node_groups :
     ng.name => join(
       ",",
       [for k, v in try(ng.labels, {}) : "${k}=${v}"]
@@ -68,7 +49,7 @@ locals {
 
   # #16: Compute effective image ID using for_each AMI data source
   node_group_image_ids = {
-    for ng in local.all_node_groups :
+    for ng in local.worker_node_groups :
     ng.name => (
       try(ng.imageId, null) != null ? ng.imageId :
       data.aws_ami.ubuntu_eks[try(ng.architecture, "x86_64")].id
@@ -86,7 +67,7 @@ resource "aws_key_pair" "main" {
 
 # Launch Templates for Node Groups
 resource "aws_launch_template" "node_groups" {
-  for_each = { for i, group in local.all_node_groups : "${local.prefix}-${group.name}" => group }
+  for_each = { for i, group in local.worker_node_groups : "${local.prefix}-${group.name}" => group }
 
   name                   = each.key
   image_id               = local.node_group_image_ids[each.value.name]
@@ -101,7 +82,7 @@ resource "aws_launch_template" "node_groups" {
   ]
 
   iam_instance_profile {
-    arn = each.value.type == "system" ? aws_iam_instance_profile.system_nodes.arn : aws_iam_instance_profile.worker_nodes.arn
+    arn = aws_iam_instance_profile.worker_nodes.arn
   }
 
   monitoring {
@@ -205,7 +186,7 @@ resource "aws_launch_template" "node_groups" {
 
 # Autoscaling Groups for Node Groups
 resource "aws_autoscaling_group" "node_groups" {
-  for_each = { for i, group in local.all_node_groups : "${local.prefix}-${group.name}" => group }
+  for_each = { for i, group in local.worker_node_groups : "${local.prefix}-${group.name}" => group }
 
   name                = each.key
   vpc_zone_identifier = local.subnet_ids_by_type[each.value.subnet]
@@ -291,5 +272,59 @@ resource "aws_autoscaling_group" "node_groups" {
     key                 = "k8s.io/cluster-autoscaler/enabled"
     value               = "true"
     propagate_at_launch = false
+  }
+}
+
+# EKS Managed Node Group for System Nodes
+# Uses AL2023 defaults — no custom AMI, launch template, or bootstrap script needed
+resource "aws_eks_node_group" "system" {
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = "${local.prefix}-system"
+  node_role_arn   = aws_iam_role.system_nodes.arn
+  subnet_ids      = local.system_subnet_ids
+
+  instance_types = [local.config.compute.nodeGroups.system.instanceType]
+  ami_type       = "AL2023_x86_64_STANDARD"
+  disk_size      = try(local.config.compute.nodeGroups.system.blockDevice.size, local.block_volume_size_default)
+
+  scaling_config {
+    desired_size = local.config.compute.nodeGroups.system.capacity.desired
+    min_size     = try(local.config.compute.nodeGroups.system.capacity.min, local.config.compute.nodeGroups.system.capacity.desired)
+    max_size     = try(local.config.compute.nodeGroups.system.capacity.max, local.config.compute.nodeGroups.system.capacity.desired)
+  }
+
+  update_config {
+    max_unavailable_percentage = 10
+  }
+
+  taint {
+    key    = "dedicated"
+    value  = "system-workload"
+    effect = "NO_SCHEDULE"
+  }
+
+  taint {
+    key    = "dedicated"
+    value  = "system-workload"
+    effect = "NO_EXECUTE"
+  }
+
+  labels = try(local.config.compute.nodeGroups.system.labels, {})
+
+  tags = merge(local.effective_tags, {
+    Name = "${local.prefix}-system"
+  })
+
+  # AWS requires IAM policies attached before node group creation
+  depends_on = [
+    aws_iam_role_policy_attachment.system_nodes_policy,
+    aws_iam_role_policy_attachment.system_nodes_cni_policy,
+    aws_iam_role_policy_attachment.system_nodes_container_registry_readonly,
+    aws_iam_role_policy_attachment.system_nodes_ssm_managed_instance_core,
+    aws_iam_role_policy_attachment.system_nodes_service_role_ebs_csi_driver_policy,
+  ]
+
+  lifecycle {
+    ignore_changes = [scaling_config[0].desired_size]
   }
 }

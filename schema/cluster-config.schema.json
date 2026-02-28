@@ -238,16 +238,34 @@
               "type": "object",
               "required": ["instanceType", "capacity"],
               "additionalProperties": false,
+              "description": "EKS managed node group (AL2023) — no custom AMI or capacity reservations",
               "properties": {
                 "instanceType": {
                   "type": "string",
                   "description": "EC2 instance type for system nodes"
                 },
-                "imageId": {
-                  "type": "string",
-                  "description": "Custom AMI ID"
-                },
-                "capacity": { "$ref": "#/$defs/capacity" }
+                "capacity": {
+                  "type": "object",
+                  "required": ["desired"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "desired": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Desired node count"
+                    },
+                    "min": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Minimum node count for autoscaling"
+                    },
+                    "max": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "description": "Maximum node count for autoscaling"
+                    }
+                  }
+                }
               }
             },
             "workers": {
