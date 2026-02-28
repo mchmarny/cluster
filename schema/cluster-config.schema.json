@@ -294,7 +294,7 @@
                   },
                   "accelerator": {
                     "type": "string",
-                    "description": "Accelerator type for EFA network interfaces (e.g. h100)"
+                    "description": "EFA accelerator type (auto-derived from instanceType: p5→h100, p6→gb200). Set only to override."
                   },
                   "imageId": {
                     "type": "string",

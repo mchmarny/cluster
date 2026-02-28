@@ -47,6 +47,24 @@ locals {
     )
   }
 
+  # Map instance type prefix to EFA accelerator type
+  # p5 = H100, p6e/p6i = GB200
+  instance_type_accelerators = {
+    "p5"  = "h100"
+    "p6e" = "gb200"
+    "p6i" = "gb200"
+  }
+
+  # Effective accelerator per worker: explicit config wins, otherwise derive from instance type prefix
+  effective_accelerators = {
+    for ng in local.worker_node_groups :
+    ng.name => coalesce(
+      try(ng.accelerator, null),
+      try(local.instance_type_accelerators[split(".", ng.instanceType)[0]], null),
+      "na"
+    )
+  }
+
   # #16: Compute effective image ID using for_each AMI data source
   node_group_image_ids = {
     for ng in local.worker_node_groups :
@@ -76,7 +94,7 @@ resource "aws_launch_template" "node_groups" {
   key_name               = length(aws_key_pair.main) > 0 ? aws_key_pair.main[0].key_name : null
 
   # Only set vpc_security_group_ids if no network interfaces are specified
-  vpc_security_group_ids = contains(keys(local.efa_network_interfaces), try(each.value.accelerator, "na")) ? null : [
+  vpc_security_group_ids = contains(keys(local.efa_network_interfaces), local.effective_accelerators[each.value.name]) ? null : [
     aws_security_group.main["${local.prefix}-efa"].id,
     aws_security_group.main["${local.prefix}-worker"].id
   ]
@@ -106,7 +124,7 @@ resource "aws_launch_template" "node_groups" {
   # EFA network interfaces for supported instance types
   # EFA instances must be in the same subnet, so we use the first subnet of the appropriate type
   dynamic "network_interfaces" {
-    for_each = contains(keys(local.efa_network_interfaces), try(each.value.accelerator, "na")) ? local.efa_network_interfaces[each.value.accelerator] : []
+    for_each = contains(keys(local.efa_network_interfaces), local.effective_accelerators[each.value.name]) ? local.efa_network_interfaces[local.effective_accelerators[each.value.name]] : []
     content {
       associate_public_ip_address = network_interfaces.value.associate_public_ip_address
       delete_on_termination       = network_interfaces.value.delete_on_termination
