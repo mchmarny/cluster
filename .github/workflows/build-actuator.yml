@@ -314,7 +314,7 @@ jobs:
           IMAGE: ${{ steps.parse.outputs.image }}
           VERSION: ${{ steps.parse.outputs.version }}
         run: |
-          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Manifest.Digest}}')
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Digest}}')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Generate attestation
