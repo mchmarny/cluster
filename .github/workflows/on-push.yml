@@ -1,0 +1,17 @@
+name: On Push
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: on-push-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qualify:
+    uses: ./.github/workflows/qualify.yml
+    permissions:
+      contents: read
