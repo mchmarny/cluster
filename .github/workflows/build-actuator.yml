@@ -126,6 +126,8 @@ jobs:
           cache-from: type=gha,scope=${{ steps.parse.outputs.provider }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ steps.parse.outputs.provider }}-${{ matrix.arch }}
           build-args: |
+            VERSION=${{ steps.parse.outputs.version }}
+            COMMIT=${{ github.sha }}
             TERRAFORM_VERSION=${{ steps.versions.outputs.terraform }}
             KUBECTL_VERSION=${{ steps.versions.outputs.kubectl }}
             AWSCLI_VERSION=${{ steps.versions.outputs.awscli }}
