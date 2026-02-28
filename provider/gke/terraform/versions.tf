@@ -4,27 +4,27 @@ terraform {
   required_providers {
     google = {
       source  = "hashicorp/google"
-      version = "~> 7.21.0"
+      version = "~> 7.21"
     }
     google-beta = {
       source  = "hashicorp/google-beta"
-      version = "~> 7.21.0"
+      version = "~> 7.21"
     }
     time = {
       source  = "hashicorp/time"
-      version = "~> 0.13.1"
+      version = "~> 0.13"
     }
     http = {
       source  = "hashicorp/http"
-      version = "~> 3.5.0"
+      version = "~> 3.5"
     }
     local = {
       source  = "hashicorp/local"
-      version = "~> 2.7.0"
+      version = "~> 2.7"
     }
     random = {
       source  = "hashicorp/random"
-      version = "~> 3.8.1"
+      version = "~> 3.8"
     }
   }
 }
