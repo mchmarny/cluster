@@ -27,7 +27,7 @@ jobs:
         uses: ./.github/actions/load-versions
 
       - name: Setup Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v5
         with:
           go-version: ${{ steps.versions.outputs.go }}
 
@@ -53,7 +53,7 @@ jobs:
         uses: ./.github/actions/load-versions
 
       - name: Setup Go
-        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5
+        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v5
         with:
           go-version: ${{ steps.versions.outputs.go }}
 
@@ -82,13 +82,13 @@ jobs:
         uses: ./.github/actions/load-versions
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
 
       - name: Setup tflint
-        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4
+        uses: terraform-linters/setup-tflint@4cb9feea73331a35b422df102992a03a44a3bb33 # v6.2.1
         with:
           tflint_version: v${{ steps.versions.outputs.tflint }}
 
