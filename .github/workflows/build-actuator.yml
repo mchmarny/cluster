@@ -2,67 +2,94 @@ name: Build Actuator Image
 
 on:
   push:
+    branches: [main]
     tags:
       - 'v*-eks'
       - 'v*-gke'
-      - 'v*-aks'
-      - 'v*-oke'
 
-env:
-  REGISTRY: ghcr.io
-  TERRAFORM_VERSION: "1.13.0"
-  # Platforms to build for
-  PLATFORMS: "linux/amd64,linux/arm64"
+concurrency:
+  group: build-${{ github.ref_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
+
+  # ===========================================================================
+  # Build: native per-arch images (parallel)
+  # ===========================================================================
+
   build:
-    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    name: Build (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
     permissions:
       contents: read
       packages: write
-      id-token: write
-      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+            platform: linux/amd64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            platform: linux/arm64
 
     steps:
-      - name: Parse tag
-        id: parse
-        run: |
-          TAG="${{ github.ref_name }}"
-          # v1.0.0-eks → VERSION=v1.0.0, CSP=eks
-          CSP="${TAG##*-}"
-          VERSION="${TAG%-*}"
-          echo "csp=$CSP" >> $GITHUB_OUTPUT
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "image=${{ env.REGISTRY }}/${{ github.repository }}/${CSP}" >> $GITHUB_OUTPUT
-
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
 
-      - name: Validate CSP directory exists
+      - name: Load versions
+        id: versions
+        uses: ./.github/actions/load-versions
+
+      - name: Parse tag
+        id: parse
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          if [[ ! -d "${{ steps.parse.outputs.csp }}/terraform" ]]; then
-            echo "Error: Directory ${{ steps.parse.outputs.csp }}/terraform does not exist"
+          PROVIDER="${TAG##*-}"
+          VERSION="${TAG%-*}"
+          echo "provider=$PROVIDER" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "image=${{ steps.versions.outputs.registry }}/${{ github.repository }}/${PROVIDER}" >> $GITHUB_OUTPUT
+
+      - name: Validate provider directory exists
+        env:
+          PROVIDER: ${{ steps.parse.outputs.provider }}
+        run: |
+          if [[ ! -d "provider/${PROVIDER}/terraform" ]]; then
+            echo "::error::Directory provider/${PROVIDER}/terraform does not exist"
             exit 1
           fi
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
-          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          terraform_version: ${{ steps.versions.outputs.terraform }}
           terraform_wrapper: false
 
       - name: Mirror Terraform dependencies
+        env:
+          PROVIDER: ${{ steps.parse.outputs.provider }}
         run: |
           chmod +x ./tools/mirror
-          ./tools/mirror ${{ steps.parse.outputs.csp }}
+          ./tools/mirror "$PROVIDER"
 
-      - name: Validate mirrored Terraform (amd64)
+      - name: Validate mirrored Terraform
+        env:
+          ARCH: ${{ matrix.arch }}
         run: |
-          # Create local terraformrc pointing to amd64 providers
           cat > /tmp/terraformrc <<EOF
           provider_installation {
             filesystem_mirror {
-              path    = "$(pwd)/mirror/providers/amd64"
+              path    = "$(pwd)/mirror/providers/${ARCH}"
               include = ["*/*"]
             }
             direct {
@@ -75,60 +102,256 @@ jobs:
           terraform init -backend=false
           terraform validate
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@29109295f81e9208d7d86ff1c6c12d2833863392 # v3
-
-      - name: Set up Docker Buildx
+      - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Login to GHCR
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ${{ steps.versions.outputs.registry }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
-        with:
-          images: ${{ steps.parse.outputs.image }}
-          tags: |
-            type=raw,value=${{ steps.parse.outputs.version }}
-            type=raw,value=latest
-
       - name: Build and push
-        id: push
         uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
         with:
           context: .
-          file: images/${{ steps.parse.outputs.csp }}.dockerfile
-          platforms: ${{ env.PLATFORMS }}
+          file: image/${{ steps.parse.outputs.provider }}.dockerfile
+          platforms: ${{ matrix.platform }}
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          # Build args for reproducibility tracking
+          tags: ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}-${{ matrix.arch }}
+          cache-from: type=gha,scope=${{ steps.parse.outputs.provider }}-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=${{ steps.parse.outputs.provider }}-${{ matrix.arch }}
           build-args: |
-            TERRAFORM_VERSION=${{ env.TERRAFORM_VERSION }}
+            TERRAFORM_VERSION=${{ steps.versions.outputs.terraform }}
+            KUBECTL_VERSION=${{ steps.versions.outputs.kubectl }}
+            AWSCLI_VERSION=${{ steps.versions.outputs.awscli }}
+          labels: |
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.parse.outputs.version }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+  # ===========================================================================
+  # Manifest: combine per-arch images into multi-arch manifest
+  # ===========================================================================
+
+  manifest:
+    name: Docker Manifest
+    runs-on: ubuntu-latest
+    needs: [build]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Load versions
+        id: versions
+        uses: ./.github/actions/load-versions
+
+      - name: Parse tag
+        id: parse
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          PROVIDER="${TAG##*-}"
+          VERSION="${TAG%-*}"
+          echo "provider=$PROVIDER" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "image=${{ steps.versions.outputs.registry }}/${{ github.repository }}/${PROVIDER}" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ steps.versions.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create multi-arch manifest
+        env:
+          IMAGE: ${{ steps.parse.outputs.image }}
+          VERSION: ${{ steps.parse.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker manifest create "${IMAGE}:${VERSION}" \
+            "${IMAGE}:${VERSION}-amd64" \
+            "${IMAGE}:${VERSION}-arm64"
+          docker manifest push "${IMAGE}:${VERSION}"
+
+          docker manifest create "${IMAGE}:latest" \
+            "${IMAGE}:${VERSION}-amd64" \
+            "${IMAGE}:${VERSION}-arm64"
+          docker manifest push "${IMAGE}:latest"
+
+  # ===========================================================================
+  # Vulnerability scan: scan multi-arch image after manifest is published
+  # ===========================================================================
+
+  image-vuln-scan:
+    name: Image Vuln Scan
+    runs-on: ubuntu-latest
+    needs: [manifest]
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: read
+      security-events: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Load versions
+        id: versions
+        uses: ./.github/actions/load-versions
+
+      - name: Parse tag
+        id: parse
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          PROVIDER="${TAG##*-}"
+          VERSION="${TAG%-*}"
+          echo "image=${{ steps.versions.outputs.registry }}/${{ github.repository }}/${PROVIDER}" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ steps.versions.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Scan container image
+        id: trivy
+        uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518 # v0.34.1
+        with:
+          scan-type: 'image'
+          image-ref: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
+          scanners: 'vuln'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'image-scan-results.sarif'
+          severity: '${{ steps.versions.outputs.scan_severity }}'
+          limit-severities-for-sarif: true
+        continue-on-error: true
+
+      - name: Upload SARIF to GitHub Security
+        if: hashFiles('image-scan-results.sarif') != ''
+        uses: github/codeql-action/upload-sarif@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.32.0
+        with:
+          sarif_file: image-scan-results.sarif
+          category: 'trivy-image-${{ steps.parse.outputs.image }}'
+        continue-on-error: true
+
+      - name: Fail on vulnerabilities
+        if: steps.trivy.outcome == 'failure'
+        env:
+          IMAGE_REF: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
+        run: |
+          set -euo pipefail
+          echo "::error::Vulnerability scan found issues in ${IMAGE_REF}"
+          echo "Check the Security tab for details."
+          exit 1
+
+  # ===========================================================================
+  # Attestation: provenance after scan passes
+  # ===========================================================================
+
+  attest:
+    name: Attest
+    runs-on: ubuntu-latest
+    needs: [image-vuln-scan]
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+
+      - name: Load versions
+        id: versions
+        uses: ./.github/actions/load-versions
+
+      - name: Parse tag
+        id: parse
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          PROVIDER="${TAG##*-}"
+          VERSION="${TAG%-*}"
+          echo "image=${{ steps.versions.outputs.registry }}/${{ github.repository }}/${PROVIDER}" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Login to GHCR
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ${{ steps.versions.outputs.registry }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get manifest digest
+        id: digest
+        env:
+          IMAGE: ${{ steps.parse.outputs.image }}
+          VERSION: ${{ steps.parse.outputs.version }}
+        run: |
+          DIGEST=$(docker manifest inspect "${IMAGE}:${VERSION}" -v | jq -r '.digest // .Descriptor.digest')
+          echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
       - name: Generate attestation
         uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
         with:
           subject-name: ${{ steps.parse.outputs.image }}
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
           push-to-registry: true
 
+  # ===========================================================================
+  # Summary
+  # ===========================================================================
+
+  summary:
+    name: Summary
+    runs-on: ubuntu-latest
+    needs: [build, manifest, image-vuln-scan, attest]
+    if: always()
+    timeout-minutes: 5
+    permissions:
+      contents: read
+
+    steps:
       - name: Summary
+        env:
+          TAG: ${{ github.ref_name }}
+          BUILD: ${{ needs.build.result }}
+          MANIFEST: ${{ needs.manifest.result }}
+          VULN_SCAN: ${{ needs.image-vuln-scan.result }}
+          ATTEST: ${{ needs.attest.result }}
         run: |
-          echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| CSP | ${{ steps.parse.outputs.csp }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Version | ${{ steps.parse.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Image | ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Platforms | ${{ env.PLATFORMS }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Digest | ${{ steps.push.outputs.digest }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Terraform | ${{ env.TERRAFORM_VERSION }} |" >> $GITHUB_STEP_SUMMARY
+          set -euo pipefail
+          {
+            echo "## Build Summary"
+            echo ""
+            echo "**Tag:** \`${TAG}\`"
+            echo ""
+            echo "| Phase | Result |"
+            echo "|-------|--------|"
+            echo "| Build (amd64 + arm64) | ${BUILD} |"
+            echo "| Multi-arch Manifest | ${MANIFEST} |"
+            echo "| Vulnerability Scan | ${VULN_SCAN} |"
+            echo "| Attestation | ${ATTEST} |"
+          } >> "$GITHUB_STEP_SUMMARY"

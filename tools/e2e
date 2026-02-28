@@ -1,0 +1,113 @@
+#!/bin/bash
+
+# End-to-end smoke tests for the cluster image
+# Tests Go build, Docker image, tool presence, CLI, and Terraform validation
+# Usage: ./tools/e2e [--skip-build]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${SCRIPT_DIR}/common"
+
+IMAGE="cluster:e2e-test"
+PASSED=0
+FAILED=0
+
+pass() { printf "${COLOR_GREEN}  PASS${COLOR_RESET} %s\n" "$1"; PASSED=$((PASSED + 1)); }
+fail() { printf "${COLOR_RED}  FAIL${COLOR_RESET} %s: %s\n" "$1" "${2:-}"; FAILED=$((FAILED + 1)); }
+
+run_test() {
+  local name="$1"; shift
+  if output=$("$@" 2>&1); then
+    pass "$name"
+  else
+    fail "$name" "$output"
+  fi
+}
+
+has_tools go docker
+
+# ---- Go quality checks ----
+msg "Go quality checks"
+run_test "go build" go build ./...
+run_test "go vet" go vet ./...
+run_test "go fmt" bash -c 'test -z "$(gofmt -l .)"'
+run_test "go test" go test ./... -count=1 -race
+
+# ---- Docker image build ----
+msg "Docker image build"
+if [[ "${1:-}" == "--skip-build" ]]; then
+  warn "skipped via --skip-build"
+else
+  if docker build -f image/eks.dockerfile \
+    --build-arg VERSION=e2e-test \
+    --build-arg COMMIT="$(git rev-parse --short HEAD)" \
+    -t "$IMAGE" . ; then
+    pass "docker build"
+  else
+    fail "docker build"
+    echo ""
+    msg "Results: ${PASSED} passed, ${FAILED} failed"
+    exit 1
+  fi
+fi
+
+# ---- Container smoke tests ----
+msg "Container smoke tests"
+
+# CLI
+run_test "cluster --version" docker run --rm "$IMAGE" --version
+run_test "cluster --help" docker run --rm "$IMAGE" --help
+
+# Tools present
+run_test "terraform version" docker run --rm --entrypoint terraform "$IMAGE" version
+run_test "kubectl version" docker run --rm --entrypoint kubectl "$IMAGE" version --client
+run_test "aws --version" docker run --rm --entrypoint aws "$IMAGE" --version
+run_test "jq --version" docker run --rm --entrypoint jq "$IMAGE" --version
+run_test "git --version" docker run --rm --entrypoint git "$IMAGE" --version
+
+# Non-root user
+run_test "runs as non-root" bash -c 'test "$(docker run --rm --entrypoint id '"$IMAGE"' -un)" = "builder"'
+run_test "uid is 1000" bash -c 'test "$(docker run --rm --entrypoint id '"$IMAGE"' -u)" = "1000"'
+
+# Terraform source files present
+run_test "terraform files present" docker run --rm --entrypoint ls "$IMAGE" /builder/terraform/main.tf
+
+# Init command generates valid config
+run_test "cluster init creates file" bash -c '
+  TMP=$(mktemp -d)
+  docker run --rm -v "$TMP:/tmp/test" '"$IMAGE"' init /tmp/test/config.yaml &&
+  test -f "$TMP/config.yaml" &&
+  rm -rf "$TMP"
+'
+run_test "cluster init has schema comment" bash -c '
+  TMP=$(mktemp -d)
+  docker run --rm -v "$TMP:/tmp/test" '"$IMAGE"' init /tmp/test/config.yaml &&
+  grep -q "yaml-language-server" "$TMP/config.yaml" &&
+  rm -rf "$TMP"
+'
+run_test "cluster init has required fields" bash -c '
+  TMP=$(mktemp -d)
+  docker run --rm -v "$TMP:/tmp/test" '"$IMAGE"' init /tmp/test/config.yaml &&
+  grep -q "deployment:" "$TMP/config.yaml" &&
+  grep -q "provider:" "$TMP/config.yaml" &&
+  grep -q "cluster:" "$TMP/config.yaml" &&
+  rm -rf "$TMP"
+'
+run_test "cluster init refuses overwrite" bash -c '
+  TMP=$(mktemp -d)
+  docker run --rm -v "$TMP:/tmp/test" '"$IMAGE"' init /tmp/test/config.yaml &&
+  ! docker run --rm -v "$TMP:/tmp/test" '"$IMAGE"' init /tmp/test/config.yaml 2>&1 &&
+  rm -rf "$TMP"
+'
+
+# Terraform validate (skip if no providers mirrored)
+if docker run --rm --entrypoint terraform "$IMAGE" \
+  -chdir=/builder/terraform validate -no-color >/dev/null 2>&1; then
+  pass "terraform validate"
+else
+  warn "terraform validate skipped (run ./tools/mirror eks first for offline providers)"
+fi
+
+# ---- Summary ----
+echo ""
+msg "Results: ${PASSED} passed, ${FAILED} failed"
+[[ $FAILED -eq 0 ]] || exit 1

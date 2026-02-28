@@ -1,0 +1,26 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+# Minimal EKS configuration - only required fields
+# All other settings use sensible defaults from Terraform
+# Note: Your current IP is automatically added to API server allowed CIDRs
+
+deployment:
+  id: demo
+  provider: eks
+  tenancy: "123456789012"  # AWS account ID
+  location: us-east-1
+
+cluster:
+  name: demo
+  version: "1.32"  # Required for automatic AMI selection
+
+compute:
+  # sshPublicKey: "ssh-ed25519 AAAA..."  # Optional: SSH public key for node access
+
+  nodeGroups:
+    system:
+      instanceType: m6i.xlarge
+      # imageId: ami-0b72f4a84c39bcd30  # Optional: defaults to Ubuntu EKS AMI (amd64)
+      capacity:
+        desired: 2

@@ -1,0 +1,139 @@
+version: "2"
+
+run:
+  go: "1.26"
+  timeout: 5m
+  tests: true
+  modules-download-mode: readonly
+
+output:
+  formats:
+    text:
+      path: stdout
+      print-linter-name: true
+      print-issued-lines: true
+      colors: true
+  sort-order:
+    - linter
+    - severity
+    - file
+
+linters:
+  enable:
+    # Bug detection
+    - bodyclose
+    - copyloopvar
+    - errorlint
+    - nilnil
+    - staticcheck
+
+    # Code quality
+    - asciicheck
+    - dogsled
+    - dupl
+    - exhaustive
+    - funlen
+    - goconst
+    - gocritic
+    - govet
+    - misspell
+    - nakedret
+    - prealloc
+    - revive
+    - unconvert
+    - unparam
+    - whitespace
+
+    # Security
+    - gosec
+
+    # HTTP/Context
+    - noctx
+
+    # Dependency management
+    - depguard
+
+    # Testing
+    - tparallel
+
+  settings:
+    gosec:
+      excludes:
+        - G706
+
+    funlen:
+      lines: 200
+      statements: 70
+      ignore-comments: true
+
+    govet:
+      enable:
+        - shadow
+
+    misspell:
+      mode: restricted
+      locale: US
+
+    unparam:
+      check-exported: true
+
+    whitespace:
+      multi-if: true
+      multi-func: true
+
+    dupl:
+      threshold: 200
+
+    depguard:
+      rules:
+        main:
+          list-mode: lax
+          deny:
+            - pkg: io/ioutil
+              desc: "Deprecated since Go 1.16. Use io and os packages instead."
+            - pkg: math/rand$
+              desc: "Use math/rand/v2 or crypto/rand instead."
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - dupl
+          - errcheck
+          - funlen
+          - gosec
+          - noctx
+        path: _test\.go
+      - linters:
+          - staticcheck
+        text: "SA5011"
+        path: _test\.go
+      - linters:
+          - funlen
+        path: cmd/.*/main\.go
+      # Shadow warnings in CLI actions are false positives — sequential if-err checks
+      - linters:
+          - govet
+        text: "shadow"
+        path: pkg/cluster/cli\.go
+      # Shadow in ensurePolicy is sequential error handling
+      - linters:
+          - govet
+        text: "shadow"
+        path: pkg/aws/iam\.go
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax

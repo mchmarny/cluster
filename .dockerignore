@@ -1,0 +1,11 @@
+.git
+.github
+.claude
+.vscode
+**/.terraform
+*.tfstate*
+plan.cache
+docs/
+provider/gke/
+*.md
+!mirror/

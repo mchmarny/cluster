@@ -1,0 +1,243 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mchmarny/cluster/schema/cluster-config.schema.json",
+  "title": "Cluster Configuration",
+  "description": "Multi-cloud Kubernetes cluster deployment configuration",
+  "type": "object",
+  "required": ["apiVersion", "kind", "deployment", "cluster"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "github.com/mchmarny/cluster/v1alpha1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "Cluster"
+    },
+    "deployment": {
+      "type": "object",
+      "required": ["id", "provider", "tenancy", "location"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique deployment identifier"
+        },
+        "provider": {
+          "type": "string",
+          "enum": ["eks", "gke"],
+          "description": "Cloud provider (eks, gke)"
+        },
+        "tenancy": {
+          "type": "string",
+          "description": "Cloud account/subscription/project ID"
+        },
+        "location": {
+          "type": "string",
+          "description": "Cloud region (e.g. us-west-2, eastus, us-central1)"
+        },
+        "state": {
+          "type": "string",
+          "enum": ["tenancy", "local"],
+          "default": "tenancy",
+          "description": "Terraform state backend: 'tenancy' for cloud storage, 'local' for local tfstate"
+        },
+        "destroy": {
+          "type": "boolean",
+          "default": false,
+          "description": "Set to true to destroy the cluster"
+        },
+        "tags": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Key-value tags applied to all resources"
+        }
+      }
+    },
+    "cluster": {
+      "type": "object",
+      "required": ["name", "version"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Kubernetes cluster name"
+        },
+        "version": {
+          "type": "string",
+          "description": "Kubernetes version (e.g. 1.33)"
+        },
+        "addOns": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "coreDns": {
+              "type": "string",
+              "description": "CoreDNS add-on version (empty for latest)"
+            },
+            "vpcCni": {
+              "type": "string",
+              "description": "VPC CNI add-on version (empty for latest)"
+            },
+            "kubeProxy": {
+              "type": "string",
+              "description": "kube-proxy add-on version (empty for latest)"
+            },
+            "cloudwatchObservability": {
+              "type": "string",
+              "description": "CloudWatch Observability add-on version (empty for latest)"
+            },
+            "ebsCsi": {
+              "type": "string",
+              "description": "EBS CSI driver add-on version (empty for latest)"
+            }
+          }
+        },
+        "controlPlane": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "allowedCidrs": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "CIDRs allowed to access the API server (your egress IP is auto-added)"
+            },
+            "cidr": {
+              "type": "string",
+              "description": "Service CIDR for the control plane"
+            }
+          }
+        },
+        "adminRoles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "IAM roles granted cluster admin access"
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cidrs": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string",
+              "description": "VPC CIDR block (default: 10.0.0.0/16)"
+            },
+            "pod": {
+              "type": "string",
+              "description": "Pod CIDR block (default: 100.65.0.0/16)"
+            }
+          }
+        },
+        "subnets": {
+          "type": "object",
+          "description": "Subnet definitions by tier (public, system, worker, pod). Auto-computed from VPC CIDR if omitted.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "cidr": { "type": "string" },
+                "zone": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sshPublicKey": {
+          "type": "string",
+          "description": "SSH public key for node access"
+        },
+        "nodeGroups": {
+          "type": "object",
+          "required": ["system"],
+          "additionalProperties": false,
+          "properties": {
+            "system": {
+              "type": "object",
+              "required": ["instanceType", "capacity"],
+              "additionalProperties": false,
+              "properties": {
+                "instanceType": {
+                  "type": "string",
+                  "description": "EC2 instance type for system nodes"
+                },
+                "imageId": {
+                  "type": "string",
+                  "description": "Custom AMI ID"
+                },
+                "capacity": { "$ref": "#/$defs/capacity" }
+              }
+            },
+            "workers": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["name", "instanceType", "capacity"],
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "Worker node group name"
+                  },
+                  "instanceType": {
+                    "type": "string",
+                    "description": "EC2 instance type"
+                  },
+                  "gpuType": {
+                    "type": "string",
+                    "description": "GPU type (e.g. a100, h100)"
+                  },
+                  "imageId": {
+                    "type": "string",
+                    "description": "Custom AMI ID"
+                  },
+                  "capacity": { "$ref": "#/$defs/capacity" },
+                  "labels": {
+                    "type": "object",
+                    "additionalProperties": { "type": "string" },
+                    "description": "Kubernetes node labels"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "capacity": {
+      "type": "object",
+      "required": ["desired"],
+      "additionalProperties": false,
+      "properties": {
+        "desired": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Desired node count"
+        },
+        "min": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum node count for autoscaling"
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum node count for autoscaling"
+        }
+      }
+    }
+  }
+}

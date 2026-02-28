@@ -1,0 +1,82 @@
+name: 'Load Versions'
+description: 'Loads tool versions from .settings.yaml (single source of truth)'
+
+outputs:
+  go:
+    description: 'Go version'
+    value: ${{ steps.versions.outputs.go }}
+  terraform:
+    description: 'Terraform version'
+    value: ${{ steps.versions.outputs.terraform }}
+  kubectl:
+    description: 'kubectl version'
+    value: ${{ steps.versions.outputs.kubectl }}
+  awscli:
+    description: 'AWS CLI version'
+    value: ${{ steps.versions.outputs.awscli }}
+  tflint:
+    description: 'tflint version'
+    value: ${{ steps.versions.outputs.tflint }}
+  trivy:
+    description: 'Trivy version'
+    value: ${{ steps.versions.outputs.trivy }}
+  golangci_lint:
+    description: 'golangci-lint version'
+    value: ${{ steps.versions.outputs.golangci_lint }}
+  lint_timeout:
+    description: 'Lint timeout duration'
+    value: ${{ steps.versions.outputs.lint_timeout }}
+  scan_severity:
+    description: 'Trivy scan severity threshold'
+    value: ${{ steps.versions.outputs.scan_severity }}
+  registry:
+    description: 'Container image registry'
+    value: ${{ steps.versions.outputs.registry }}
+  platforms:
+    description: 'Docker build platforms'
+    value: ${{ steps.versions.outputs.platforms }}
+  kind_node_image:
+    description: 'KinD node image for testing'
+    value: ${{ steps.versions.outputs.kind_node_image }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Load versions from .settings.yaml
+      id: versions
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        # Languages
+        echo "go=$(yq eval '.languages.go' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Infrastructure tools
+        echo "terraform=$(yq eval '.tools.terraform' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "kubectl=$(yq eval '.tools.kubectl' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "awscli=$(yq eval '.tools.awscli' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "tflint=$(yq eval '.tools.tflint' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "trivy=$(yq eval '.tools.trivy' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Linting
+        echo "golangci_lint=$(yq eval '.linting.golangci_lint' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "lint_timeout=$(yq eval '.linting.lint_timeout' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "scan_severity=$(yq eval '.linting.scan_severity' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Build
+        echo "registry=$(yq eval '.build.registry' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "platforms=$(yq eval '.build.platforms' .settings.yaml)" >> $GITHUB_OUTPUT
+
+        # Testing
+        echo "kind_node_image=$(yq eval '.testing.kind_node_image' .settings.yaml)" >> $GITHUB_OUTPUT
+
+    - name: Display loaded versions
+      shell: bash
+      run: |
+        echo "Loaded from .settings.yaml:"
+        echo "  go: ${{ steps.versions.outputs.go }}"
+        echo "  terraform: ${{ steps.versions.outputs.terraform }}"
+        echo "  kubectl: ${{ steps.versions.outputs.kubectl }}"
+        echo "  awscli: ${{ steps.versions.outputs.awscli }}"
+        echo "  registry: ${{ steps.versions.outputs.registry }}"
+        echo "  platforms: ${{ steps.versions.outputs.platforms }}"

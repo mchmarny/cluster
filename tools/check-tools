@@ -1,0 +1,108 @@
+#!/bin/bash
+
+# check-tools: Verifies required tools are installed and shows version comparison
+# Reads expected versions from .settings.yaml (single source of truth).
+# Usage: ./tools/check-tools
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(dirname "$SCRIPT_DIR")"
+SETTINGS="${ROOT_DIR}/.settings.yaml"
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+RESET='\033[0m'
+
+if ! command -v yq &>/dev/null; then
+  printf "${RED}[ERR]${RESET} yq is required. Install: brew install yq\n" >&2
+  exit 1
+fi
+
+if [[ ! -f "$SETTINGS" ]]; then
+  printf "${RED}[ERR]${RESET} Settings file not found: %s\n" "$SETTINGS" >&2
+  exit 1
+fi
+
+# Tool metadata: command:::version_cmd:::match_strategy
+# match_strategy: exact | major | major_minor | presence
+get_tool_metadata() {
+  local key="$1"
+  case "$key" in
+    go)          echo "go:::go version 2>/dev/null | grep -oE 'go[0-9]+\.[0-9]+' | sed 's/go//':::major_minor" ;;
+    terraform)   echo "terraform:::terraform version -json 2>/dev/null | grep terraform_version | grep -oE '[0-9]+\.[0-9]+\.[0-9]+':::exact" ;;
+    kubectl)     echo "kubectl:::kubectl version --client -o json 2>/dev/null | grep gitVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+':::major_minor" ;;
+    awscli)      echo "aws:::aws --version 2>/dev/null | grep -oE 'aws-cli/[0-9]+\.[0-9]+' | sed 's|aws-cli/||':::major_minor" ;;
+    tflint)      echo "tflint:::tflint --version 2>/dev/null | awk 'NR==1{print \$3}':::major_minor" ;;
+    trivy)       echo "trivy:::trivy version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+':::major_minor" ;;
+    golangci_lint) echo "golangci-lint:::golangci-lint version --short 2>/dev/null:::major" ;;
+    *)           echo "" ;;
+  esac
+}
+
+get_major() { echo "$1" | sed 's/^v//' | cut -d. -f1; }
+get_major_minor() { echo "$1" | sed 's/^v//' | cut -d. -f1,2; }
+
+compare_versions() {
+  local expected="$1" installed="$2" strategy="$3"
+  case "$strategy" in
+    exact)       [[ "$installed" == "$expected" ]] ;;
+    major)       [[ "$(get_major "$installed")" == "$(get_major "$expected")" ]] ;;
+    major_minor) [[ "$(get_major_minor "$installed")" == "$(get_major_minor "$expected")" ]] ;;
+    presence)    return 0 ;;
+  esac
+}
+
+print_row() { printf "%-20s %-15s %-15s %s\n" "$1" "$2" "$3" "$4"; }
+
+check_tool() {
+  local yaml_key="$1" expected="$2"
+  local metadata
+  metadata=$(get_tool_metadata "$yaml_key")
+  [[ -z "$metadata" ]] && return
+
+  local cmd_name="${metadata%%:::*}"
+  local rest="${metadata#*:::}"
+  local version_cmd="${rest%%:::*}"
+  local strategy="${rest##*:::}"
+
+  if ! command -v "$cmd_name" &>/dev/null; then
+    print_row "$cmd_name" "$expected" "-" "✗"
+    return
+  fi
+
+  local installed
+  installed=$(eval "$version_cmd" 2>/dev/null || echo "unknown")
+
+  if compare_versions "$expected" "$installed" "$strategy"; then
+    print_row "$cmd_name" "$expected" "$installed" "✓"
+  else
+    print_row "$cmd_name" "$expected" "$installed" "⚠"
+  fi
+}
+
+echo "=== Tool Version Check ==="
+echo ""
+print_row "Tool" "Expected" "Installed" "Status"
+print_row "----" "--------" "---------" "------"
+
+# Iterate all categories from .settings.yaml
+for category in $(yq 'keys | .[]' "$SETTINGS"); do
+  for tool in $(yq ".$category | keys | .[]" "$SETTINGS" 2>/dev/null || true); do
+    expected=$(yq ".$category.$tool" "$SETTINGS")
+    check_tool "$tool" "$expected"
+  done
+done
+
+# Docker (not in .settings.yaml but useful)
+if command -v docker &>/dev/null; then
+  installed=$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo "not running")
+  print_row "docker" "-" "$installed" "✓"
+else
+  print_row "docker" "-" "-" "✗"
+fi
+
+echo ""
+echo "Legend: ✓ = ok, ⚠ = version mismatch, ✗ = missing"

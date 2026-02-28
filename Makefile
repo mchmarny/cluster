@@ -9,8 +9,32 @@ SHELL           := bash
 .ONESHELL:
 .SHELLFLAGS     := -eu -o pipefail -c
 .DEFAULT_GOAL   := help
-YAML_FILES      := $(shell find . -type f \( -iname "*.yml" -o -iname "*.yaml" \))
-SCAN_SEVERITY   := CRITICAL,HIGH
+
+# Versions from .settings.yaml (single source of truth)
+TERRAFORM_VERSION ?= $(shell yq -r '.tools.terraform' .settings.yaml 2>/dev/null)
+ifeq ($(TERRAFORM_VERSION),)
+TERRAFORM_VERSION := 1.14.6
+endif
+KUBECTL_VERSION ?= $(shell yq -r '.tools.kubectl' .settings.yaml 2>/dev/null)
+ifeq ($(KUBECTL_VERSION),)
+KUBECTL_VERSION := 1.35.1
+endif
+AWSCLI_VERSION ?= $(shell yq -r '.tools.awscli' .settings.yaml 2>/dev/null)
+ifeq ($(AWSCLI_VERSION),)
+AWSCLI_VERSION := 2.32.18
+endif
+SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
+ifeq ($(SCAN_SEVERITY),)
+SCAN_SEVERITY := CRITICAL,HIGH
+endif
+LINT_TIMEOUT ?= $(shell yq -r '.linting.lint_timeout' .settings.yaml 2>/dev/null)
+ifeq ($(LINT_TIMEOUT),)
+LINT_TIMEOUT := 5m
+endif
+KIND_NODE_IMAGE ?= $(shell yq -r '.testing.kind_node_image' .settings.yaml 2>/dev/null)
+ifeq ($(KIND_NODE_IMAGE),)
+KIND_NODE_IMAGE := kindest/node:v1.32.2
+endif
 
 # Tools
 TF ?= terraform
@@ -34,6 +58,15 @@ info: ## Prints the current project info
 	@echo "  remote:            $(REMOTE)"
 	@echo "  user:              $(USER)"
 	@echo "  changes:           $(CHANGES)"
+	@echo "Settings (.settings.yaml):"
+	@echo "  terraform:         $(TERRAFORM_VERSION)"
+	@echo "  kubectl:           $(KUBECTL_VERSION)"
+	@echo "  awscli:            $(AWSCLI_VERSION)"
+	@echo "  kind_node_image:   $(KIND_NODE_IMAGE)"
+
+.PHONY: tools-check
+tools-check: ## Verify required tools are installed and show version comparison
+	@bash tools/check-tools
 
 .PHONY: dep-check
 dep-check: ## Run all dependency checks
@@ -91,12 +124,67 @@ tf-lint: dep-check ## Run tflint (per directory)
 scan: dep-check ## Run trivy security scan
 	@$(TRIVY) config . --severity $(SCAN_SEVERITY) --format table --ignorefile .trivyignore --quiet
 
-.PHONY: all
-all: tf-validate tf-lint tf-fmt scan  ## Run all validation checks (format, lint, security scan, terraform validate)
+.PHONY: tf-qualify
+tf-qualify: tf-validate tf-lint tf-fmt scan  ## Run all Terraform quality checks
+
+.PHONY: qualify
+qualify: go-qualify tf-qualify ## Run all quality checks (Go + Terraform)
+
+# Go Targets
+
+GO ?= go
+VERSION ?= $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0-dev")
+
+.PHONY: go-test
+go-test: ## Run Go unit tests with race detection and coverage
+	@$(GO) test -count=1 -race -coverprofile=coverage.out ./...
+	@$(GO) tool cover -func=coverage.out | tail -1
+	@rm -f coverage.out
+
+.PHONY: go-vet
+go-vet: ## Run go vet
+	@$(GO) vet ./...
+
+.PHONY: go-fmt
+go-fmt: ## Check Go formatting
+	@test -z "$$(gofmt -l .)" || { gofmt -l . && exit 1; }
+
+.PHONY: go-lint
+go-lint: ## Run golangci-lint
+	@golangci-lint run --timeout=$(LINT_TIMEOUT) ./...
+
+.PHONY: go-build
+go-build: ## Build the cluster binary
+	@$(GO) build -trimpath -ldflags "-s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT)" -o dist/cluster ./cmd/cluster
+
+.PHONY: go-qualify
+go-qualify: go-vet go-fmt go-lint go-test go-build ## Run all Go quality checks
+
+.PHONY: e2e
+e2e: ## Run end-to-end smoke tests (builds Docker image + validates)
+	@./tools/e2e
+
+# Image Build Targets
+
+.PHONY: build-eks
+build-eks: ## Build EKS Docker image (mirrors providers, then builds)
+	@./tools/mirror eks
+	@docker build -f image/eks.dockerfile \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		-t cluster-eks:$(VERSION) -t cluster-eks:latest .
+
+.PHONY: build-gke
+build-gke: ## Build GKE Docker image (mirrors providers, then builds)
+	@./tools/mirror gke
+	@docker build -f image/gke.dockerfile \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		-t cluster-gke:$(VERSION) -t cluster-gke:latest .
 
 # Version Bump Targets
 
-CSPS := aks eks gke oke
+CSPS := eks gke
 BUMP_TYPES := major minor patch
 
 define bump_target

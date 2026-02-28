@@ -1,77 +1,64 @@
 # Cluster
 
-Opinionated Kubernetes cluster deployment toolkit for multiple cloud platforms. Provides Terraform configurations with sensible defaults and YAML-based customization.
+Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurations with sensible defaults and YAML-based customization for EKS (AWS) and GKE (Google Cloud).
 
 ## Platforms
 
 | Platform | Directory | Features |
 |----------|-----------|----------|
-| [Azure (AKS)](./aks/) | `aks/` | Private cluster, Workload Identity, Key Vault CSI, Azure CNI |
-| [AWS (EKS)](./eks/) | `eks/` | Multi-AZ, VPC CNI, self-managed nodes, CloudWatch |
-| [Google Cloud (GKE)](./gke/) | `gke/` | Regional cluster, Workload Identity, Shielded Nodes |
-| [Oracle Cloud (OKE)](./oke/) | `oke/` | VCN-native networking, Flex shapes, GPU support |
-| [Local (KinD)](./kind/) | `kind/` | Development and testing |
+| [AWS (EKS)](./provider/eks/) | `provider/eks/` | Multi-AZ, VPC CNI, self-managed nodes, CloudWatch |
+| [Google Cloud (GKE)](./provider/gke/) | `provider/gke/` | Regional cluster, Workload Identity, Shielded Nodes |
 
 ## Quick Start
 
 ### 1. Prerequisites
 
 ```bash
-# Required tools
-terraform --version  # >= 1.13.0
+terraform --version  # >= 1.14
 yq --version         # YAML processor
-
-# Platform CLI (one of)
-az --version         # Azure
-aws --version        # AWS
-gcloud --version     # GCP
-oci --version        # Oracle
+aws --version        # AWS CLI (for EKS)
+gcloud --version     # GCP CLI (for GKE)
 ```
 
-### 2. Minimal Configuration
+### 2. Generate Config
 
-Each platform supports minimal configs that rely on sensible defaults:
+```shell
+docker run --rm \
+  -v $PWD/config:/config \
+  ghcr.io/mchmarny/cluster/eks:latest init /config/eks-example.yaml
+```
 
-**AKS** (`aks/configs/minimal.yaml`):
+Or use an existing example:
+
+**EKS** (`config/eks-minimal.yaml`):
 ```yaml
 deployment:
   id: demo
-  tenancy: "00000000-0000-0000-0000-000000000000"  # Subscription ID
-  location: eastus
-  azure:
-    resourceGroup: "rg-aks-demo"
-
-cluster:
-  controlPlane:
-    authorizedIpRanges:
-      - 1.2.3.4/32  # Your IP
-```
-
-**EKS** (`eks/configs/minimal.yaml`):
-```yaml
-deployment:
-  id: demo
-  tenancy: "123456789012"  # Account ID
+  provider: eks
+  tenancy: "123456789012"
   location: us-east-1
 
 cluster:
+  name: demo
+  version: "1.33"
   controlPlane:
     allowedCidrs:
       - 1.2.3.4/32
 
 compute:
-  sshPublicKey: "ssh-ed25519 AAAA..."
   nodeGroups:
     system:
       instanceType: m6i.xlarge
-      imageId: ami-0b72f4a84c39bcd30
+      capacity:
+        desired: 3
 ```
 
-**GKE** (`gke/configs/minimal.yaml`):
+**GKE** (`config/gke-minimal.yaml`):
 ```yaml
 deployment:
   id: demo
-  tenancy: "my-project-id"  # Project ID
+  provider: gke
+  tenancy: "my-project-id"
   location: us-central1
 
 cluster:
@@ -81,215 +68,77 @@ cluster:
         name: my-network
 ```
 
-**OKE** (`oke/configs/minimal.yaml`):
-```yaml
-deployment:
-  id: demo
-  tenancy: "ocid1.tenancy.oc1..XXX"
-  location: us-ashburn-1
-  oci:
-    compartment: "ocid1.compartment.oc1..XXX"
-
-cluster:
-  controlPlane:
-    allowedCidrs:
-      - 1.2.3.4/32
-
-compute:
-  sshPublicKey: "ssh-ed25519 AAAA..."
-```
-
 ### 3. Deploy
 
-```bash
-cd <platform>  # aks, eks, gke, or oke
-
-# Setup backend storage for Terraform state
-./tools/setup configs/minimal.yaml
-
-# Deploy cluster
-./tools/actuate configs/minimal.yaml
-```
+See [DEMO.md](DEMO.md) for the full init → setup → apply workflow.
 
 ## Container Images
 
-Self-contained actuator images with pre-mirrored Terraform providers are built automatically on tag push. These images enable offline, reproducible deployments without runtime dependency downloads.
-
-### Available Images
+Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch (amd64 + arm64) built on native runners.
 
 | Platform | Image |
 |----------|-------|
 | EKS | `ghcr.io/mchmarny/cluster/eks:<version>` |
 | GKE | `ghcr.io/mchmarny/cluster/gke:<version>` |
-| AKS | `ghcr.io/mchmarny/cluster/aks:<version>` |
-| OKE | `ghcr.io/mchmarny/cluster/oke:<version>` |
 
-### Building Images
-
-Images are built automatically when tags matching `v*-<csp>` are pushed:
-
-```bash
-# Tag and push to trigger build
-git tag v1.0.0-eks
-git push origin v1.0.0-eks
-```
-
-### Configuration Methods
-
-The actuator supports multiple configuration input methods (in priority order):
-
-| Priority | Method | Environment Variable | Description |
-|----------|--------|---------------------|-------------|
-| 1 | File path | `CONFIG_PATH` | Path to YAML config file |
-| 2 | Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML |
-| 3 | Remote URL | `CONFIG_URL` | S3, GCS, HTTPS, Azure, OCI URLs |
-| 4 | Inline JSON | `CONFIG_JSON` | JSON converted to YAML |
-
-### Usage Examples
-
-**Docker with base64 config:**
-```bash
-docker run \
-  -e CONFIG_CONTENT="$(base64 < config.yaml)" \
-  -e AUTO_APPROVE=true \
-  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  ghcr.io/mchmarny/cluster/eks:v1.0.0 apply
-```
-
-**Docker with mounted config:**
-```bash
-docker run \
-  -v $(pwd)/config.yaml:/config.yaml \
-  -e CONFIG_PATH=/config.yaml \
-  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  ghcr.io/mchmarny/cluster/eks:v1.0.0 plan
-```
-
-**Docker with remote config (S3):**
-```bash
-docker run \
-  -e CONFIG_URL=s3://my-bucket/configs/prod.yaml \
-  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  ghcr.io/mchmarny/cluster/eks:v1.0.0 apply
-```
-
-**Kubernetes Job:**
-```yaml
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: cluster-deploy
-spec:
-  template:
-    spec:
-      restartPolicy: Never
-      containers:
-        - name: actuator
-          image: ghcr.io/mchmarny/cluster/eks:v1.0.0
-          args: ["apply"]
-          env:
-            - name: CONFIG_CONTENT
-              valueFrom:
-                secretKeyRef:
-                  name: cluster-config
-                  key: config.yaml.b64
-            - name: AUTO_APPROVE
-              value: "true"
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: aws-credentials
-                  key: access-key-id
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aws-credentials
-                  key: secret-access-key
-```
-
-### Commands
+### CLI Commands
 
 | Command | Description |
 |---------|-------------|
-| `plan` | Generate and show execution plan |
-| `apply` | Apply the Terraform configuration (default) |
-| `destroy` | Destroy the infrastructure |
-| `output` | Show deployment outputs |
+| `init <path>` | Generate a starter configuration file |
+| `setup -c <config>` | Bootstrap cloud account (state bucket, IAM user, access key) |
+| `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
 
-### Environment Variables
+Destroy is triggered by setting `deployment.destroy: true` in the config and running `apply`.
 
-| Variable | Description |
-|----------|-------------|
-| `CONFIG_PATH` | Path to YAML configuration file |
-| `CONFIG_CONTENT` | Base64-encoded YAML configuration |
-| `CONFIG_URL` | Remote URL (s3://, gs://, https://, az://, oci://) |
-| `CONFIG_JSON` | Inline JSON configuration |
-| `AUTO_APPROVE` | Set to "true" to skip interactive approval |
-| `TERRAFORM_DIR` | Override Terraform directory (default: /builder/terraform) |
+### Configuration Input
+
+| Method | Flag / Env Var | Description |
+|--------|---------------|-------------|
+| File path | `-c` / `CONFIG_PATH` | Path to YAML config file |
+| Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML |
+
+### Building Images
+
+```bash
+make build-eks   # Mirror providers + build EKS image
+make build-gke   # Mirror providers + build GKE image
+```
+
+Tags matching `v*-eks` or `v*-gke` pushed to `main` trigger CI builds.
 
 ## Configuration Schema
 
-All platforms use a unified YAML configuration schema:
+A [JSON Schema](schema/cluster-config.schema.json) is provided for VS Code autocomplete (Red Hat YAML extension).
 
 ```yaml
 deployment:
   id: <string>           # Deployment identifier (required)
-  tenancy: <string>      # Account/Subscription/Project ID (required)
+  provider: <string>     # eks | gke (required)
+  tenancy: <string>      # Account/Project ID (required)
   location: <string>     # Region (required)
-  tags: {}               # Resource tags (optional)
-  # Platform-specific:
-  azure:
-    resourceGroup: <string>
-  oci:
-    compartment: <string>
+  state: tenancy         # tenancy (cloud) | local (tfstate)
+  destroy: false         # Set true to destroy
+  tags: {}               # Resource tags
 
 cluster:
-  name: <string>         # Cluster name (default: {id}-{platform})
-  version: <string>      # K8s version (default: latest stable)
-  controlPlane:
-    authorizedIpRanges: []  # API access CIDRs (required)
+  name: <string>         # Cluster name (required)
+  version: <string>      # K8s version (required)
 
-network:                 # Optional - uses sensible defaults
-  # Auto-computed if not specified:
-  # - VPC CIDR: 10.0.0.0/16
-  # - Subnet CIDRs: derived from VPC
-  # - Pod/Service CIDRs: platform defaults
-
-compute:                 # Optional - uses sensible defaults
-  nodePools:
-    system: {}           # Default: 3 nodes, standard instance
-    # workers: []        # Optional worker pools
+network:                 # Optional — auto-computed from VPC CIDR
+compute:                 # Optional — system + worker node groups
 ```
-
-## Defaults
-
-Terraform applies these defaults when not specified in config:
-
-| Setting | Default |
-|---------|---------|
-| VPC/VNet CIDR | `10.0.0.0/16` |
-| Pod CIDR | `10.244.0.0/16` (AKS) or `100.65.0.0/16` (EKS/OKE) |
-| Service CIDR | `172.20.0.0/16` |
-| Private cluster | `true` |
-| Workload Identity | `true` |
-| System node pool | 3 nodes, autoscaling 2-10 |
 
 ## Development
 
 ```bash
-# Validate all Terraform
-make all
-
-# Individual checks
-make tf-validate  # Terraform validation
-make tf-lint      # tflint analysis
-make tf-fmt       # Format check
-make scan         # Trivy security scan
+make qualify      # All quality checks (Go + Terraform)
+make go-qualify   # Go: vet, fmt, lint, test, build
+make tf-qualify   # Terraform: validate, lint, fmt, trivy scan
+make e2e          # Full end-to-end (qualify + Docker build + smoke tests)
+make tools-check  # Verify tool versions match .settings.yaml
 ```
 
 ## License
 
-MIT - see [LICENSE](LICENSE)
+MIT — see [LICENSE](LICENSE)

@@ -1,34 +1,42 @@
 #!/bin/bash
 
 # Common functions for cluster deployment tools
-# Source this file in other scripts: . "${DIR}/common"
+# Source this file in other scripts:
+#   SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#   . "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
 set -euo pipefail
 
-# Colors for output
+# Repo root (works from any subdirectory)
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && git rev-parse --show-toplevel)"
+
+# Colors
 COLOR_GREEN='\033[0;32m'
 COLOR_RED='\033[0;31m'
 COLOR_YELLOW='\033[0;33m'
 COLOR_RESET='\033[0m'
 
-# Logging functions
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+
 msg() {
-  local message=$1
-  printf "${COLOR_GREEN}[MSG]${COLOR_RESET} %s\n" "$message" >&2
+  printf "${COLOR_GREEN}[MSG]${COLOR_RESET} %s\n" "$1" >&2
 }
 
 warn() {
-  local message=$1
-  printf "${COLOR_YELLOW}[WARN]${COLOR_RESET} %s\n" "$message" >&2
+  printf "${COLOR_YELLOW}[WARN]${COLOR_RESET} %s\n" "$1" >&2
 }
 
 err() {
-  local message=$1
-  printf "${COLOR_RED}[ERR]${COLOR_RESET} %s\n" "$message" >&2
+  printf "${COLOR_RED}[ERR]${COLOR_RESET} %s\n" "$1" >&2
   exit 1
 }
 
-# Check if required tools are installed
+# ---------------------------------------------------------------------------
+# Tool validation
+# ---------------------------------------------------------------------------
+
 has_tools() {
   local tools=("$@")
   for tool in "${tools[@]}"; do
@@ -38,7 +46,27 @@ has_tools() {
   done
 }
 
-# Validate YAML configuration file
+# ---------------------------------------------------------------------------
+# Config helpers
+# ---------------------------------------------------------------------------
+
+# Resolve a config path relative to REPO_ROOT (absolute paths pass through).
+resolve_config() {
+  local config_path="${1:-}"
+  [[ -z "$config_path" ]] && err "Usage: resolve_config <path>"
+
+  if [[ "$config_path" != /* ]]; then
+    config_path="${REPO_ROOT}/${config_path}"
+  fi
+
+  if [[ ! -f "$config_path" ]]; then
+    err "Config file not found: $config_path"
+  fi
+
+  realpath "$config_path"
+}
+
+# Validate required YAML fields exist.
 validate_config() {
   local config_file=$1
 
@@ -46,7 +74,6 @@ validate_config() {
     err "Config file not found: $config_file"
   fi
 
-  # Check required fields
   local required_fields=("deployment.id" "deployment.location" "deployment.tenancy")
   for field in "${required_fields[@]}"; do
     if ! yq -e ".$field" "$config_file" &>/dev/null; then
@@ -55,7 +82,7 @@ validate_config() {
   done
 }
 
-# Get value from config with optional default
+# Get value from config with optional default.
 config_get() {
   local config_file=$1
   local key=$2
@@ -64,4 +91,56 @@ config_get() {
   local value
   value=$(yq -er ".$key // \"$default\"" "$config_file" 2>/dev/null || echo "$default")
   echo "$value"
+}
+
+# ---------------------------------------------------------------------------
+# Terraform helpers
+# ---------------------------------------------------------------------------
+
+# Initialize Terraform with backend config flags.
+# Usage: tf_init <tf_dir> [-backend-config=k=v ...]
+tf_init() {
+  local tf_dir="$1"; shift
+  msg "Initializing Terraform in $tf_dir..."
+  terraform -chdir="$tf_dir" init -upgrade -migrate-state "$@"
+}
+
+# Plan and save to plan.cache.
+# Usage: tf_plan <tf_dir> <config_file>
+tf_plan() {
+  local tf_dir="$1" config_file="$2"
+  msg "Planning deployment..."
+  TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" plan -out="plan.cache"
+}
+
+# Apply a saved plan or directly with optional auto-approve.
+# Usage: tf_apply <tf_dir> <config_file> [true|false]
+tf_apply() {
+  local tf_dir="$1" config_file="$2" auto_approve="${3:-false}"
+
+  if [[ -f "$tf_dir/plan.cache" ]]; then
+    msg "Applying saved plan..."
+    TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "plan.cache"
+    rm -f "$tf_dir/plan.cache"
+  elif [[ "$auto_approve" == "true" ]]; then
+    msg "Applying deployment (auto-approve)..."
+    TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply -auto-approve
+  else
+    msg "Applying deployment..."
+    TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply
+  fi
+}
+
+# Destroy infrastructure.
+# Usage: tf_destroy <tf_dir> <config_file> [true|false]
+tf_destroy() {
+  local tf_dir="$1" config_file="$2" auto_approve="${3:-false}"
+
+  if [[ "$auto_approve" == "true" ]]; then
+    msg "Destroying deployment (auto-approve)..."
+    TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy -auto-approve
+  else
+    msg "Destroying deployment..."
+    TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy
+  fi
 }

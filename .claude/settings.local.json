@@ -1,8 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "WebSearch",
-      "WebFetch(domain:pin-gh-actions.kammel.dev)"
-    ]
-  }
-}

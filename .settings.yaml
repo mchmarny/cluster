@@ -1,0 +1,29 @@
+# Project settings — single source of truth for versions and configuration.
+# Consumed by: Makefile (yq), GitHub Actions (load-versions action), tools/check-tools.
+
+# Language Versions
+languages:
+  go: '1.26.0'
+
+# Infrastructure Tools
+tools:
+  terraform: '1.14.6'
+  kubectl: '1.35.1'
+  awscli: '2.32.18'
+  tflint: '0.61.0'
+  trivy: '0.69.1'
+
+# Linting
+linting:
+  golangci_lint: 'v2.10.1'
+  lint_timeout: '5m'
+  scan_severity: 'CRITICAL,HIGH'
+
+# Build Configuration
+build:
+  registry: 'ghcr.io'
+  platforms: 'linux/amd64,linux/arm64'
+
+# Testing Configuration
+testing:
+  kind_node_image: 'kindest/node:v1.32.2'

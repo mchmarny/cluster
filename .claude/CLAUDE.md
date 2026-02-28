@@ -4,56 +4,70 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-cloud Kubernetes cluster deployment toolkit. Provides Terraform configurations with YAML-driven customization for AKS (Azure), EKS (AWS), GKE (Google Cloud), OKE (Oracle Cloud), and KinD (local dev).
+Multi-cloud Kubernetes cluster deployment toolkit. Provides Terraform configurations with YAML-driven customization for EKS (AWS) and GKE (Google Cloud).
+
+## Version Management
+
+`.settings.yaml` is the **single source of truth** for all tool versions and build configuration. It is consumed by:
+- **Makefile** — via `yq -r` with fallback defaults
+- **GitHub Actions** — via `.github/actions/load-versions` composite action
+- **`tools/check-tools`** — compares installed vs expected versions
+
+When updating tool versions, change `.settings.yaml` only — Makefile, CI, and Dockerfiles pick it up automatically.
 
 ## Build Commands
 
-### Validation (root Makefile)
+### Quality Checks (root Makefile)
 ```bash
-make all          # Run all checks: tf-validate, tf-lint, tf-fmt, scan
-make tf-init      # Init Terraform in all directories (plugin cache: ~/.terraform.d/plugin-cache)
-make tf-validate  # Validate Terraform configs (runs tf-init first)
-make tf-fmt       # Check formatting
-make tf-lint      # Run tflint (uses .tflint.hcl with aws + google plugins)
-make scan         # Trivy security scan (CRITICAL,HIGH; uses .trivyignore)
-make dep-check    # Verify terraform, tflint, trivy are installed
+make qualify      # Run all quality checks (Go + Terraform)
+make go-qualify   # Go: vet, fmt, lint, test, build
+make tf-qualify   # Terraform: validate, lint, fmt, trivy scan
+make go-test      # Unit tests with race detection and coverage
+make tools-check  # Verify tools installed and compare versions to .settings.yaml
+make e2e          # Full end-to-end (qualify + Docker build + smoke tests)
 ```
 
-### Platform Deployment (from platform directory: aks/, eks/, gke/, oke/)
-Two scripts per platform — both in `<platform>/tools/`:
-
-**Platform-specific `actuate`** (direct local deployment):
+### Image Builds
 ```bash
-./tools/setup configs/demo.yaml          # Create backend state storage
-./tools/actuate configs/demo.yaml        # Plan + apply (takes config path as positional arg)
+make build-eks    # Mirror providers + build EKS Docker image
+make build-gke    # Mirror providers + build GKE Docker image
 ```
-Set `deployment.destroy: true` in YAML config to destroy instead of apply.
 
-**Shared `tools/actuate`** (container/CI deployment, at repo root):
-```bash
-./tools/actuate -c configs/demo.yaml plan      # plan | apply | destroy | output
-./tools/actuate -c configs/demo.yaml -a apply  # -a = auto-approve
-```
-Also accepts config via env vars: `CONFIG_PATH`, `CONFIG_CONTENT` (base64), `CONFIG_URL` (s3/gs/https/az/oci), `CONFIG_JSON`.
+### Go CLI Commands (inside container)
+The `cluster` binary exposes three commands:
+- `cluster init <path>` — generate starter config
+- `cluster setup -c <config>` — bootstrap cloud account (S3 bucket, IAM user, key)
+- `cluster apply -c <config>` — deploy or destroy via Terraform (destroy when `deployment.destroy: true`)
 
-### KinD Local Development
+### Local Provider Tools
+EKS-specific shell scripts in `provider/eks/tools/`:
 ```bash
-cd kind && make cluster-up    # CLUSTER_NAME=demo, NODE_IMAGE=kindest/node:v1.32.2
-cd kind && make cluster-down
+provider/eks/tools/actuate -c config/eks-demo.yaml apply    # plan + apply
+provider/eks/tools/setup -c config/eks-demo.yaml            # bootstrap AWS
+provider/eks/tools/validate -c config/eks-demo.yaml         # post-deploy checks
+provider/eks/tools/disco -r us-west-2                       # discover versions
 ```
+All scripts source `tools/common` for shared logging, config resolution, and terraform helpers.
 
 ## Architecture
 
-### Two Layers of Tooling
-
-1. **Platform-specific scripts** (`<platform>/tools/actuate`, `setup`, `common`): Used for direct local deployment. The `actuate` script sources `common` for shared helpers (msg/warn/err, has_tools, validate_config, config_get). Each reads the YAML config, extracts deployment settings, initializes Terraform backend, and runs plan+apply.
-
-2. **Shared container actuator** (`tools/actuate`): Used inside Docker images for CI/CD. Auto-detects CSP from Terraform resource names (e.g., `aws_eks_cluster` → EKS). Handles multi-source config resolution. Images built via `.github/workflows/build-actuator.yml` on `v*-<csp>` tags with pre-mirrored providers (`tools/mirror`).
+### Project Layout
+```
+cmd/cluster/          # Go CLI entrypoint
+pkg/                  # Go packages (aws, cluster, config, run, state, terraform)
+provider/eks/         # EKS Terraform + tools
+provider/gke/         # GKE Terraform + tools
+config/               # Global config files (provider-prefixed: eks-demo.yaml, gke-demo.yaml)
+schema/               # JSON Schema for config validation
+image/                # Dockerfiles (eks.dockerfile, gke.dockerfile)
+tools/                # Shared scripts (common, mirror, e2e, check-tools)
+.settings.yaml        # Single source of truth for versions
+```
 
 ### Terraform Module Convention (per platform)
-Each platform (`aks/`, `eks/`, `gke/`, `oke/`) has `terraform/` with:
+Each platform (`provider/eks/`, `provider/gke/`) has `terraform/` with:
 - **variables.tf**: Single variable `CONFIG_PATH`
-- **main.tf**: `yamldecode(file(var.CONFIG_PATH))` loads YAML, then `locals {}` block extracts all values with `try()` for optional fields with defaults. Includes `check` block to validate account/subscription/project matches config.
+- **main.tf**: `yamldecode(file(var.CONFIG_PATH))` loads YAML, then `locals {}` block extracts all values with `try()` for optional fields with defaults. Includes `check` block to validate account/project matches config.
 - **cluster.tf**: Managed K8s cluster resource
 - **compute.tf**: Node pools (system + worker) with autoscaling
 - **network.tf**: VPC/VNet, subnets, NAT, routing
@@ -62,16 +76,8 @@ Each platform (`aks/`, `eks/`, `gke/`, `oke/`) has `terraform/` with:
 
 Config is passed to Terraform via `TF_VAR_CONFIG_PATH="$CONFIG_FILE"`.
 
-### Adding/Modifying Terraform Resources
-When working on a platform's Terraform:
-- All values must come from `local.*` (defined in main.tf) — never hardcode
-- Optional config fields use `try(local.config.path.to.field, default_value)`
-- Subnets are auto-computed from VPC CIDR if not specified in config
-- Egress IP is auto-detected via HTTP lookup for authorized network rules
-- Tags are applied from `local.effective_tags` (from `deployment.tags`)
-
 ### Container Images
-Built from `images/<csp>.dockerfile`. Include pre-mirrored Terraform providers for offline deployment. Multi-arch (amd64 + arm64). Entrypoint is the shared `tools/actuate`.
+Built from `image/<csp>.dockerfile`. Include pre-mirrored Terraform providers for offline deployment. Multi-arch (amd64 + arm64) via native runners (no QEMU). Entrypoint is the `cluster` Go binary.
 
 ## Key Patterns
 
@@ -83,7 +89,7 @@ Built from `images/<csp>.dockerfile`. Include pre-mirrored Terraform providers f
 
 **Account Validation**: Terraform `check` blocks verify the active cloud account matches config's `deployment.tenancy` to prevent cross-account mistakes.
 
-**Status Output**: Deployment results written as JSON to `<config-basename>-status.json` in same directory as config.
+**AWS helpers in pkg/aws**: Provider-specific functions like `BucketName()`, `PolicyARN()`, `SAName()` live in `pkg/aws`, not on the generic `Config` struct.
 
 ## Behavioral Guidelines
 
@@ -99,3 +105,4 @@ Built from `images/<csp>.dockerfile`. Include pre-mirrored Terraform providers f
 4. **Fix, don't skip** — Never disable tests to make CI pass
 5. **Edit over Write** — Prefer editing existing files to creating new ones
 6. **3-strike rule** — After 3 failed fix attempts, stop, reassess, and explain blockers
+7. **No plans in repo** — Store Claude plans/designs in `/tmp`, never commit to the repository

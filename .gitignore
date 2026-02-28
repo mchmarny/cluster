@@ -84,8 +84,13 @@ sbom.json
 test-*.yaml
 test-*.json
 TEMP_DEMO.md
+*.test.yaml
 
 
 # Mirror directory (build artifact)
 mirror/
 
+# Claude local settings (user-specific)
+.claude/settings.local.json
+
+dist/
