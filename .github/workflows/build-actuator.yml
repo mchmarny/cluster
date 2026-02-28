@@ -41,7 +41,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
@@ -103,22 +103,25 @@ jobs:
           terraform validate
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Login to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ${{ steps.versions.outputs.registry }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push
-        uses: docker/build-push-action@ca052bb54ab0790a636c9b5f226502c73d547a25 # v5
+        id: push
+        uses: docker/build-push-action@471d1dc4e07e5cdedd4c2171150001c434f0b7a4 # v6.15.0
         with:
           context: .
           file: image/${{ steps.parse.outputs.provider }}.dockerfile
           platforms: ${{ matrix.platform }}
           push: true
+          sbom: true
+          provenance: mode=max
           tags: ${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}-${{ matrix.arch }}
           cache-from: type=gha,scope=${{ steps.parse.outputs.provider }}-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=${{ steps.parse.outputs.provider }}-${{ matrix.arch }}
@@ -147,7 +150,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
@@ -167,14 +170,14 @@ jobs:
           echo "image=${{ steps.versions.outputs.registry }}/${{ github.repository }}/${PROVIDER}" >> $GITHUB_OUTPUT
 
       - name: Login to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ${{ steps.versions.outputs.registry }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
 
       - name: Create multi-arch manifest
         env:
@@ -206,7 +209,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
@@ -225,7 +228,7 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Login to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ${{ steps.versions.outputs.registry }}
           username: ${{ github.actor }}
@@ -247,7 +250,7 @@ jobs:
 
       - name: Upload SARIF to GitHub Security
         if: hashFiles('image-scan-results.sarif') != ''
-        uses: github/codeql-action/upload-sarif@b20883b0cd1f46c72ae0ba6d1090936928f9fa30 # v4.32.0
+        uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
         with:
           sarif_file: image-scan-results.sarif
           category: 'trivy-image-${{ steps.parse.outputs.image }}'
@@ -264,7 +267,7 @@ jobs:
           exit 1
 
   # ===========================================================================
-  # Attestation: provenance after scan passes
+  # Attestation: provenance + SBOM after scan passes
   # ===========================================================================
 
   attest:
@@ -280,7 +283,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
 
@@ -299,26 +302,25 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Login to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@74a5d142397b4f367a81961eba4e8cd7edddf772 # v3.4.0
         with:
           registry: ${{ steps.versions.outputs.registry }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Get manifest digest
         id: digest
         env:
           IMAGE: ${{ steps.parse.outputs.image }}
           VERSION: ${{ steps.parse.outputs.version }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{.Digest}}')
+          set -euo pipefail
+          DIGEST=$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --raw | sha256sum | awk '{print "sha256:"$1}')
           echo "digest=$DIGEST" >> $GITHUB_OUTPUT
 
-      - name: Generate attestation
-        uses: actions/attest-build-provenance@96b4a1ef7235a096b17240c259729fdd70c83d45 # v2
+      - name: Generate provenance attestation
+        uses: actions/attest-build-provenance@a2bbfa25375fe432b6a289bc6b6cd05ecd0c4c32 # v4
         with:
           subject-name: ${{ steps.parse.outputs.image }}
           subject-digest: ${{ steps.digest.outputs.digest }}
