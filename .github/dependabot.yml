@@ -3,37 +3,49 @@ updates:
   - package-ecosystem: "gomod"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
     commit-message:
       prefix: "chore: deps"
+    groups:
+      go-dependencies:
+        patterns: ["*"]
 
   - package-ecosystem: "github-actions"
     directories:
       - "/.github/**"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
     commit-message:
       prefix: "chore: deps"
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 5
+      interval: "weekly"
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
     commit-message:
       prefix: "chore: deps"
+    groups:
+      docker:
+        patterns: ["*"]
 
   - package-ecosystem: "terraform"
     directories:
       - "/infra/**"
     schedule:
-      interval: "daily"
-    open-pull-requests-limit: 10
+      interval: "weekly"
+    open-pull-requests-limit: 1
     labels: ["dependencies"]
     commit-message:
       prefix: "chore: deps"
+    groups:
+      terraform-providers:
+        patterns: ["*"]

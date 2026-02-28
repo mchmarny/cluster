@@ -92,34 +92,13 @@ jobs:
         with:
           tflint_version: v${{ steps.versions.outputs.tflint }}
 
-      - name: Validate, lint, fmt
-        run: make tf-validate tf-lint tf-fmt
-
-  # ===========================================================================
-  # Security: trivy config scan
-  # ===========================================================================
-
-  security-scan:
-    name: Security Scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          persist-credentials: false
-
-      - name: Load versions
-        id: versions
-        uses: ./.github/actions/load-versions
-
       - name: Install Trivy
         run: |
-          sudo apt-get install -y wget apt-transport-https gnupg
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor | sudo tee /usr/share/keyrings/trivy.gpg > /dev/null
           echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb generic main" | sudo tee /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update
-          sudo apt-get install -y trivy=${{ steps.versions.outputs.trivy }}-1
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq trivy
 
-      - name: Scan
-        run: make scan
+      - name: Qualify
+        run: make tf-qualify
+
