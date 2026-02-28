@@ -143,7 +143,11 @@
               "type": "object",
               "properties": {
                 "cidr": { "type": "string" },
-                "zone": { "type": "string" }
+                "zone": { "type": "string" },
+                "disableEndpoints": {
+                  "type": "boolean",
+                  "description": "Disable VPC endpoints for this subnet"
+                }
               }
             }
           }
@@ -198,6 +202,15 @@
                     "type": "string",
                     "description": "GPU type (e.g. a100, h100)"
                   },
+                  "architecture": {
+                    "type": "string",
+                    "enum": ["x86_64", "arm64"],
+                    "description": "CPU architecture (default: x86_64)"
+                  },
+                  "accelerator": {
+                    "type": "string",
+                    "description": "Accelerator type for EFA network interfaces (e.g. h100)"
+                  },
                   "imageId": {
                     "type": "string",
                     "description": "Custom AMI ID"
@@ -236,6 +249,24 @@
           "type": "integer",
           "minimum": 0,
           "description": "Maximum node count for autoscaling"
+        },
+        "reservation": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preference": {
+              "type": "string",
+              "description": "Capacity reservation preference (e.g. capacity-reservations-only)"
+            },
+            "target": {
+              "type": "string",
+              "description": "Capacity reservation ID, resource group ARN, or resource group name"
+            },
+            "marketType": {
+              "type": "string",
+              "description": "Market type (e.g. capacity-block)"
+            }
+          }
         }
       }
     }
