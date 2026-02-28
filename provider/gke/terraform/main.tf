@@ -26,6 +26,9 @@ locals {
   region      = local.config.deployment.location
   egress_cidr = "${trimspace(data.http.egress_ip.response_body)}/32"
 
+  // Cluster name (defaults to deployment.id)
+  cluster_name = try(local.config.cluster.name, local.prefix)
+
   // Extract optional deployment settings with defaults
   gke_version         = try(local.config.cluster.version, null)
   release_channel     = try(local.config.cluster.releaseChannel, "STABLE")

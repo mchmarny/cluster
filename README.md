@@ -39,7 +39,6 @@ deployment:
   location: us-east-1
 
 cluster:
-  name: demo
   version: "1.33"
   controlPlane:
     allowedCidrs:
@@ -88,6 +87,7 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 | `init <path>` | Generate a starter configuration file |
 | `setup -c <config>` | Bootstrap cloud account (state bucket, IAM user, access key) |
 | `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
+| `output -c <config>` | Retrieve Terraform outputs and save to state directory |
 
 Destroy is triggered by setting `deployment.destroy: true` in the config and running `apply`.
 
@@ -119,10 +119,10 @@ deployment:
   location: <string>     # Region (required)
   state: tenancy         # tenancy (cloud) | local (tfstate)
   destroy: false         # Set true to destroy
-  tags: {}               # Resource tags
+  tags: {}               # Resource tags (optional)
 
 cluster:
-  name: <string>         # Cluster name (required)
+  name: <string>         # Cluster name (defaults to deployment.id)
   version: <string>      # K8s version (required)
 
 network:                 # Optional — auto-computed from VPC CIDR

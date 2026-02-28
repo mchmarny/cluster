@@ -70,7 +70,6 @@ deployment:
   tenancy: "123456789012"
   location: us-west-2
 cluster:
-  name: test
   version: "1.33"
 `
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -88,6 +87,9 @@ cluster:
 	}
 	if cfg.Deployment.Destroy {
 		t.Error("default Destroy = true, want false")
+	}
+	if cfg.Cluster.Name != "test-dep" {
+		t.Errorf("default Cluster.Name = %q, want %q (deployment.id)", cfg.Cluster.Name, "test-dep")
 	}
 }
 
@@ -151,15 +153,6 @@ deployment:
   state: invalid
 cluster:
   name: test
-  version: "1.33"
-`},
-		{"missing cluster name", `
-deployment:
-  id: test
-  provider: eks
-  tenancy: "123"
-  location: us-west-2
-cluster:
   version: "1.33"
 `},
 		{"missing cluster version", `

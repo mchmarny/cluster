@@ -131,6 +131,14 @@ tf_apply() {
   fi
 }
 
+# Output Terraform state as JSON.
+# Usage: tf_output <tf_dir> <config_file>
+tf_output() {
+  local tf_dir="$1" config_file="$2"
+  msg "Retrieving outputs..."
+  TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" output -json
+}
+
 # Destroy infrastructure.
 # Usage: tf_destroy <tf_dir> <config_file> [true|false]
 tf_destroy() {

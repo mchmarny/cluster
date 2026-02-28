@@ -17,12 +17,12 @@ deployment:
   location: us-west-2
   state: tenancy              # "tenancy" = S3 in target account | "local" = tfstate in /state
   # destroy: false            # Set to true to destroy the cluster
-  tags:
-    owner: ""                 # REQUIRED: Your username or team name
-    env: dev
+  # tags:                      # Optional: key-value tags applied to all resources
+  #   owner: your-name
+  #   env: dev
 
 cluster:
-  name: my-cluster
+  # name: my-cluster          # Optional: defaults to deployment.id
   version: "1.33"
   addOns:
     coreDns: ""

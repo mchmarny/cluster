@@ -64,6 +64,9 @@ run_test "aws --version" docker run --rm --entrypoint aws "$IMAGE" --version
 run_test "jq --version" docker run --rm --entrypoint jq "$IMAGE" --version
 run_test "git --version" docker run --rm --entrypoint git "$IMAGE" --version
 
+# Output command
+run_test "cluster output --help" docker run --rm "$IMAGE" output --help
+
 # Non-root user
 run_test "runs as non-root" bash -c 'test "$(docker run --rm --entrypoint id '"$IMAGE"' -un)" = "builder"'
 run_test "uid is 1000" bash -c 'test "$(docker run --rm --entrypoint id '"$IMAGE"' -u)" = "1000"'

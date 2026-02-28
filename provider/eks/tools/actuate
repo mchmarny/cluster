@@ -20,7 +20,7 @@ COMMAND="apply"
 AUTO_APPROVE="false"
 
 usage() {
-  echo "Usage: $0 -c <config.yaml> [-a] [plan|apply|destroy]"
+  echo "Usage: $0 -c <config.yaml> [-a] [plan|apply|destroy|output]"
   echo "  -c  Config file path (relative to repo root or absolute)"
   echo "  -a  Auto-approve (skip confirmation prompts)"
   exit 1
@@ -31,7 +31,7 @@ while [[ $# -gt 0 ]]; do
     -c|--config)  CONFIG_FILE="$2"; shift 2 ;;
     -a|--auto-approve) AUTO_APPROVE="true"; shift ;;
     -h|--help)    usage ;;
-    plan|apply|destroy) COMMAND="$1"; shift ;;
+    plan|apply|destroy|output) COMMAND="$1"; shift ;;
     *) err "Unknown option: $1" ;;
   esac
 done
@@ -78,6 +78,9 @@ case "$COMMAND" in
     ;;
   destroy)
     tf_destroy "$SRC_DIR" "$CONFIG_FILE" "$AUTO_APPROVE"
+    ;;
+  output)
+    tf_output "$SRC_DIR" "$CONFIG_FILE"
     ;;
 esac
 

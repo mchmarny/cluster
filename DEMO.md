@@ -39,3 +39,16 @@ docker run --rm \
   -e CONFIG_CONTENT="$(base64 < $CLUSTER_CONFIG)" \
   ghcr.io/mchmarny/cluster/eks:latest apply
 ```
+
+## Output
+
+Retrieve deployment outputs (endpoint, access command, etc.) and save to the state volume:
+
+```shell
+docker run --rm \
+  -v $PWD/state:/state \
+  -e CONFIG_CONTENT="$(base64 < $CLUSTER_CONFIG)" \
+  ghcr.io/mchmarny/cluster/eks:latest output
+```
+
+The output JSON is saved to `/state/<id>-<tenancy>-output.json`.

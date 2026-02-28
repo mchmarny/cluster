@@ -24,6 +24,29 @@ type RunConfig struct {
 	SecretAccessKey string
 }
 
+// Output runs terraform init and captures terraform output -json.
+func Output(ctx context.Context, cfg RunConfig) ([]byte, error) {
+	if cfg.TerraformDir == "" {
+		return nil, fmt.Errorf("terraform dir is required")
+	}
+
+	slog.Info("terraform output", "dir", cfg.TerraformDir, "state", cfg.State)
+
+	env := buildEnv(cfg)
+
+	initArgs := buildInitArgs(cfg.State, cfg.Bucket, cfg.Region, cfg.StateKey)
+	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
+		return nil, fmt.Errorf("terraform init: %w", err)
+	}
+
+	out, err := run.Cmd(ctx, cfg.TerraformDir, env, "terraform", "output", "-json")
+	if err != nil {
+		return nil, fmt.Errorf("terraform output: %w", err)
+	}
+
+	return []byte(out), nil
+}
+
 // Run orchestrates the full Terraform lifecycle.
 func Run(ctx context.Context, cfg RunConfig) error {
 	if cfg.TerraformDir == "" {

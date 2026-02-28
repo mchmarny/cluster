@@ -41,7 +41,7 @@ resource "google_kms_crypto_key_iam_member" "gke_secrets_encrypter" {
 resource "google_container_cluster" "main" {
   provider = google-beta
 
-  name     = local.config.cluster.name
+  name     = local.cluster_name
   location = local.region
   project  = local.project
 

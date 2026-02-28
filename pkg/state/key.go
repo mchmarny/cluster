@@ -58,6 +58,24 @@ func ReadKey(stateDir, fileName string) (string, string, error) {
 	return resp.AccessKey.AccessKeyId, resp.AccessKey.SecretAccessKey, nil
 }
 
+// WriteFile writes arbitrary data to the state dir.
+func WriteFile(stateDir, fileName string, data []byte) error {
+	path, err := safePath(stateDir, fileName)
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return fmt.Errorf("creating state dir: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("writing file: %w", err)
+	}
+
+	return nil
+}
+
 // safePath validates that the resolved path stays within stateDir.
 func safePath(stateDir, fileName string) (string, error) {
 	absDir, err := filepath.Abs(stateDir)

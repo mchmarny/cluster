@@ -4,7 +4,7 @@
 
 resource "google_service_account" "gke_cluster" {
   account_id   = "${local.prefix}-gke-cluster"
-  display_name = "GKE Cluster Service Account for ${local.config.cluster.name}"
+  display_name = "GKE Cluster Service Account for ${local.cluster_name}"
   description  = "Service account used by GKE cluster control plane"
   project      = local.project
 }

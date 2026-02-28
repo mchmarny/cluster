@@ -111,6 +111,9 @@ func Load(path string) (*Config, error) {
 	if cfg.Deployment.State == "" {
 		cfg.Deployment.State = StateTenancy
 	}
+	if cfg.Cluster.Name == "" {
+		cfg.Cluster.Name = cfg.Deployment.ID
+	}
 
 	if err := cfg.validate(); err != nil {
 		return nil, err
@@ -142,9 +145,6 @@ func (c *Config) validate() error {
 	}
 	if c.Deployment.State != StateTenancy && c.Deployment.State != StateLocal {
 		return fmt.Errorf("deployment.state must be 'tenancy' or 'local', got %q", c.Deployment.State)
-	}
-	if c.Cluster.Name == "" {
-		return fmt.Errorf("cluster.name is required")
 	}
 	if c.Cluster.Version == "" {
 		return fmt.Errorf("cluster.version is required")

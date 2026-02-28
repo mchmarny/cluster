@@ -85,7 +85,7 @@ locals {
 
   // Extract optional deployment settings with defaults
   eks_version  = try(local.config.cluster.version, null)
-  cluster_name = try(local.config.cluster.name, "${local.prefix}-eks")
+  cluster_name = try(local.config.cluster.name, local.prefix)
 
   // EKS version for AMI lookup (must be specified for Ubuntu AMI auto-selection)
   eks_version_for_ami = local.eks_version

@@ -47,6 +47,7 @@ func Execute(version, commit string) {
 			initCmd(),
 			setupCmd(),
 			applyCmd(),
+			outputCmd(),
 		},
 		Action: func(_ context.Context, cmd *cli.Command) error {
 			return cli.ShowAppHelp(cmd)
@@ -158,6 +159,54 @@ func applyCmd() *cli.Command {
 				AccessKeyID:     keyID,
 				SecretAccessKey: secret,
 			})
+		},
+	}
+}
+
+func outputCmd() *cli.Command {
+	return &cli.Command{
+		Name:  "output",
+		Usage: "Retrieve Terraform outputs and save to state directory",
+		Flags: append(configFlags(),
+			&cli.StringFlag{
+				Name:    "terraform-dir",
+				Usage:   "Terraform working directory",
+				Value:   "/builder/terraform",
+				Sources: cli.EnvVars("TERRAFORM_DIR"),
+			},
+		),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			cfg, configPath, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+
+			sd := cmd.String("state-dir")
+			tfDir := cmd.String("terraform-dir")
+
+			keyID, secret := resolveCredentials(sd, cfg)
+
+			data, err := terraform.Output(ctx, terraform.RunConfig{
+				TerraformDir:    tfDir,
+				ConfigPath:      configPath,
+				State:           cfg.Deployment.State,
+				Bucket:          aws.BucketName(cfg),
+				Region:          cfg.Deployment.Location,
+				StateKey:        aws.StateKey(cfg),
+				AccessKeyID:     keyID,
+				SecretAccessKey: secret,
+			})
+			if err != nil {
+				return err
+			}
+
+			outFile := aws.OutputFileName(cfg)
+			if err := state.WriteFile(sd, outFile, data); err != nil {
+				return fmt.Errorf("saving output: %w", err)
+			}
+
+			fmt.Fprintf(os.Stderr, "Output saved to %s/%s\n", sd, outFile)
+			return nil
 		},
 	}
 }

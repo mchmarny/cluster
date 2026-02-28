@@ -57,12 +57,12 @@
     },
     "cluster": {
       "type": "object",
-      "required": ["name", "version"],
+      "required": ["version"],
       "additionalProperties": false,
       "properties": {
         "name": {
           "type": "string",
-          "description": "Kubernetes cluster name"
+          "description": "Kubernetes cluster name (defaults to deployment.id)"
         },
         "version": {
           "type": "string",

@@ -11,6 +11,11 @@ func KeyFileName(cfg *config.Config) string {
 	return fmt.Sprintf("%s-%s-key.json", cfg.Deployment.ID, cfg.Deployment.Tenancy)
 }
 
+// OutputFileName returns the output file name for this deployment.
+func OutputFileName(cfg *config.Config) string {
+	return fmt.Sprintf("%s-%s-output.json", cfg.Deployment.ID, cfg.Deployment.Tenancy)
+}
+
 // SAName returns the IAM service account name for this deployment.
 func SAName(cfg *config.Config) string {
 	return fmt.Sprintf("%s-builder-sa", cfg.Deployment.ID)

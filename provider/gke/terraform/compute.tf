@@ -69,7 +69,7 @@ resource "google_container_node_pool" "pools" {
     labels = merge(
       try(each.value.nodeConfig.labels, {}),
       {
-        "gke-cluster" = local.config.cluster.name
+        "gke-cluster" = local.cluster_name
         "node-pool"   = each.key
         "node-type"   = each.value.type
       }
