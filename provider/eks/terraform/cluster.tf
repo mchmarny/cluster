@@ -110,7 +110,7 @@ resource "aws_kms_alias" "eks" {
 
 # CloudWatch Log Group for EKS Control Plane
 resource "aws_cloudwatch_log_group" "eks_cluster" {
-  name              = "/aws/eks/cluster/${local.prefix}-${local.config.cluster.name}"
+  name              = "/aws/eks/cluster/${local.prefix}-${local.cluster_name}"
   retention_in_days = local.log_retention_days
   kms_key_id        = aws_kms_key.eks.arn
 
@@ -119,13 +119,13 @@ resource "aws_cloudwatch_log_group" "eks_cluster" {
 
 # EKS Cluster
 resource "aws_eks_cluster" "main" {
-  name     = local.config.cluster.name
+  name     = local.cluster_name
   version  = local.eks_version
   role_arn = aws_iam_role.eks_cluster.arn
 
   enabled_cluster_log_types = ["api", "authenticator", "audit", "scheduler", "controllerManager"]
 
-  tags = { Name = local.config.cluster.name }
+  tags = { Name = local.cluster_name }
 
   access_config {
     authentication_mode                         = "API_AND_CONFIG_MAP"
