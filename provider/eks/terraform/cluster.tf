@@ -1,7 +1,66 @@
+# Toleration locals for DRY add-on configuration (#9)
+locals {
+  # Tolerations for system-only add-ons (coredns, metrics-server, ebs-csi controller)
+  system_tolerations = [
+    {
+      key      = "dedicated"
+      operator = "Equal"
+      value    = "system-workload"
+      effect   = "NoSchedule"
+    },
+    {
+      key      = "dedicated"
+      operator = "Equal"
+      value    = "system-workload"
+      effect   = "NoExecute"
+    },
+    {
+      operator = "Exists"
+    }
+  ]
+
+  # Tolerations for add-ons that run on all nodes (vpc-cni, cloudwatch agent)
+  all_node_tolerations = [
+    {
+      key      = "dedicated"
+      operator = "Equal"
+      value    = "system-workload"
+      effect   = "NoSchedule"
+    },
+    {
+      key      = "dedicated"
+      operator = "Equal"
+      value    = "system-workload"
+      effect   = "NoExecute"
+    },
+    {
+      key      = "dedicated"
+      operator = "Equal"
+      value    = "worker-workload"
+      effect   = "NoSchedule"
+    },
+    {
+      key      = "dedicated"
+      operator = "Equal"
+      value    = "worker-workload"
+      effect   = "NoExecute"
+    },
+    {
+      operator = "Exists"
+    }
+  ]
+
+  # #10: Normalize addon versions — empty string means latest (null)
+  addon_versions = {
+    for k, v in try(local.config.cluster.addOns, {}) :
+    k => v == "" ? null : v
+  }
+}
+
 # KMS Key for EKS Secret Encryption
 resource "aws_kms_key" "eks" {
   description             = "${local.prefix} EKS Secret Encryption Key"
-  deletion_window_in_days = local.kmsDeletionWindowInDays
+  deletion_window_in_days = local.kms_deletion_window_days
   enable_key_rotation     = true
 
   policy = jsonencode({
@@ -40,10 +99,8 @@ resource "aws_kms_key" "eks" {
     ]
   })
 
-  tags = merge(local.effective_tags, {
-    Name           = "${local.prefix}-eks-secrets",
-    LastReconciled = local.updateTime,
-  })
+  # #5: Removed LastReconciled timestamp tag (caused drift every apply)
+  tags = { Name = "${local.prefix}-eks-secrets" }
 }
 
 resource "aws_kms_alias" "eks" {
@@ -54,12 +111,10 @@ resource "aws_kms_alias" "eks" {
 # CloudWatch Log Group for EKS Control Plane
 resource "aws_cloudwatch_log_group" "eks_cluster" {
   name              = "/aws/eks/cluster/${local.prefix}-${local.config.cluster.name}"
-  retention_in_days = local.logRetentionInDays
+  retention_in_days = local.log_retention_days
   kms_key_id        = aws_kms_key.eks.arn
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-eks-control-plane-logs"
-  })
+  tags = { Name = "${local.prefix}-eks-control-plane-logs" }
 }
 
 # EKS Cluster
@@ -70,7 +125,7 @@ resource "aws_eks_cluster" "main" {
 
   enabled_cluster_log_types = ["api", "authenticator", "audit", "scheduler", "controllerManager"]
 
-  tags = merge({ Name = local.config.cluster.name }, local.effective_tags)
+  tags = { Name = local.config.cluster.name }
 
   access_config {
     authentication_mode                         = "API_AND_CONFIG_MAP"
@@ -104,11 +159,11 @@ resource "aws_eks_cluster" "main" {
     ]
   }
 
+  # #17: Keep only IAM policy + log group deps (cluster already refs KMS by attribute)
   depends_on = [
     aws_iam_role_policy_attachment.eks_cluster_policy,
     aws_iam_role_policy_attachment.eks_vpc_resource_controller,
     aws_cloudwatch_log_group.eks_cluster,
-    aws_kms_key.eks
   ]
 }
 
@@ -118,7 +173,7 @@ resource "aws_eks_access_entry" "system_nodes" {
   principal_arn = aws_iam_role.system_nodes.arn
   type          = "EC2_LINUX"
 
-  tags = merge({ Name = "${local.prefix}-system-nodes-access" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-system-nodes-access" }
 }
 
 resource "aws_eks_access_entry" "worker_nodes" {
@@ -126,7 +181,7 @@ resource "aws_eks_access_entry" "worker_nodes" {
   principal_arn = aws_iam_role.worker_nodes.arn
   type          = "EC2_LINUX"
 
-  tags = merge({ Name = "${local.prefix}-worker-nodes-access" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-worker-nodes-access" }
 }
 
 # EKS Access Entries for Admin Roles
@@ -157,10 +212,10 @@ resource "aws_eks_access_entry" "admin_roles" {
   principal_arn = each.value
   type          = "STANDARD"
 
-  tags = merge({ Name = "${local.prefix}-${replace(each.key, "/[^a-zA-Z0-9-]/", "-")}-access" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-${replace(each.key, "/[^a-zA-Z0-9-]/", "-")}-access" }
 }
 
-# EKS Access Policy Associations
+# #18: Only ClusterAdminPolicy (superset of EKSAdminPolicy — removed duplicate)
 resource "aws_eks_access_policy_association" "admin_cluster_admin" {
   for_each = local.admin_role_arns
 
@@ -175,48 +230,18 @@ resource "aws_eks_access_policy_association" "admin_cluster_admin" {
   depends_on = [aws_eks_access_entry.admin_roles]
 }
 
-resource "aws_eks_access_policy_association" "admin_eks_admin" {
-  for_each = local.admin_role_arns
-
-  cluster_name  = aws_eks_cluster.main.name
-  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSAdminPolicy"
-  principal_arn = each.value
-
-  access_scope {
-    type = "cluster"
-  }
-
-  depends_on = [aws_eks_access_entry.admin_roles]
-}
-
 # EKS Add-ons
 resource "aws_eks_addon" "coredns" {
   count = try(local.config.cluster.addOns.coreDns, null) != null ? 1 : 0
 
   addon_name                  = "coredns"
-  addon_version               = try(local.config.cluster.addOns.coreDns, null) == "" ? null : try(local.config.cluster.addOns.coreDns, null)
+  addon_version               = try(local.addon_versions.coreDns, null)
   cluster_name                = aws_eks_cluster.main.name
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
   configuration_values = jsonencode({
-    tolerations = [
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "system-workload"
-        effect   = "NoSchedule"
-      },
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "system-workload"
-        effect   = "NoExecute"
-      },
-      {
-        operator = "Exists"
-      }
-    ]
-    corefile = <<-EOT
+    tolerations = local.system_tolerations
+    corefile    = <<-EOT
     .:53 {
         errors
         health {
@@ -240,11 +265,7 @@ resource "aws_eks_addon" "coredns" {
 EOT
   })
 
-  tags = merge({ Name = "${local.prefix}-coredns" }, local.effective_tags)
-
-  depends_on = [
-    aws_eks_cluster.main
-  ]
+  tags = { Name = "${local.prefix}-coredns" }
 }
 
 resource "aws_eks_addon" "vpc_cni" {
@@ -252,40 +273,11 @@ resource "aws_eks_addon" "vpc_cni" {
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "vpc-cni"
-  addon_version               = try(local.config.cluster.addOns.vpcCni, null) == "" ? null : try(local.config.cluster.addOns.vpcCni, null)
+  addon_version               = try(local.addon_versions.vpcCni, null)
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
   configuration_values = jsonencode({
-    tolerations = [
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "system-workload"
-        effect   = "NoSchedule"
-      },
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "system-workload"
-        effect   = "NoExecute"
-      },
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "worker-workload"
-        effect   = "NoSchedule"
-      },
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "worker-workload"
-        effect   = "NoExecute"
-      },
-      {
-        # Required: Allow CNI to run on nodes that are not yet ready
-        operator = "Exists"
-      }
-    ]
+    tolerations         = local.all_node_tolerations
     enableNetworkPolicy = "true"
     init = {
       env = {
@@ -298,17 +290,14 @@ resource "aws_eks_addon" "vpc_cni" {
       ENI_CONFIG_LABEL_DEF               = "topology.kubernetes.io/zone"
       POD_SECURITY_GROUP_ENFORCING_MODE  = "standard"
       AWS_VPC_K8S_CNI_EXTERNALSNAT       = "false"
-      MINIMUM_IP_TARGET                  = local.vpcCniMinimumIpTarget
-      WARM_IP_TARGET                     = local.vpcCniWarmIpTarget
+      MINIMUM_IP_TARGET                  = local.vpc_cni_minimum_ip_target
+      WARM_IP_TARGET                     = local.vpc_cni_warm_ip_target
     }
   })
 
-  depends_on = [
-    aws_eks_cluster.main,
-    local_file.eniconfig
-  ]
+  depends_on = [local_file.eniconfig]
 
-  tags = merge({ Name = "${local.prefix}-vpc-cni" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-vpc-cni" }
 }
 
 resource "aws_eks_addon" "kube_proxy" {
@@ -316,15 +305,11 @@ resource "aws_eks_addon" "kube_proxy" {
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "kube-proxy"
-  addon_version               = try(local.config.cluster.addOns.kubeProxy, null) == "" ? null : try(local.config.cluster.addOns.kubeProxy, null)
+  addon_version               = try(local.addon_versions.kubeProxy, null)
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
-  depends_on = [
-    aws_eks_cluster.main
-  ]
-
-  tags = merge({ Name = "${local.prefix}-kube-proxy" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-kube-proxy" }
 }
 
 resource "aws_eks_addon" "cloudwatch_observability" {
@@ -332,71 +317,22 @@ resource "aws_eks_addon" "cloudwatch_observability" {
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "amazon-cloudwatch-observability"
-  addon_version               = try(local.config.cluster.addOns.cloudwatchObservability, null) == "" ? null : try(local.config.cluster.addOns.cloudwatchObservability, null)
+  addon_version               = try(local.addon_versions.cloudwatchObservability, null)
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
   service_account_role_arn    = aws_iam_role.cloudwatch_observability.arn
 
   configuration_values = jsonencode({
     manager = {
-      tolerations = [
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "system-workload"
-          effect   = "NoSchedule"
-        },
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "system-workload"
-          effect   = "NoExecute"
-        },
-        {
-          operator = "Exists"
-        }
-      ]
+      tolerations = local.system_tolerations
     }
     agent = {
-      name = "cw-observability"
-      tolerations = [
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "system-workload"
-          effect   = "NoSchedule"
-        },
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "system-workload"
-          effect   = "NoExecute"
-        },
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "worker-workload"
-          effect   = "NoSchedule"
-        },
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "worker-workload"
-          effect   = "NoExecute"
-        },
-        {
-          operator = "Exists"
-        }
-      ]
+      name        = "cw-observability"
+      tolerations = local.all_node_tolerations
     }
   })
 
-  depends_on = [
-    aws_eks_cluster.main,
-    aws_iam_role.cloudwatch_observability
-  ]
-
-  tags = merge({ Name = "${local.prefix}-cloudwatch-observability" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-cloudwatch-observability" }
 }
 
 resource "aws_eks_addon" "metrics_server" {
@@ -404,35 +340,15 @@ resource "aws_eks_addon" "metrics_server" {
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "metrics-server"
-  addon_version               = try(local.config.cluster.addOns.metricsServer, null) == "" ? null : try(local.config.cluster.addOns.metricsServer, null)
+  addon_version               = try(local.addon_versions.metricsServer, null)
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
 
   configuration_values = jsonencode({
-    tolerations = [
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "system-workload"
-        effect   = "NoSchedule"
-      },
-      {
-        key      = "dedicated"
-        operator = "Equal"
-        value    = "system-workload"
-        effect   = "NoExecute"
-      },
-      {
-        operator = "Exists"
-      }
-    ]
+    tolerations = local.system_tolerations
   })
 
-  depends_on = [
-    aws_eks_cluster.main
-  ]
-
-  tags = merge({ Name = "${local.prefix}-metrics-server" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-metrics-server" }
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
@@ -440,39 +356,18 @@ resource "aws_eks_addon" "ebs_csi_driver" {
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"
-  addon_version               = try(local.config.cluster.addOns.ebsCsi, null) == "" ? null : try(local.config.cluster.addOns.ebsCsi, null)
+  addon_version               = try(local.addon_versions.ebsCsi, null)
   resolve_conflicts_on_create = "OVERWRITE"
   resolve_conflicts_on_update = "OVERWRITE"
   service_account_role_arn    = aws_iam_role.ebs_csi_driver.arn
 
   configuration_values = jsonencode({
     controller = {
-      tolerations = [
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "system-workload"
-          effect   = "NoSchedule"
-        },
-        {
-          key      = "dedicated"
-          operator = "Equal"
-          value    = "system-workload"
-          effect   = "NoExecute"
-        },
-        {
-          operator = "Exists"
-        }
-      ]
+      tolerations = local.system_tolerations
     }
   })
 
-  depends_on = [
-    aws_eks_cluster.main,
-    aws_iam_role.ebs_csi_driver
-  ]
-
-  tags = merge({ Name = "${local.prefix}-ebs-csi-driver" }, local.effective_tags)
+  tags = { Name = "${local.prefix}-ebs-csi-driver" }
 }
 
 
@@ -487,9 +382,5 @@ resource "aws_iam_openid_connect_provider" "oidc_provider" {
 
   thumbprint_list = [data.tls_certificate.oidc_provider.certificates[0].sha1_fingerprint]
 
-  tags = merge({ Name = "${local.prefix}-oidc-provider" }, local.effective_tags)
-
-  depends_on = [
-    aws_eks_cluster.main
-  ]
+  tags = { Name = "${local.prefix}-oidc-provider" }
 }

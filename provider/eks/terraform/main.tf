@@ -15,32 +15,18 @@ data "http" "egress_ip" {
 
 # Ubuntu EKS Worker AMI lookup (used when imageId is not specified)
 # https://cloud-images.ubuntu.com/docs/aws/eks/
-data "aws_ami" "ubuntu_eks_x86_64" {
-  most_recent = true
-  owners      = ["099720109477"] # Canonical
-
-  filter {
-    name   = "name"
-    values = ["ubuntu-eks/k8s_${local.eks_version_for_ami}/images/*"]
-  }
-
-  filter {
-    name   = "architecture"
-    values = ["x86_64"]
-  }
-
-  filter {
-    name   = "virtualization-type"
-    values = ["hvm"]
-  }
-
-  filter {
-    name   = "state"
-    values = ["available"]
-  }
+# Only looks up architectures that are actually needed by node groups
+locals {
+  needed_architectures = toset([
+    for ng in local.all_node_groups :
+    try(ng.architecture, "x86_64")
+    if try(ng.imageId, null) == null
+  ])
 }
 
-data "aws_ami" "ubuntu_eks_arm64" {
+data "aws_ami" "ubuntu_eks" {
+  for_each = local.needed_architectures
+
   most_recent = true
   owners      = ["099720109477"] # Canonical
 
@@ -51,7 +37,7 @@ data "aws_ami" "ubuntu_eks_arm64" {
 
   filter {
     name   = "architecture"
-    values = ["arm64"]
+    values = [each.value]
   }
 
   filter {
@@ -69,13 +55,10 @@ locals {
   // Load configuration from YAML file
   config = yamldecode(file(var.CONFIG_PATH))
 
-  configDir      = dirname(var.CONFIG_PATH)
-  configFilename = basename(var.CONFIG_PATH)
-  configBasename = replace(local.configFilename, "/\\.ya?ml$/", "")
-  statusFilePath = "${local.configDir}/${local.configBasename}-status.json"
-
-  // Update time 
-  updateTime = timestamp()
+  config_dir       = dirname(var.CONFIG_PATH)
+  config_filename  = basename(var.CONFIG_PATH)
+  config_basename  = replace(local.config_filename, "/\\.ya?ml$/", "")
+  status_file_path = "${local.config_dir}/${local.config_basename}-status.json"
 
   // Extract required deployment settings
   prefix      = local.config.deployment.id
@@ -100,29 +83,29 @@ locals {
   vpc_endpoints     = try(local.config.network.endpoints, local.default_endpoints)
 
   // Observability
-  logRetentionInDays        = try(local.config.observability.logRetentionInDays, 7)
-  vpcFlowLogRetentionInDays = try(local.config.observability.vpcFlowLogs.retentionInDays, 7)
-  metricsGranularity        = try(local.config.observability.metrics.granularity, "1Minute")
+  log_retention_days          = try(local.config.observability.logRetentionInDays, 7)
+  vpc_flow_log_retention_days = try(local.config.observability.vpcFlowLogs.retentionInDays, 7)
+  metrics_granularity         = try(local.config.observability.metrics.granularity, "1Minute")
 
   // Security
-  kmsDeletionWindowInDays = try(local.config.security.kms.deletionWindowInDays, 30)
+  kms_deletion_window_days = try(local.config.security.kms.deletionWindowInDays, 30)
 
   // Networking
-  vpcCniMinimumIpTarget = tostring(try(local.config.networking.vpcCni.minimumIpTarget, 30))
-  vpcCniWarmIpTarget    = tostring(try(local.config.networking.vpcCni.warmIpTarget, 20))
+  vpc_cni_minimum_ip_target = tostring(try(local.config.networking.vpcCni.minimumIpTarget, 30))
+  vpc_cni_warm_ip_target    = tostring(try(local.config.networking.vpcCni.warmIpTarget, 20))
 
   // ASG Configuration
-  asgHealthCheckGracePeriod = try(local.config.compute.autoscaling.healthCheck.gracePeriod, 300)
-  asgCapacityTimeout        = try(local.config.compute.autoscaling.capacityTimeout, "10m")
-  asgDeleteTimeout          = try(local.config.compute.autoscaling.deleteTimeout, "30m")
-  asgMinHealthyPercentage   = try(local.config.compute.autoscaling.instanceRefresh.minHealthyPercentage, 90)
-  asgInstanceWarmup         = try(local.config.compute.autoscaling.instanceRefresh.instanceWarmup, 300)
-  asgCheckpointPercentages  = try(local.config.compute.autoscaling.instanceRefresh.checkpointPercentages, [50, 100])
+  asg_health_check_grace_period = try(local.config.compute.autoscaling.healthCheck.gracePeriod, 300)
+  asg_capacity_timeout          = try(local.config.compute.autoscaling.capacityTimeout, "10m")
+  asg_delete_timeout            = try(local.config.compute.autoscaling.deleteTimeout, "30m")
+  asg_min_healthy_percentage    = try(local.config.compute.autoscaling.instanceRefresh.minHealthyPercentage, 90)
+  asg_instance_warmup           = try(local.config.compute.autoscaling.instanceRefresh.instanceWarmup, 300)
+  asg_checkpoint_percentages    = try(local.config.compute.autoscaling.instanceRefresh.checkpointPercentages, [50, 100])
 
-  // Storage 
-  blockVolumeMountDefault = "/dev/sda1" // Default mount point if not specified
-  blockVolumeTypeDefault  = "gp3"       // Default volume type if not specified
-  blockVolumeSizeDefault  = 50          // Default volume size in GB if not specified
+  // Storage
+  block_volume_mount_default = "/dev/sda1" // Default mount point if not specified
+  block_volume_type_default  = "gp3"       // Default volume type if not specified
+  block_volume_size_default  = 50          // Default volume size in GB if not specified
 
   // Taints
   system_node_taints = "dedicated=system-workload:NoSchedule,dedicated=system-workload:NoExecute"
@@ -159,15 +142,4 @@ locals {
   // Effective config: user config if provided, otherwise defaults
   effective_subnets = try(local.config.network.subnets, null) != null ? local.config.network.subnets : local.default_subnets
   effective_tags    = try(local.config.deployment.tags, {})
-}
-
-// =====================================================================================
-// Validation 
-// =====================================================================================
-
-check "account_matches" {
-  assert {
-    condition     = data.aws_caller_identity.current.account_id == local.account
-    error_message = "Invalid AWS account (want: ${local.account}, got: ${data.aws_caller_identity.current.account_id})."
-  }
 }

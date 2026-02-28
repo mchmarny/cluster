@@ -66,15 +66,12 @@ locals {
     )
   }
 
-  # Compute effective image ID for each node group
-  # Uses provided imageId if specified, otherwise falls back to Ubuntu EKS AMI
-  # based on architecture (defaults to x86_64 if not specified)
+  # #16: Compute effective image ID using for_each AMI data source
   node_group_image_ids = {
     for ng in local.all_node_groups :
     ng.name => (
       try(ng.imageId, null) != null ? ng.imageId :
-      try(ng.architecture, "x86_64") == "arm64" ? data.aws_ami.ubuntu_eks_arm64.id :
-      data.aws_ami.ubuntu_eks_x86_64.id
+      data.aws_ami.ubuntu_eks[try(ng.architecture, "x86_64")].id
     )
   }
 }
@@ -117,10 +114,10 @@ resource "aws_launch_template" "node_groups" {
   }
 
   block_device_mappings {
-    device_name = try(each.value.blockDevice.mount, local.blockVolumeMountDefault)
+    device_name = try(each.value.blockDevice.mount, local.block_volume_mount_default)
     ebs {
-      volume_size = try(each.value.blockDevice.size, local.blockVolumeSizeDefault)
-      volume_type = try(each.value.blockDevice.type, local.blockVolumeTypeDefault)
+      volume_size = try(each.value.blockDevice.size, local.block_volume_size_default)
+      volume_type = try(each.value.blockDevice.type, local.block_volume_type_default)
       encrypted   = true
     }
   }
@@ -180,7 +177,7 @@ resource "aws_launch_template" "node_groups" {
 
       # Use known values from Terraform instead of dynamic lookup
       /usr/local/bin/setup-local-disks raid0 || echo "No local disks found"
-      
+
       /etc/eks/bootstrap.sh ${aws_eks_cluster.main.name} \
         --b64-cluster-ca ${aws_eks_cluster.main.certificate_authority[0].data} \
         --apiserver-endpoint ${aws_eks_cluster.main.endpoint} \
@@ -192,6 +189,7 @@ resource "aws_launch_template" "node_groups" {
   EOF
   )
 
+  # default_tags don't propagate into launch template tag_specifications
   tag_specifications {
     resource_type = "instance"
     tags = merge(local.effective_tags, {
@@ -218,8 +216,8 @@ resource "aws_autoscaling_group" "node_groups" {
 
   # Health check configuration
   health_check_type         = "EC2"
-  health_check_grace_period = local.asgHealthCheckGracePeriod
-  wait_for_capacity_timeout = local.asgCapacityTimeout
+  health_check_grace_period = local.asg_health_check_grace_period
+  wait_for_capacity_timeout = local.asg_capacity_timeout
 
   # Termination policies
   termination_policies = [
@@ -231,9 +229,9 @@ resource "aws_autoscaling_group" "node_groups" {
   instance_refresh {
     strategy = "Rolling"
     preferences {
-      min_healthy_percentage = local.asgMinHealthyPercentage
-      instance_warmup        = local.asgInstanceWarmup
-      checkpoint_percentages = local.asgCheckpointPercentages
+      min_healthy_percentage = local.asg_min_healthy_percentage
+      instance_warmup        = local.asg_instance_warmup
+      checkpoint_percentages = local.asg_checkpoint_percentages
     }
   }
 
@@ -248,7 +246,7 @@ resource "aws_autoscaling_group" "node_groups" {
     "GroupTerminatingInstances",
     "GroupTotalInstances"
   ]
-  metrics_granularity = local.metricsGranularity
+  metrics_granularity = local.metrics_granularity
 
   launch_template {
     id      = aws_launch_template.node_groups[each.key].id
@@ -261,7 +259,7 @@ resource "aws_autoscaling_group" "node_groups" {
   }
 
   timeouts {
-    delete = local.asgDeleteTimeout
+    delete = local.asg_delete_timeout
   }
 
   tag {

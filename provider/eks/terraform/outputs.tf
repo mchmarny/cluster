@@ -8,10 +8,10 @@ output "status" {
     deployment = {
       accountId  = data.aws_caller_identity.current.account_id
       region     = local.region
-      updated    = local.updateTime
+      updated    = timestamp()
       prefix     = local.prefix
       tags       = try(local.config.deployment.tags, {})
-      statusFile = local.statusFilePath
+      statusFile = local.status_file_path
     }
     access = {
       command = "aws eks update-kubeconfig --region ${local.region} --name ${aws_eks_cluster.main.name} --alias ${aws_eks_cluster.main.name}"
@@ -28,7 +28,7 @@ locals {
     kind       = "ClusterStatus"
     metadata = {
       name      = aws_eks_cluster.main.name
-      timestamp = local.updateTime
+      timestamp = timestamp()
     }
     deployment = {
       id        = local.prefix
@@ -193,7 +193,7 @@ locals {
 
 // Write status to YAML file
 resource "local_file" "status" {
-  filename = local.statusFilePath
+  filename = local.status_file_path
   content  = jsonencode(local.status_data)
 
   file_permission      = "0644"

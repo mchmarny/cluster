@@ -13,6 +13,7 @@ type Config struct {
 	Deployment Deployment `yaml:"deployment"`
 	Cluster    Cluster    `yaml:"cluster"`
 	Network    *Network   `yaml:"network,omitempty"`
+	IAM        *IAM       `yaml:"iam,omitempty"`
 	Compute    *Compute   `yaml:"compute,omitempty"`
 }
 
@@ -40,6 +41,12 @@ type AddOns struct {
 	KubeProxy               string `yaml:"kubeProxy,omitempty"`
 	CloudwatchObservability string `yaml:"cloudwatchObservability,omitempty"`
 	EbsCsi                  string `yaml:"ebsCsi,omitempty"`
+	MetricsServer           string `yaml:"metricsServer,omitempty"`
+}
+
+type IAM struct {
+	SystemNodePolicies []string `yaml:"systemNodePolicies,omitempty"`
+	WorkerNodePolicies []string `yaml:"workerNodePolicies,omitempty"`
 }
 
 type ControlPlane struct {

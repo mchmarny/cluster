@@ -25,6 +25,9 @@ locals {
     aws_subnet.main["${local.prefix}-system-${cfg.zone}"].id
   ]
 
+  # #15: Split endpoints into gateway (S3 — free) and interface (ENI-based)
+  gateway_endpoints   = toset([for e in local.vpc_endpoints : e if e == "s3"])
+  interface_endpoints = toset([for e in local.vpc_endpoints : e if e != "s3"])
 }
 
 # VPC
@@ -33,36 +36,25 @@ resource "aws_vpc" "main" {
   enable_dns_hostnames = true
   enable_dns_support   = true
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-vpc"
-  })
-}
+  tags = { Name = "${local.prefix}-vpc" }
 
-# Clean up any orphaned log group from previous deployments
-resource "null_resource" "cleanup_vpc_flow_logs" {
-  triggers = {
-    always = timestamp()
-  }
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/sh", "-c"]
-    command     = <<-EOC
-      aws logs delete-log-group --log-group-name "/aws/vpc/${local.prefix}-flow-logs" --region ${local.region} 2>/dev/null || true
-    EOC
+  # #8: Hard account validation via precondition (replaces check block)
+  lifecycle {
+    precondition {
+      condition     = data.aws_caller_identity.current.account_id == local.account
+      error_message = "Invalid AWS account (want: ${local.account}, got: ${data.aws_caller_identity.current.account_id})."
+    }
   }
 }
 
 # CloudWatch Log Group for VPC Flow Logs
+# #6: Removed null_resource cleanup hack — Terraform manages the lifecycle
 resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
   name              = "/aws/vpc/${local.prefix}-flow-logs"
-  retention_in_days = local.vpcFlowLogRetentionInDays
+  retention_in_days = local.vpc_flow_log_retention_days
   kms_key_id        = aws_kms_key.eks.arn
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-vpc-flow-logs"
-  })
-
-  depends_on = [null_resource.cleanup_vpc_flow_logs]
+  tags = { Name = "${local.prefix}-vpc-flow-logs" }
 }
 
 # IAM Role for VPC Flow Logs
@@ -70,9 +62,7 @@ resource "aws_iam_role" "vpc_flow_logs" {
   name               = "${local.prefix}-vpc-flow-logs"
   assume_role_policy = data.aws_iam_policy_document.vpc_flow_logs_assume_role.json
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-vpc-flow-logs"
-  })
+  tags = { Name = "${local.prefix}-vpc-flow-logs" }
 }
 
 data "aws_iam_policy_document" "vpc_flow_logs_assume_role" {
@@ -98,9 +88,7 @@ resource "aws_flow_log" "main" {
   traffic_type    = "ALL"
   vpc_id          = aws_vpc.main.id
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-vpc-flow-log"
-  })
+  tags = { Name = "${local.prefix}-vpc-flow-log" }
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "secondary_cidr" {
@@ -117,7 +105,7 @@ resource "aws_subnet" "main" {
   cidr_block              = each.value.cidr_block
   map_public_ip_on_launch = each.value.map_public_ip_on_launch
 
-  tags = merge(local.effective_tags, {
+  tags = merge({
     Name = "${each.key}-subnet"
     # AWS Load Balancer Controller tags
     "kubernetes.io/role/elb"                      = contains(split("-", each.key), "public") ? "1" : null
@@ -134,9 +122,7 @@ resource "aws_subnet" "main" {
 resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-igw"
-  })
+  tags = { Name = "${local.prefix}-igw" }
 }
 
 # Elastic IPs for NAT Gateways
@@ -148,9 +134,7 @@ resource "aws_eip" "nat" {
 
   domain = "vpc"
 
-  tags = merge(local.effective_tags, {
-    Name = each.key
-  })
+  tags = { Name = each.key }
 }
 
 # NAT Gateways
@@ -166,9 +150,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = each.value.subnet_id
   allocation_id = each.value.allocation_id
 
-  tags = merge(local.effective_tags, {
-    Name = each.key
-  })
+  tags = { Name = each.key }
 
   depends_on = [aws_internet_gateway.main]
 }
@@ -187,9 +169,7 @@ resource "aws_route_table" "public" {
     gateway_id = aws_internet_gateway.main.id
   }
 
-  tags = merge(local.effective_tags, {
-    Name = each.key
-  })
+  tags = { Name = each.key }
 }
 
 resource "aws_route_table" "private_system" {
@@ -208,9 +188,7 @@ resource "aws_route_table" "private_system" {
     nat_gateway_id = each.value.nat_gateway_id
   }
 
-  tags = merge(local.effective_tags, {
-    Name = each.key
-  })
+  tags = { Name = each.key }
 }
 
 resource "aws_route_table" "private_worker" {
@@ -229,9 +207,7 @@ resource "aws_route_table" "private_worker" {
     nat_gateway_id = each.value.nat_gateway_id
   }
 
-  tags = merge(local.effective_tags, {
-    Name = each.key
-  })
+  tags = { Name = each.key }
 }
 
 # Route Table Associations
@@ -283,8 +259,25 @@ locals {
   ]
 }
 
-resource "aws_vpc_endpoint" "services" {
-  for_each = { for service in local.vpc_endpoints : service => service }
+# #15: Gateway endpoints (S3) — free, uses route tables
+resource "aws_vpc_endpoint" "gateway" {
+  for_each = local.gateway_endpoints
+
+  vpc_id            = aws_vpc.main.id
+  service_name      = "com.amazonaws.${local.region}.${each.value}"
+  vpc_endpoint_type = "Gateway"
+
+  route_table_ids = concat(
+    [for k, rt in aws_route_table.private_system : rt.id],
+    [for k, rt in aws_route_table.private_worker : rt.id],
+  )
+
+  tags = { Name = "${local.prefix}-vpce-${each.value}" }
+}
+
+# #15: Interface endpoints (everything except S3) — ENI-based with private DNS
+resource "aws_vpc_endpoint" "interface" {
+  for_each = local.interface_endpoints
 
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${local.region}.${each.value}"
@@ -305,9 +298,7 @@ resource "aws_vpc_endpoint" "services" {
     aws_security_group.main["${local.prefix}-worker"].id,
   ]
 
-  tags = merge(local.effective_tags, {
-    Name = "${local.prefix}-vpce-${each.value}"
-  })
+  tags = { Name = "${local.prefix}-vpce-${each.value}" }
 }
 
 resource "local_file" "eniconfig" {
@@ -326,13 +317,13 @@ resource "local_file" "eniconfig" {
     ])
   })
 
+  # #11: Removed rm -f from local-exec (Terraform manages the file lifecycle)
   provisioner "local-exec" {
     interpreter = ["/bin/sh", "-c"]
     command     = <<-EOC
       set -eu
       aws eks update-kubeconfig --region ${local.region} --name ${aws_eks_cluster.main.name}
       kubectl apply -f ${self.filename}
-      rm -f ${self.filename}
     EOC
   }
 

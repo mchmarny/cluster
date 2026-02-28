@@ -7,6 +7,5 @@ terraform {
     http  = { source = "hashicorp/http", version = "~> 3.5.0" }
     local = { source = "hashicorp/local", version = "~> 2.5.3" }
     tls   = { source = "hashicorp/tls", version = "~> 4.1.0" }
-    null  = { source = "hashicorp/null", version = "~> 3.2.4" }
   }
 }

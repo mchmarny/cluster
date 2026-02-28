@@ -91,6 +91,10 @@
             "ebsCsi": {
               "type": "string",
               "description": "EBS CSI driver add-on version (empty for latest)"
+            },
+            "metricsServer": {
+              "type": "string",
+              "description": "Metrics Server add-on version (empty for latest)"
             }
           }
         },
@@ -134,6 +138,53 @@
             }
           }
         },
+        "securityGroups": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "additionalRules": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["target", "direction", "fromPort", "toPort", "protocol"],
+                "additionalProperties": false,
+                "properties": {
+                  "target": {
+                    "type": "string",
+                    "enum": ["system", "worker", "pod"],
+                    "description": "Security group to add the rule to"
+                  },
+                  "direction": {
+                    "type": "string",
+                    "enum": ["ingress", "egress"],
+                    "description": "Rule direction"
+                  },
+                  "description": {
+                    "type": "string",
+                    "description": "Rule description"
+                  },
+                  "fromPort": {
+                    "type": "integer",
+                    "description": "Start port"
+                  },
+                  "toPort": {
+                    "type": "integer",
+                    "description": "End port"
+                  },
+                  "protocol": {
+                    "type": "string",
+                    "description": "Protocol (tcp, udp, -1 for all)"
+                  },
+                  "cidrBlocks": {
+                    "type": "array",
+                    "items": { "type": "string" },
+                    "description": "CIDR blocks for the rule"
+                  }
+                }
+              }
+            }
+          }
+        },
         "subnets": {
           "type": "object",
           "description": "Subnet definitions by tier (public, system, worker, pod). Auto-computed from VPC CIDR if omitted.",
@@ -151,6 +202,22 @@
               }
             }
           }
+        }
+      }
+    },
+    "iam": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "systemNodePolicies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional IAM policy ARNs to attach to system node role"
+        },
+        "workerNodePolicies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Additional IAM policy ARNs to attach to worker node role"
         }
       }
     },
