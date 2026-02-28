@@ -45,7 +45,6 @@ func Execute(version, commit string) {
 		},
 		Commands: []*cli.Command{
 			initCmd(),
-			setupCmd(),
 			applyCmd(),
 			outputCmd(),
 		},
@@ -76,50 +75,7 @@ func initCmd() *cli.Command {
 			}
 
 			slog.Info("config template generated", "path", path)
-			fmt.Fprintf(os.Stderr, "Config written to %s\nEdit the REQUIRED fields, then run: cluster setup\n", path)
-			return nil
-		},
-	}
-}
-
-func setupCmd() *cli.Command {
-	return &cli.Command{
-		Name:  "setup",
-		Usage: "Bootstrap AWS account (S3 bucket, IAM user, access key)",
-		Flags: configFlags(),
-		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, _, err := loadConfig(cmd)
-			if err != nil {
-				return err
-			}
-
-			sd := cmd.String("state-dir")
-
-			if err := aws.ValidateAccount(ctx, cfg.Deployment.Tenancy); err != nil {
-				return err
-			}
-
-			if cfg.Deployment.State == config.StateTenancy {
-				if err := aws.EnsureBucket(ctx, aws.BucketName(cfg), cfg.Deployment.Location); err != nil {
-					return fmt.Errorf("ensuring state bucket: %w", err)
-				}
-			} else {
-				slog.Info("skipping S3 bucket (state: local)")
-			}
-
-			keyJSON, err := aws.EnsureIAMUser(ctx, aws.SAName(cfg), aws.PolicyName(cfg), aws.PolicyARN(cfg))
-			if err != nil {
-				return fmt.Errorf("ensuring IAM user: %w", err)
-			}
-
-			if err := state.WriteKey(sd, aws.KeyFileName(cfg), keyJSON); err != nil {
-				return fmt.Errorf("saving key: %w", err)
-			}
-
-			slog.Info("setup complete",
-				"key", fmt.Sprintf("%s/%s", sd, aws.KeyFileName(cfg)),
-				"bucket", aws.BucketName(cfg),
-				"user", aws.SAName(cfg))
+			fmt.Fprintf(os.Stderr, "Config written to %s\nEdit the REQUIRED fields, then run: provider/<csp>/tools/setup\n", path)
 			return nil
 		},
 	}
@@ -145,8 +101,9 @@ func applyCmd() *cli.Command {
 
 			sd := cmd.String("state-dir")
 			tfDir := cmd.String("terraform-dir")
+			kc := cmd.String("key-content")
 
-			keyID, secret := resolveCredentials(sd, cfg)
+			keyID, secret := resolveCredentials(kc, sd, cfg)
 
 			return terraform.Run(ctx, terraform.RunConfig{
 				TerraformDir:    tfDir,
@@ -183,8 +140,9 @@ func outputCmd() *cli.Command {
 
 			sd := cmd.String("state-dir")
 			tfDir := cmd.String("terraform-dir")
+			kc := cmd.String("key-content")
 
-			keyID, secret := resolveCredentials(sd, cfg)
+			keyID, secret := resolveCredentials(kc, sd, cfg)
 
 			data, err := terraform.Output(ctx, terraform.RunConfig{
 				TerraformDir:    tfDir,
@@ -225,6 +183,11 @@ func configFlags() []cli.Flag {
 			Sources: cli.EnvVars("CONFIG_CONTENT"),
 		},
 		&cli.StringFlag{
+			Name:    "key-content",
+			Usage:   "Base64-encoded AWS key JSON (from setup)",
+			Sources: cli.EnvVars("KEY_CONTENT"),
+		},
+		&cli.StringFlag{
 			Name:    "state-dir",
 			Usage:   "Directory for state and key files",
 			Value:   stateDir,
@@ -255,9 +218,22 @@ func loadConfig(cmd *cli.Command) (*config.Config, string, error) {
 	return cfg, configPath, nil
 }
 
-// resolveCredentials returns AWS credentials from env vars or state key file.
-// Returns empty strings if no credentials are found (terraform may use instance profile).
-func resolveCredentials(stateDir string, cfg *config.Config) (keyID, secret string) {
+// resolveCredentials returns AWS credentials using the following priority:
+//  1. KEY_CONTENT (base64-encoded key JSON)
+//  2. AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars
+//  3. State key file on disk
+//  4. Empty (terraform uses default provider chain)
+func resolveCredentials(keyContent, stateDir string, cfg *config.Config) (keyID, secret string) {
+	if keyContent != "" {
+		id, s, err := state.ParseKeyContent(keyContent)
+		if err != nil {
+			slog.Warn("failed to parse KEY_CONTENT", "error", err)
+		} else {
+			slog.Info("using AWS credentials from KEY_CONTENT")
+			return id, s
+		}
+	}
+
 	if id, s := os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"); id != "" && s != "" {
 		slog.Info("using AWS credentials from environment")
 		return id, s

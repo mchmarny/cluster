@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -38,6 +39,37 @@ func TestReadKeyNotFound(t *testing.T) {
 	_, _, err := ReadKey(t.TempDir(), "missing.json")
 	if err == nil {
 		t.Error("expected error for missing key file")
+	}
+}
+
+func TestParseKeyContent(t *testing.T) {
+	keyJSON := `{"AccessKey":{"AccessKeyId":"AKIAROUND","SecretAccessKey":"roundtrip","UserName":"test"}}`
+	encoded := base64.StdEncoding.EncodeToString([]byte(keyJSON))
+
+	keyID, secret, err := ParseKeyContent(encoded)
+	if err != nil {
+		t.Fatalf("ParseKeyContent() error: %v", err)
+	}
+	if keyID != "AKIAROUND" {
+		t.Errorf("AccessKeyId = %q, want %q", keyID, "AKIAROUND")
+	}
+	if secret != "roundtrip" {
+		t.Errorf("SecretAccessKey = %q, want %q", secret, "roundtrip")
+	}
+}
+
+func TestParseKeyContentInvalidBase64(t *testing.T) {
+	_, _, err := ParseKeyContent("not-valid-base64!!!")
+	if err == nil {
+		t.Error("expected error for invalid base64")
+	}
+}
+
+func TestParseKeyContentInvalidJSON(t *testing.T) {
+	encoded := base64.StdEncoding.EncodeToString([]byte("not json"))
+	_, _, err := ParseKeyContent(encoded)
+	if err == nil {
+		t.Error("expected error for invalid JSON")
 	}
 }
 

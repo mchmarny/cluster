@@ -1,6 +1,7 @@
 package state
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -46,13 +47,27 @@ func ReadKey(stateDir, fileName string) (string, string, error) {
 		return "", "", fmt.Errorf("reading key file %s: %w (run 'setup' first)", path, err)
 	}
 
+	return parseKey(data)
+}
+
+// ParseKeyContent decodes a base64-encoded key JSON and returns (AccessKeyId, SecretAccessKey).
+func ParseKeyContent(base64Content string) (string, string, error) {
+	data, err := base64.StdEncoding.DecodeString(base64Content)
+	if err != nil {
+		return "", "", fmt.Errorf("decoding base64 key content: %w", err)
+	}
+	return parseKey(data)
+}
+
+// parseKey parses raw key JSON (from aws iam create-access-key) and returns credentials.
+func parseKey(data []byte) (string, string, error) {
 	var resp accessKeyResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return "", "", fmt.Errorf("parsing key file: %w", err)
 	}
 
 	if resp.AccessKey.AccessKeyId == "" || resp.AccessKey.SecretAccessKey == "" {
-		return "", "", fmt.Errorf("key file %s missing AccessKeyId or SecretAccessKey", path)
+		return "", "", fmt.Errorf("key data missing AccessKeyId or SecretAccessKey")
 	}
 
 	return resp.AccessKey.AccessKeyId, resp.AccessKey.SecretAccessKey, nil

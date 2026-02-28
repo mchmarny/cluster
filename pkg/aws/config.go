@@ -16,21 +16,6 @@ func OutputFileName(cfg *config.Config) string {
 	return fmt.Sprintf("%s-%s-output.json", cfg.Deployment.ID, cfg.Deployment.Tenancy)
 }
 
-// SAName returns the IAM service account name for this deployment.
-func SAName(cfg *config.Config) string {
-	return fmt.Sprintf("%s-builder-sa", cfg.Deployment.ID)
-}
-
-// PolicyName returns the IAM policy name for this deployment.
-func PolicyName(cfg *config.Config) string {
-	return fmt.Sprintf("%s-builder-policy", cfg.Deployment.ID)
-}
-
-// PolicyARN returns the IAM policy ARN for this deployment.
-func PolicyARN(cfg *config.Config) string {
-	return fmt.Sprintf("arn:aws:iam::%s:policy/%s", cfg.Deployment.Tenancy, PolicyName(cfg))
-}
-
 // BucketName returns the S3 state bucket name for this deployment.
 func BucketName(cfg *config.Config) string {
 	return fmt.Sprintf("cluster-state-%s", cfg.Deployment.Tenancy)

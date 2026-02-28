@@ -14,29 +14,24 @@ docker run --rm \
 
 ## Setup
 
-Bootstrap the target tenancy (e.g. account on AWS or project on GCP) based on the config file:
-
-> Assumes user is already authenticated to the target tenancy and the provider-specific credentials are passed into the setup step. The `/state` volume persists the generated service account key for use during apply. Do not commit that file into source control. 
+Bootstrap the target tenancy (one-time, as yourself with admin credentials):
 
 ```shell
-docker run --rm \
-  -v $PWD/state:/state \
-  -e AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  -e AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  -e CONFIG_CONTENT="$(base64 < $CLUSTER_CONFIG)" \
-  ghcr.io/mchmarny/cluster/eks:latest setup
+provider/eks/tools/setup -c config/eks-example.yaml -o ./keys
 ```
+
+This creates the S3 state bucket, IAM user, policy, and access key. The key file is saved to `./keys/.{id}-{account}-key.json`.
 
 ## Apply
 
-Deploy the desired cluster state to the tenancy. Credentials are loaded from the key file saved during setup (in `/state`), or from env vars if set.
+Deploy the desired cluster state using the service account key from setup:
 
-> Set `deployment.destroy: true` in the config to destroy the previously applied cluster and all of its resources.
+> Set `deployment.destroy: true` in the config to destroy the cluster.
 
 ```shell
 docker run --rm \
-  -v $PWD/state:/state \
-  -e CONFIG_CONTENT="$(base64 < $CLUSTER_CONFIG)" \
+  -e KEY_CONTENT="$(base64 < ./keys/.{id}-{account}-key.json)" \
+  -e CONFIG_CONTENT="$(base64 < config/eks-example.yaml)" \
   ghcr.io/mchmarny/cluster/eks:latest apply
 ```
 
@@ -47,7 +42,8 @@ Retrieve deployment outputs (endpoint, access command, etc.) and save to the sta
 ```shell
 docker run --rm \
   -v $PWD/state:/state \
-  -e CONFIG_CONTENT="$(base64 < $CLUSTER_CONFIG)" \
+  -e KEY_CONTENT="$(base64 < ./keys/.{id}-{account}-key.json)" \
+  -e CONFIG_CONTENT="$(base64 < config/eks-example.yaml)" \
   ghcr.io/mchmarny/cluster/eks:latest output
 ```
 
