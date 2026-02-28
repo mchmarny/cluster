@@ -20,14 +20,29 @@ const (
 )
 
 func Execute(version, commit string) {
+	// Default: suppress all structured logging. --debug enables it.
+	logLevel := new(slog.LevelVar)
+	logLevel.Set(slog.LevelError + 1) // above Error = silent
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelInfo,
+		Level: logLevel,
 	})))
 
 	app := &cli.Command{
 		Name:    appName,
 		Version: fmt.Sprintf("%s (commit: %s)", version, commit),
-		Usage:   "Self-contained EKS cluster deployment tool",
+		Usage:   "Self-contained cluster deployment tool",
+		Flags: []cli.Flag{
+			&cli.BoolFlag{
+				Name:  "debug",
+				Usage: "Enable debug logging",
+			},
+		},
+		Before: func(ctx context.Context, cmd *cli.Command) (context.Context, error) {
+			if cmd.Bool("debug") {
+				logLevel.Set(slog.LevelDebug)
+			}
+			return ctx, nil
+		},
 		Commands: []*cli.Command{
 			initCmd(),
 			setupCmd(),
@@ -39,7 +54,7 @@ func Execute(version, commit string) {
 	}
 
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		slog.Error("fatal", "error", err)
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
 }
