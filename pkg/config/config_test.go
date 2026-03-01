@@ -21,16 +21,9 @@ deployment:
     owner: tester
     env: dev
 cluster:
-  name: test-cluster
-  version: "1.33"
-compute:
-  nodeGroups:
-    system:
-      instanceType: m6i.xlarge
-      capacity:
-        desired: 3
-        min: 3
-        max: 6
+  eks:
+    name: test-cluster
+    version: "1.33"
 `
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
@@ -57,8 +50,8 @@ compute:
 	if cfg.Deployment.Destroy {
 		t.Error("Deployment.Destroy = true, want false")
 	}
-	if cfg.Cluster.Name != "test-cluster" {
-		t.Errorf("Cluster.Name = %q, want %q", cfg.Cluster.Name, "test-cluster")
+	if cfg.Cluster["eks"].Name != "test-cluster" {
+		t.Errorf("Cluster[eks].Name = %q, want %q", cfg.Cluster["eks"].Name, "test-cluster")
 	}
 }
 
@@ -70,7 +63,8 @@ deployment:
   tenancy: "123456789012"
   location: us-west-2
 cluster:
-  version: "1.33"
+  eks:
+    version: "1.33"
 `
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(yaml), 0644); err != nil {
@@ -88,8 +82,8 @@ cluster:
 	if cfg.Deployment.Destroy {
 		t.Error("default Destroy = true, want false")
 	}
-	if cfg.Cluster.Name != "test-dep" {
-		t.Errorf("default Cluster.Name = %q, want %q (deployment.id)", cfg.Cluster.Name, "test-dep")
+	if cfg.ClusterName() != "test-dep" {
+		t.Errorf("default ClusterName() = %q, want %q (deployment.id)", cfg.ClusterName(), "test-dep")
 	}
 }
 
@@ -104,8 +98,9 @@ deployment:
   tenancy: "123"
   location: us-west-2
 cluster:
-  name: test
-  version: "1.33"
+  eks:
+    name: test
+    version: "1.33"
 `},
 		{"missing provider", `
 deployment:
@@ -113,8 +108,9 @@ deployment:
   tenancy: "123"
   location: us-west-2
 cluster:
-  name: test
-  version: "1.33"
+  eks:
+    name: test
+    version: "1.33"
 `},
 		{"invalid provider", `
 deployment:
@@ -123,8 +119,9 @@ deployment:
   tenancy: "123"
   location: us-west-2
 cluster:
-  name: test
-  version: "1.33"
+  eks:
+    name: test
+    version: "1.33"
 `},
 		{"missing tenancy", `
 deployment:
@@ -132,8 +129,9 @@ deployment:
   provider: eks
   location: us-west-2
 cluster:
-  name: test
-  version: "1.33"
+  eks:
+    name: test
+    version: "1.33"
 `},
 		{"missing location", `
 deployment:
@@ -141,8 +139,9 @@ deployment:
   provider: eks
   tenancy: "123"
 cluster:
-  name: test
-  version: "1.33"
+  eks:
+    name: test
+    version: "1.33"
 `},
 		{"invalid state", `
 deployment:
@@ -152,8 +151,9 @@ deployment:
   location: us-west-2
   state: invalid
 cluster:
-  name: test
-  version: "1.33"
+  eks:
+    name: test
+    version: "1.33"
 `},
 		{"missing cluster version", `
 deployment:
@@ -162,7 +162,18 @@ deployment:
   tenancy: "123"
   location: us-west-2
 cluster:
-  name: test
+  eks:
+    name: test
+`},
+		{"missing cluster section", `
+deployment:
+  id: test
+  provider: eks
+  tenancy: "123"
+  location: us-west-2
+cluster:
+  gke:
+    version: "1.33"
 `},
 	}
 

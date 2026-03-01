@@ -8,13 +8,10 @@ import (
 )
 
 type Config struct {
-	APIVersion string     `yaml:"apiVersion"`
-	Kind       string     `yaml:"kind"`
-	Deployment Deployment `yaml:"deployment"`
-	Cluster    Cluster    `yaml:"cluster"`
-	Network    *Network   `yaml:"network,omitempty"`
-	IAM        *IAM       `yaml:"iam,omitempty"`
-	Compute    *Compute   `yaml:"compute,omitempty"`
+	APIVersion string                    `yaml:"apiVersion"`
+	Kind       string                    `yaml:"kind"`
+	Deployment Deployment                `yaml:"deployment"`
+	Cluster    map[string]ProviderConfig `yaml:"cluster"`
 }
 
 type Deployment struct {
@@ -27,71 +24,18 @@ type Deployment struct {
 	Tags     map[string]string `yaml:"tags,omitempty"`
 }
 
-type Cluster struct {
-	Name         string        `yaml:"name"`
-	Version      string        `yaml:"version"`
-	AddOns       *AddOns       `yaml:"addOns,omitempty"`
-	ControlPlane *ControlPlane `yaml:"controlPlane,omitempty"`
-	AdminRoles   []string      `yaml:"adminRoles,omitempty"`
+type ProviderConfig struct {
+	Version string `yaml:"version"`
+	Name    string `yaml:"name,omitempty"`
 }
 
-type AddOns struct {
-	CoreDns                 string `yaml:"coreDns,omitempty"` //nolint:revive // yaml key
-	VpcCni                  string `yaml:"vpcCni,omitempty"`
-	KubeProxy               string `yaml:"kubeProxy,omitempty"`
-	CloudwatchObservability string `yaml:"cloudwatchObservability,omitempty"`
-	EbsCsi                  string `yaml:"ebsCsi,omitempty"`
-	MetricsServer           string `yaml:"metricsServer,omitempty"`
-}
-
-type IAM struct {
-	SystemNodePolicies []string `yaml:"systemNodePolicies,omitempty"`
-	WorkerNodePolicies []string `yaml:"workerNodePolicies,omitempty"`
-}
-
-type ControlPlane struct {
-	AllowedCidrs []string `yaml:"allowedCidrs,omitempty"`
-	Cidr         string   `yaml:"cidr,omitempty"`
-}
-
-type Network struct {
-	Cidrs   *NetworkCidrs  `yaml:"cidrs,omitempty"`
-	Subnets map[string]any `yaml:"subnets,omitempty"`
-}
-
-type NetworkCidrs struct {
-	Host string `yaml:"host,omitempty"`
-	Pod  string `yaml:"pod,omitempty"`
-}
-
-type Compute struct {
-	SSHPublicKey string     `yaml:"sshPublicKey,omitempty"`
-	NodeGroups   NodeGroups `yaml:"nodeGroups"`
-}
-
-type NodeGroups struct {
-	System  SystemNodeGroup   `yaml:"system"`
-	Workers []WorkerNodeGroup `yaml:"workers,omitempty"`
-}
-
-type SystemNodeGroup struct {
-	InstanceType string   `yaml:"instanceType"`
-	Capacity     Capacity `yaml:"capacity"`
-}
-
-type WorkerNodeGroup struct {
-	Name         string            `yaml:"name"`
-	InstanceType string            `yaml:"instanceType"`
-	GPUType      string            `yaml:"gpuType,omitempty"`
-	ImageID      string            `yaml:"imageId,omitempty"`
-	Capacity     Capacity          `yaml:"capacity"`
-	Labels       map[string]string `yaml:"labels,omitempty"`
-}
-
-type Capacity struct {
-	Desired int `yaml:"desired"`
-	Min     int `yaml:"min,omitempty"`
-	Max     int `yaml:"max,omitempty"`
+// ClusterName returns the cluster name for the active provider,
+// falling back to deployment.id if unset.
+func (c *Config) ClusterName() string {
+	if pc, ok := c.Cluster[c.Deployment.Provider]; ok && pc.Name != "" {
+		return pc.Name
+	}
+	return c.Deployment.ID
 }
 
 const (
@@ -117,8 +61,11 @@ func Load(path string) (*Config, error) {
 	if cfg.Deployment.State == "" {
 		cfg.Deployment.State = StateTenancy
 	}
-	if cfg.Cluster.Name == "" {
-		cfg.Cluster.Name = cfg.Deployment.ID
+
+	provider := cfg.Deployment.Provider
+	if pc, ok := cfg.Cluster[provider]; ok && pc.Name == "" {
+		pc.Name = cfg.Deployment.ID
+		cfg.Cluster[provider] = pc
 	}
 
 	if err := cfg.validate(); err != nil {
@@ -152,8 +99,14 @@ func (c *Config) validate() error {
 	if c.Deployment.State != StateTenancy && c.Deployment.State != StateLocal {
 		return fmt.Errorf("deployment.state must be 'tenancy' or 'local', got %q", c.Deployment.State)
 	}
-	if c.Cluster.Version == "" {
-		return fmt.Errorf("cluster.version is required")
+
+	provider := c.Deployment.Provider
+	pc, ok := c.Cluster[provider]
+	if !ok {
+		return fmt.Errorf("cluster.%s section is required", provider)
+	}
+	if pc.Version == "" {
+		return fmt.Errorf("cluster.%s.version is required", provider)
 	}
 	return nil
 }

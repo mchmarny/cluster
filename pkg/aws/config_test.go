@@ -15,7 +15,9 @@ func TestAWSConfigHelpers(t *testing.T) {
 			Location: "us-west-2",
 			State:    "tenancy",
 		},
-		Cluster: config.Cluster{Name: "test", Version: "1.33"},
+		Cluster: map[string]config.ProviderConfig{
+			"eks": {Name: "test", Version: "1.33"},
+		},
 	}
 
 	tests := []struct {
