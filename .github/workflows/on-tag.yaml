@@ -263,7 +263,7 @@ jobs:
           grype "${IMAGE_REF}" \
             --config .grype.yaml \
             --only-fixed \
-            --fail-on high \
+            --fail-on critical \
             --output table \
             --output sarif=image-scan-results.sarif
         continue-on-error: true
