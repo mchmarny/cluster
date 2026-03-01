@@ -1,162 +1,155 @@
 #!/bin/bash
 
-set -euo pipefail
+# Bootstrap GCP project for GKE cluster deployment.
+# Creates: GCS state bucket, backend.hcl, service account with IAM roles.
 
-# Paths
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "${DIR}/common"
-ROOT=$(dirname "${DIR}")
-OUT_DIR="${ROOT}/terraform"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
-# Check for required tools
-REQUIRED_TOOLS=(gcloud yq)
+REQUIRED_TOOLS=(gcloud yq jq)
+TF_DIR="${SCRIPT_DIR}/../terraform"
+
+usage() {
+  echo "Usage: $(basename "$0") -c <config-file>" >&2
+  exit 1
+}
+
+# Parse flags
+CONFIG_FILE=""
+while getopts "c:h" opt; do
+  case $opt in
+    c) CONFIG_FILE="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && usage
+
+# Validate
 has_tools "${REQUIRED_TOOLS[@]}"
+CONFIG_FILE=$(resolve_config "$CONFIG_FILE")
+validate_config "$CONFIG_FILE"
 
-# Config
-CONFIG_FILE="${1:-}"
-if [[ -z "$CONFIG_FILE" ]]; then
-  err "Usage: $0 <path to config.yaml>"
-fi
-if [[ ! -f "$CONFIG_FILE" ]]; then
-  err "Error: Config file does not exist at the specified path: ${CONFIG_FILE}"
-fi
-
-# Derived variables
-msg "Reading configuration from ${CONFIG_FILE}..."
-PROJECT_ID=$(yq -er '.deployment.tenancy' "$CONFIG_FILE")
-REGION=$(yq -er '.deployment.location' "$CONFIG_FILE")
-DEPLOYMENT_ID=$(yq -er '.deployment.id' "$CONFIG_FILE")
-SA_NAME="${SA_NAME:-cluster-builder-sa}"
-CURRENT_PROJECT_ID="$(gcloud config get-value project 2>/dev/null || echo '')"
+# Read config
+PROJECT_ID=$(config_get "$CONFIG_FILE" "deployment.tenancy")
+REGION=$(config_get "$CONFIG_FILE" "deployment.location")
+DEP_ID=$(config_get "$CONFIG_FILE" "deployment.id")
+SA_NAME="${DEP_ID}-builder-sa"
 BUCKET_NAME="cluster-state-${PROJECT_ID}"
-PROJECT_NUMBER="$(curl -sS -H "Authorization: Bearer $(gcloud auth print-access-token)" \
-    "https://cloudresourcemanager.googleapis.com/v1/projects/$PROJECT_ID" | jq -r '.projectNumber')"
+STATE_PREFIX="deployments/${REGION}/${DEP_ID}"
 
-# Validate project
-if [[ -z "$CURRENT_PROJECT_ID" ]]; then
-  err "No active GCP project. Run: gcloud config set project ${PROJECT_ID}"
+# Validate active project matches config
+ACTIVE_PROJECT=$(gcloud config get-value project 2>/dev/null)
+if [[ "$ACTIVE_PROJECT" != "$PROJECT_ID" ]]; then
+  err "Active GCP project ($ACTIVE_PROJECT) does not match config ($PROJECT_ID). Run: gcloud config set project $PROJECT_ID"
 fi
 
-if [[ "$PROJECT_ID" != "$CURRENT_PROJECT_ID" ]]; then
-    err "Active GCP project (${CURRENT_PROJECT_ID}) does not match the project in config (${PROJECT_ID})."
+msg "GKE Setup"
+msg "  Project:    $PROJECT_ID"
+msg "  Region:     $REGION"
+msg "  Deployment: $DEP_ID"
+msg "  Bucket:     $BUCKET_NAME"
+msg "  SA:         $SA_NAME"
+
+# Check for stale Terraform state
+if [[ -d "$TF_DIR/.terraform" ]] || [[ -f "$TF_DIR/.terraform.lock.hcl" ]]; then
+  err "Stale Terraform state found in $TF_DIR. Remove .terraform/ and .terraform.lock.hcl before running setup."
 fi
 
-msg "Project ID: ${PROJECT_ID} (${PROJECT_NUMBER})"
-msg "Region:     ${REGION}"
-msg "Service Account: ${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
-msg "Bucket:     ${BUCKET_NAME}"
-msg "Output:     ${OUT_DIR}"
-
-# prep 
-mkdir -p "$OUT_DIR"
-
-# =========================================================================================
+# ---------------------------------------------------------------------------
 # Enable Required APIs
-# =========================================================================================
-
-msg "Enabling required GCP APIs..."
+# ---------------------------------------------------------------------------
+msg "Enabling required APIs..."
 
 REQUIRED_APIS=(
-  "compute.googleapis.com"
-  "container.googleapis.com"
-  "iam.googleapis.com"
-  "cloudkms.googleapis.com"
-  "logging.googleapis.com"
-  "monitoring.googleapis.com"
-  "cloudresourcemanager.googleapis.com"
+  container.googleapis.com
+  compute.googleapis.com
+  iam.googleapis.com
+  cloudresourcemanager.googleapis.com
+  cloudkms.googleapis.com
+  logging.googleapis.com
+  monitoring.googleapis.com
 )
 
+ENABLED_APIS=$(gcloud services list --enabled --format="value(config.name)" --project="$PROJECT_ID" 2>/dev/null)
+
 for api in "${REQUIRED_APIS[@]}"; do
-  if ! gcloud services list --enabled --filter="name:${api}" --format="value(name)" | grep -q "${api}"; then
-    msg "Enabling ${api}..."
-    gcloud services enable "${api}" --project="${PROJECT_ID}"
+  if echo "$ENABLED_APIS" | grep -q "^${api}$"; then
+    msg "  Already enabled: $api"
   else
-    msg "${api} already enabled"
+    msg "  Enabling: $api"
+    gcloud services enable "$api" --project="$PROJECT_ID"
   fi
 done
 
-# =========================================================================================
+# ---------------------------------------------------------------------------
 # State Bucket
-# =========================================================================================
+# ---------------------------------------------------------------------------
+msg "Configuring state bucket: $BUCKET_NAME"
 
-# Create GCS bucket if it does not exist
-if ! gsutil ls -b "gs://${BUCKET_NAME}" &>/dev/null; then
-  msg "Creating GCS bucket: ${BUCKET_NAME} in region ${REGION}"
-  gsutil mb -p "${PROJECT_ID}" -l "${REGION}" -b on "gs://${BUCKET_NAME}/"
+if gcloud storage buckets describe "gs://$BUCKET_NAME" --project="$PROJECT_ID" &>/dev/null; then
+  msg "  Bucket already exists"
 else
-  msg "Bucket ${BUCKET_NAME} already exists"
+  msg "  Creating bucket..."
+  gcloud storage buckets create "gs://$BUCKET_NAME" \
+    --project="$PROJECT_ID" \
+    --location="$REGION" \
+    --uniform-bucket-level-access \
+    --public-access-prevention
 fi
 
 # Enable versioning
-gsutil versioning set on "gs://${BUCKET_NAME}/"
+gcloud storage buckets update "gs://$BUCKET_NAME" --versioning
 
-# Block public access
-gsutil iam ch -d allUsers "gs://${BUCKET_NAME}/" 2>/dev/null || true
-gsutil iam ch -d allAuthenticatedUsers "gs://${BUCKET_NAME}/" 2>/dev/null || true
-
-# Set uniform bucket-level access
-gsutil uniformbucketlevelaccess set on "gs://${BUCKET_NAME}/"
-
-# Create backend configuration
-cat <<EOF > "${OUT_DIR}/backend.hcl"
+# Write backend.hcl
+msg "  Writing backend.hcl"
+cat > "$TF_DIR/backend.hcl" <<EOF
 bucket = "$BUCKET_NAME"
-prefix = "terraform/state"
+prefix = "$STATE_PREFIX"
 EOF
 
-msg "Created backend configuration in ${OUT_DIR}/backend.hcl"
-
-# =========================================================================================
+# ---------------------------------------------------------------------------
 # Service Account
-# =========================================================================================
+# ---------------------------------------------------------------------------
+msg "Configuring service account: $SA_NAME"
 
 SA_EMAIL="${SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com"
 
-# Create service account if it doesn't exist
-if ! gcloud iam service-accounts describe "${SA_EMAIL}" --project="${PROJECT_ID}" &>/dev/null; then
-  msg "Creating service account: ${SA_NAME}"
-  gcloud iam service-accounts create "${SA_NAME}" \
-    --display-name="Cluster Builder Service Account" \
-    --description="Service account for Terraform GKE cluster deployment" \
-    --project="${PROJECT_ID}"
+if gcloud iam service-accounts describe "$SA_EMAIL" --project="$PROJECT_ID" &>/dev/null; then
+  msg "  SA already exists"
 else
-  msg "Service account ${SA_NAME} already exists"
+  msg "  Creating SA..."
+  gcloud iam service-accounts create "$SA_NAME" \
+    --display-name="Cluster builder for ${DEP_ID}" \
+    --project="$PROJECT_ID"
 fi
 
-# Grant required roles to the service account
-REQUIRED_ROLES=(
-  "roles/cloudkms.admin"
-  "roles/compute.admin"
-  "roles/compute.networkAdmin"
-  "roles/container.admin"
-  "roles/container.clusterAdmin"
-  "roles/container.defaultNodeServiceAccount"
-  "roles/iam.serviceAccountAdmin"
-  "roles/logging.admin"
-  "roles/monitoring.admin"
-  "roles/resourcemanager.projectIamAdmin"
-  "roles/storage.admin"
-  "roles/storage.objectAdmin"
+# IAM roles for the builder SA
+SA_ROLES=(
+  roles/container.admin
+  roles/compute.admin
+  roles/iam.serviceAccountAdmin
+  roles/iam.serviceAccountUser
+  roles/resourcemanager.projectIamAdmin
+  roles/storage.admin
+  roles/cloudkms.admin
+  roles/logging.admin
+  roles/monitoring.admin
+  roles/serviceusage.serviceUsageAdmin
 )
 
-for role in "${REQUIRED_ROLES[@]}"; do
-  if ! gcloud projects get-iam-policy "${PROJECT_ID}" \
-       --flatten="bindings[].members" \
-       --filter="bindings.role:${role} AND bindings.members:serviceAccount:${SA_EMAIL}" \
-       --format="value(bindings.members)" | grep -q "${SA_EMAIL}"; then
-    msg "Granting ${role} to ${SA_NAME}"
-    gcloud projects add-iam-policy-binding "${PROJECT_ID}" \
-      --member="serviceAccount:${SA_EMAIL}" \
-      --role="${role}" \
-      --condition=None \
-      --quiet
-  else
-    msg "${role} already granted to ${SA_NAME}"
-  fi
+for role in "${SA_ROLES[@]}"; do
+  msg "  Binding: $role"
+  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
+    --member="serviceAccount:$SA_EMAIL" \
+    --role="$role" \
+    --condition=None \
+    --quiet &>/dev/null
 done
 
+msg "Setup complete."
 msg ""
 msg "Next steps:"
-msg "  1. Export GOOGLE_APPLICATION_CREDENTIALS"
-msg "  2. Run: cd ${OUT_DIR}"
-msg "  3. Run: terraform init -backend-config=backend.hcl"
-msg "  4. Run: ../tools/actuate ../configs/<your-config>.yaml"
+msg "  1. Authenticate: gcloud auth application-default login"
+msg "  2. Deploy:       provider/gke/tools/actuate -c $CONFIG_FILE apply"
