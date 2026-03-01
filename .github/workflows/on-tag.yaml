@@ -264,6 +264,7 @@ jobs:
             --config .grype.yaml \
             --only-fixed \
             --fail-on high \
+            --output table \
             --output sarif=image-scan-results.sarif
         continue-on-error: true
 
