@@ -18,9 +18,3 @@ AVD-AWS-0040  # EKS Cluster public endpoint access (same check, different ID)
 
 # Public subnets for NAT gateways and load balancers only (nodes are in private subnets)
 AVD-AWS-0164  # Public subnet auto-assigns public IP
-
-# CVE-2025-68121: crypto/tls unexpected session resumption
-# Affects Go stdlib < 1.25.7 / < 1.26.1
-# No fix available in Go 1.26.0 stable; suppress until Go 1.26.1 release
-# Ref: https://avd.aquasec.com/nvd/cve-2025-68121
-CVE-2025-68121

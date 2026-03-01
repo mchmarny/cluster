@@ -221,9 +221,10 @@ jobs:
       security-events: write
 
     steps:
-      # persist-credentials required: trivy-action fetches default branch internally
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Load versions
         id: versions
@@ -246,20 +247,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Scan container image
-        id: trivy
-        uses: aquasecurity/trivy-action@e368e328979b113139d6f9068e03accaed98a518 # v0.34.1
+      - name: Install grype
         env:
-          TRIVY_IGNOREFILE: .trivyignore
-        with:
-          scan-type: 'image'
-          image-ref: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
-          scanners: 'vuln'
-          ignore-unfixed: true
-          format: 'sarif'
-          output: 'image-scan-results.sarif'
-          severity: '${{ steps.versions.outputs.scan_severity }}'
-          limit-severities-for-sarif: true
+          GRYPE_VERSION: ${{ steps.versions.outputs.grype }}
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/anchore/grype/main/install.sh | sh -s -- -b /usr/local/bin "v${GRYPE_VERSION}"
+          grype version
+
+      - name: Scan container image
+        id: grype
+        env:
+          IMAGE_REF: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
+        run: |
+          set -euo pipefail
+          grype "${IMAGE_REF}" \
+            --config .grype.yaml \
+            --only-fixed \
+            --fail-on high \
+            --output sarif=image-scan-results.sarif
         continue-on-error: true
 
       - name: Upload SARIF to GitHub Security
@@ -267,11 +272,11 @@ jobs:
         uses: github/codeql-action/upload-sarif@89a39a4e59826350b863aa6b6252a07ad50cf83e # v4.32.4
         with:
           sarif_file: image-scan-results.sarif
-          category: 'trivy-image-${{ steps.parse.outputs.image }}'
+          category: 'grype-image-${{ steps.parse.outputs.image }}'
         continue-on-error: true
 
       - name: Fail on vulnerabilities
-        if: steps.trivy.outcome == 'failure'
+        if: steps.grype.outcome == 'failure'
         env:
           IMAGE_REF: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
         run: |

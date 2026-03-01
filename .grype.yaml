@@ -1,0 +1,5 @@
+ignore:
+  - vulnerability: CVE-2025-68121  # crypto/tls session resumption, no fix in Go 1.26.0
+
+exclude:
+  - '**/.terraform/**'

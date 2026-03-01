@@ -20,6 +20,9 @@ outputs:
   trivy:
     description: 'Trivy version'
     value: ${{ steps.versions.outputs.trivy }}
+  grype:
+    description: 'Grype version'
+    value: ${{ steps.versions.outputs.grype }}
   golangci_lint:
     description: 'golangci-lint version'
     value: ${{ steps.versions.outputs.golangci_lint }}
@@ -57,6 +60,7 @@ runs:
         echo "awscli=$(yq eval '.tools.awscli' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "tflint=$(yq eval '.tools.tflint' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "trivy=$(yq eval '.tools.trivy' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "grype=$(yq eval '.tools.grype' .settings.yaml)" >> $GITHUB_OUTPUT
 
         # Linting
         echo "golangci_lint=$(yq eval '.linting.golangci_lint' .settings.yaml)" >> $GITHUB_OUTPUT
