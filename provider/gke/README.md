@@ -18,12 +18,14 @@ Deploys a production-ready GKE cluster from a single YAML config:
 - **gcloud CLI** configured with appropriate credentials
 - **yq** >= 4.0 for YAML parsing
 
-### 1. Create Config
+### 1. Generate Config (optional)
 
-Copy from an existing example in `config/` and edit to match your environment:
+Generate a starter config, or copy from an existing example in `config/`:
 
 ```shell
-cp config/gke-demo.yaml config/gke-example.yaml
+docker run --rm \
+  -v $PWD/config:/config \
+  ghcr.io/mchmarny/cluster/gke:latest init /config/gke-example.yaml
 ```
 
 ### 2. Setup Tenancy (one-time)
@@ -39,7 +41,7 @@ This creates:
 - Service account with required IAM roles (compute, container, KMS, logging, monitoring)
 - Backend configuration for Terraform remote state
 
-### 4. Apply
+### 3. Apply
 
 Deploy using the container image:
 
@@ -47,14 +49,28 @@ Deploy using the container image:
 docker run --rm \
   -e KEY_CONTENT="$(base64 < ./keys/.{id}-{project}-key.json)" \
   -e CONFIG_CONTENT="$(base64 < config/gke-example.yaml)" \
-  ghcr.io/mchmarny/cluster/gke:latest -c /config/gke-example.yaml apply
+  ghcr.io/mchmarny/cluster/gke:latest apply
 ```
 
 Deployment time: approximately 10-15 minutes for full cluster creation.
 
+### 4. Output (optional)
+
+Retrieve deployment outputs (endpoint, access command, etc.) and save to the state volume:
+
+```shell
+docker run --rm \
+  -v $PWD/state:/state \
+  -e KEY_CONTENT="$(base64 < ./keys/.{id}-{project}-key.json)" \
+  -e CONFIG_CONTENT="$(base64 < config/gke-example.yaml)" \
+  ghcr.io/mchmarny/cluster/gke:latest output
+```
+
+The output JSON is saved to `/state/{id}-{project}-output.json`.
+
 ### 5. Destroy
 
-Set `deployment.destroy: true` in the config and re-run apply (step 4).
+Set `deployment.destroy: true` in the config and re-run apply (step 3).
 
 ### Local Deployment (without container)
 

@@ -6,6 +6,5 @@
 *.tfstate*
 plan.cache
 docs/
-provider/gke/
 *.md
 !mirror/
