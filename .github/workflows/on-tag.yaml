@@ -255,6 +255,7 @@ jobs:
           image-ref: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
           scanners: 'vuln'
           ignore-unfixed: true
+          trivyignores: '.trivyignore'
           format: 'sarif'
           output: 'image-scan-results.sarif'
           severity: '${{ steps.versions.outputs.scan_severity }}'
