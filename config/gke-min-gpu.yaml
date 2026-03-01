@@ -1,0 +1,42 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-gpu
+  provider: gke
+  tenancy: "my-gcp-project"
+  location: us-west1
+  state: tenancy
+  destroy: true
+  tags:
+    env: dev
+
+cluster:
+  version: "1.33"
+  releaseChannel: STABLE
+  controlPlane:
+    authorizedNetworks:
+      - cidr: 216.228.127.128/30
+        name: office-vpn
+      - cidr: 52.41.222.58/32
+        name: ci-runner
+
+network:
+  cidr: 10.0.0.0/16
+
+compute:
+  nodePools:
+    system:
+      machineType: e2-standard-4
+    workers:
+      - name: cpu-worker-1
+        machineType: n2-standard-8
+        labels:
+          nodeGroup: cpu-worker
+      - name: gpu-worker
+        machineType: a3-highgpu-8g
+        accelerators:
+          - type: nvidia-h100-80gb
+            count: 8
+        labels:
+          nodeGroup: gpu-worker
