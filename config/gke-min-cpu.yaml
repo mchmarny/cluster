@@ -13,15 +13,17 @@ deployment:
     stack: mini
 
 cluster:
-  version: "1.33"
-  releaseChannel: STABLE
+  gke:
+    version: "1.33"
+    releaseChannel: STABLE
 
 compute:
-  nodePools:
-    system:
-      machineType: e2-standard-4
-    workers:
-      - name: cpu-worker-1
-        machineType: n2-standard-8
-        labels:
-          nodeGroup: cpu-worker
+  gke:
+    nodePools:
+      system:
+        machineType: e2-standard-4
+      workers:
+        - name: cpu-worker-1
+          machineType: n2-standard-8
+          labels:
+            nodeGroup: cpu-worker

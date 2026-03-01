@@ -13,23 +13,25 @@ deployment:
     stack: mini
 
 cluster:
-  version: "1.35"
-  adminRoles:
-    - AWSReservedSSO_CS-Admin_55d42b5a9a2a8c35
-  addOns:
-    coreDns: ""
-    kubeProxy: ""
+  eks:
+    version: "1.35"
+    adminRoles:
+      - AWSReservedSSO_CS-Admin_55d42b5a9a2a8c35
+    addOns:
+      coreDns: ""
+      kubeProxy: ""
 
 compute:
-  nodeGroups:
-    system:
-      instanceType: m7i.xlarge
-      capacity:
-        desired: 2
-    workers:
-      - name: cpu-worker-1
+  eks:
+    nodeGroups:
+      system:
         instanceType: m7i.xlarge
         capacity:
-          desired: 1
-        labels:
-          nodeGroup: cpu-worker
+          desired: 2
+      workers:
+        - name: cpu-worker-1
+          instanceType: m7i.xlarge
+          capacity:
+            desired: 1
+          labels:
+            nodeGroup: cpu-worker
