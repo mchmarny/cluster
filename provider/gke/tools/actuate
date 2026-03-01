@@ -37,7 +37,7 @@ validate_config "$CONFIG_FILE"
 DEP_ID=$(config_get "$CONFIG_FILE" "deployment.id")
 REGION=$(config_get "$CONFIG_FILE" "deployment.location")
 PROJECT_ID=$(config_get "$CONFIG_FILE" "deployment.tenancy")
-CLUSTER_NAME=$(config_get "$CONFIG_FILE" "cluster.name" "$DEP_ID")
+CLUSTER_NAME=$(config_get "$CONFIG_FILE" "cluster.gke.name" "$DEP_ID")
 DESTROY=$(config_get "$CONFIG_FILE" "deployment.destroy" "false")
 BUCKET_NAME="cluster-state-${PROJECT_ID}"
 STATE_PREFIX="deployments/${REGION}/${DEP_ID}"

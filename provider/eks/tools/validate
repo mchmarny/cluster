@@ -37,11 +37,11 @@ CONFIG_FILE="$(resolve_config "$CONFIG_FILE")"
 
 has_tools aws kubectl jq yq
 
-CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.name "$(config_get "$CONFIG_FILE" deployment.id)")"
+CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.eks.name "$(config_get "$CONFIG_FILE" deployment.id)")"
 REGION="$(config_get "$CONFIG_FILE" deployment.location)"
 ACCOUNT_ID="$(config_get "$CONFIG_FILE" deployment.tenancy)"
-EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.version)"
-VPC_CNI_ENABLED="$(yq -e '.cluster.addOns.vpcCni' "$CONFIG_FILE" >/dev/null 2>&1 && echo "true" || echo "false")"
+EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.eks.version)"
+VPC_CNI_ENABLED="$(yq -e '.cluster.eks.addOns.vpcCni' "$CONFIG_FILE" >/dev/null 2>&1 && echo "true" || echo "false")"
 
 msg "Validating cluster: ${CLUSTER_NAME} in ${REGION}"
 
