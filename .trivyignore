@@ -12,14 +12,12 @@ AVD-AWS-0177  # Route table rule allows ingress from/egress to public internet
 # VPC - Standard networking patterns
 AVD-AWS-0102  # Security group rule specified with protocol number rather than name
 
-# EKS - Standard cluster configurations
+# EKS - Public API endpoint restricted to authorized CIDRs (not 0.0.0.0/0)
 AVD-AWS-0039  # EKS Cluster has endpoint access publicly enabled
-AVD-AWS-0040  # EKS Cluster should have Control Plane Logging enabled
-AVD-AWS-0041  # EKS Cluster should not have secrets encryption disabled
+AVD-AWS-0040  # EKS Cluster public endpoint access (same check, different ID)
 
-# CloudFormation - Standard Kubernetes infrastructure patterns
-AVD-AWS-0130  # Launch template IMDS v2 tokens (standard for K8s nodes)
-AVD-AWS-0164  # Public subnet auto-assigns public IP (required for NAT gateways and load balancers)
+# Public subnets for NAT gateways and load balancers only (nodes are in private subnets)
+AVD-AWS-0164  # Public subnet auto-assigns public IP
 
 # CVE-2025-68121: crypto/tls unexpected session resumption
 # Affects Go stdlib < 1.25.7 / < 1.26.1
