@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../schema/eks-config.schema.json
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 

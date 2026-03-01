@@ -1,0 +1,494 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mchmarny/cluster/schema/gke-config.schema.json",
+  "title": "GKE Cluster Config",
+  "description": "Schema for GKE cluster deployment configuration",
+  "type": "object",
+  "required": ["apiVersion", "kind", "deployment", "cluster"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "github.com/mchmarny/cluster/v1alpha1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "Cluster"
+    },
+    "deployment": {
+      "$ref": "cluster-config.schema.json#/$defs/deployment"
+    },
+    "cluster": {
+      "type": "object",
+      "required": ["gke"],
+      "additionalProperties": false,
+      "properties": {
+        "gke": {
+          "type": "object",
+          "required": ["version"],
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "Kubernetes version (e.g. 1.33)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Cluster name (defaults to deployment.id)"
+            },
+            "releaseChannel": {
+              "type": "string",
+              "enum": ["RAPID", "REGULAR", "STABLE"],
+              "default": "STABLE",
+              "description": "GKE release channel"
+            },
+            "deletionProtection": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable deletion protection on the cluster"
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "authorizedNetworks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["cidr", "name"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "cidr": {
+                        "type": "string",
+                        "description": "CIDR block allowed to reach the control plane"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Display name for the authorized network"
+                      }
+                    }
+                  },
+                  "description": "Networks allowed to access the API server (terraform executor IP is auto-added)"
+                }
+              }
+            },
+            "maintenance": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "window": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "startTime": {
+                      "type": "string",
+                      "description": "Daily maintenance window start time in HH:MM format (UTC)"
+                    }
+                  }
+                }
+              }
+            },
+            "features": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "workloadIdentity": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable Workload Identity"
+                },
+                "gcpFilestoreCsiDriver": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Enable GCP Filestore CSI driver"
+                },
+                "gcsFuseCsiDriver": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Enable GCS Fuse CSI driver"
+                }
+              }
+            },
+            "private": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable private cluster (no public endpoint for nodes)"
+                },
+                "masterIpv4CidrBlock": {
+                  "type": "string",
+                  "default": "172.16.0.0/28",
+                  "description": "CIDR for the control plane internal range"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gke": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nodePools": {
+              "type": "object",
+              "required": ["system"],
+              "additionalProperties": false,
+              "properties": {
+                "system": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "System node pool for control-plane add-ons (tainted dedicated=CriticalAddonsOnly:NoSchedule)",
+                  "properties": {
+                    "machineType": {
+                      "type": "string",
+                      "description": "GCE machine type (default: e2-standard-4)"
+                    },
+                    "imageType": {
+                      "type": "string",
+                      "description": "Node image type (default: COS_CONTAINERD)"
+                    },
+                    "diskType": {
+                      "type": "string",
+                      "description": "Boot disk type (default: pd-standard)"
+                    },
+                    "diskSizeGb": {
+                      "type": "integer",
+                      "minimum": 10,
+                      "description": "Boot disk size in GB (default: 100)"
+                    },
+                    "autoscaling": { "$ref": "#/$defs/autoscaling" },
+                    "autoUpgrade": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "Enable automatic node upgrades"
+                    },
+                    "autoRepair": {
+                      "type": "boolean",
+                      "default": true,
+                      "description": "Enable automatic node repair"
+                    },
+                    "nodeConfig": { "$ref": "#/$defs/nodeConfig" }
+                  }
+                },
+                "workers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "machineType"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Node pool name"
+                      },
+                      "machineType": {
+                        "type": "string",
+                        "description": "GCE machine type"
+                      },
+                      "imageType": {
+                        "type": "string",
+                        "description": "Node image type (default: COS_CONTAINERD)"
+                      },
+                      "diskType": {
+                        "type": "string",
+                        "description": "Boot disk type (default: pd-standard)"
+                      },
+                      "diskSizeGb": {
+                        "type": "integer",
+                        "minimum": 10,
+                        "description": "Boot disk size in GB"
+                      },
+                      "accelerators": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["type", "count"],
+                          "additionalProperties": false,
+                          "properties": {
+                            "type": {
+                              "type": "string",
+                              "description": "Accelerator type (e.g. nvidia-h100-80gb)"
+                            },
+                            "count": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "description": "Number of accelerators per node"
+                            }
+                          }
+                        }
+                      },
+                      "autoscaling": { "$ref": "#/$defs/autoscaling" },
+                      "autoUpgrade": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Enable automatic node upgrades"
+                      },
+                      "autoRepair": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Enable automatic node repair"
+                      },
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" },
+                        "description": "Kubernetes node labels"
+                      },
+                      "nodeConfig": { "$ref": "#/$defs/nodeConfig" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "gke": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": {
+              "type": "string",
+              "description": "VPC name (default: <deployment.id>-vpc)"
+            },
+            "cidr": {
+              "type": "string",
+              "description": "VPC CIDR block (default: 10.0.0.0/16)"
+            },
+            "nat": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable Cloud NAT for private nodes"
+                },
+                "sourceSubnetIpRangesToNat": {
+                  "type": "string",
+                  "default": "ALL_SUBNETWORKS_ALL_IP_RANGES",
+                  "description": "Subnetwork IP ranges to NAT"
+                },
+                "minPortsPerVm": {
+                  "type": "integer",
+                  "default": 64,
+                  "description": "Minimum ports per VM for NAT"
+                }
+              }
+            },
+            "subnets": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Subnet definitions. Auto-computed from VPC CIDR if omitted.",
+              "properties": {
+                "nodes": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "cidr"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Subnet name"
+                      },
+                      "cidr": {
+                        "type": "string",
+                        "description": "Subnet CIDR block"
+                      },
+                      "privateGoogleAccess": {
+                        "type": "boolean",
+                        "default": true,
+                        "description": "Enable Private Google Access"
+                      }
+                    }
+                  }
+                },
+                "secondary": {
+                  "type": "object",
+                  "description": "Secondary IP ranges for pods and services, keyed by subnet name",
+                  "additionalProperties": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                      "pods": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "rangeName": { "type": "string" },
+                          "cidr": { "type": "string" }
+                        }
+                      },
+                      "services": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "properties": {
+                          "rangeName": { "type": "string" },
+                          "cidr": { "type": "string" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "binaryAuthorization": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable Binary Authorization"
+            }
+          }
+        },
+        "secretsEncryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable KMS encryption for Kubernetes secrets"
+            },
+            "preventDestroy": {
+              "type": "boolean",
+              "default": false,
+              "description": "Enable lifecycle prevent_destroy on the KMS key"
+            }
+          }
+        },
+        "shieldedNodes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "secureBoot": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable Secure Boot on shielded nodes"
+            },
+            "integrityMonitoring": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable Integrity Monitoring on shielded nodes"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable cluster autoscaler for this node pool"
+        },
+        "minNodes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum node count"
+        },
+        "maxNodes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum node count"
+        },
+        "locationPolicy": {
+          "type": "string",
+          "enum": ["BALANCED", "ANY"],
+          "default": "BALANCED",
+          "description": "Node location policy across zones"
+        }
+      }
+    },
+    "nodeConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "preemptible": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use preemptible VM instances"
+        },
+        "spot": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Spot VM instances"
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Network tags applied to nodes"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": { "type": "string" },
+          "description": "Kubernetes node labels"
+        },
+        "taints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key", "value", "effect"],
+            "additionalProperties": false,
+            "properties": {
+              "key": { "type": "string" },
+              "value": { "type": "string" },
+              "effect": {
+                "type": "string",
+                "enum": ["NO_SCHEDULE", "PREFER_NO_SCHEDULE", "NO_EXECUTE"]
+              }
+            }
+          }
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": { "type": "string" }
+        },
+        "oauthScopes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "shieldedInstanceConfig": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enableSecureBoot": {
+              "type": "boolean",
+              "default": true
+            },
+            "enableIntegrityMonitoring": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    }
+  }
+}
