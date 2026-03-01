@@ -20,7 +20,7 @@ Deploys a production-ready GKE cluster from a single YAML config:
 
 ### 1. Generate Config (optional)
 
-Generate a starter config, or copy from an existing example in `config/`:
+Generate a starter config, or copy from an existing example in `config/`. The `init` command detects the provider from the filename prefix (`gke-*` generates a GKE template):
 
 ```shell
 docker run --rm \
@@ -43,11 +43,11 @@ This creates:
 
 ### 3. Apply
 
-Deploy using the container image:
+Deploy using the container image. `KEY_CONTENT` accepts a base64-encoded GCP ADC JSON (from `gcloud auth application-default login`):
 
 ```shell
 docker run --rm \
-  -e KEY_CONTENT="$(base64 < ./keys/.{id}-{project}-key.json)" \
+  -e KEY_CONTENT="$(base64 < ~/.config/gcloud/application_default_credentials.json)" \
   -e CONFIG_CONTENT="$(base64 < config/gke-example.yaml)" \
   ghcr.io/mchmarny/cluster/gke:latest apply
 ```
@@ -61,7 +61,7 @@ Retrieve deployment outputs (endpoint, access command, etc.) and save to the sta
 ```shell
 docker run --rm \
   -v $PWD/state:/state \
-  -e KEY_CONTENT="$(base64 < ./keys/.{id}-{project}-key.json)" \
+  -e KEY_CONTENT="$(base64 < ~/.config/gcloud/application_default_credentials.json)" \
   -e CONFIG_CONTENT="$(base64 < config/gke-example.yaml)" \
   ghcr.io/mchmarny/cluster/gke:latest output
 ```
@@ -175,21 +175,16 @@ deployment:
   id: min-gpu
   provider: gke
   tenancy: "my-gcp-project"
-  location: us-west1
+  location: us-central1
   state: tenancy
 
 cluster:
   gke:
-    version: "1.33"
-    releaseChannel: STABLE
+    version: "1.35"
     controlPlane:
       authorizedNetworks:
         - cidr: 216.228.127.128/30
           name: office-vpn
-
-network:
-  gke:
-    cidr: 10.0.0.0/16
 
 compute:
   gke:
@@ -197,21 +192,33 @@ compute:
       system:
         machineType: e2-standard-4
       workers:
-        - name: cpu-worker-1
+        - name: cpu-worker
           machineType: n2-standard-8
-          labels:
-            nodeGroup: cpu-worker
+          diskType: pd-ssd
+          nodeConfig:
+            labels:
+              nodeGroup: cpu-worker
         - name: gpu-worker
           machineType: a3-highgpu-8g
-          accelerators:
-            - type: nvidia-h100-80gb
-              count: 8
-          labels:
-            nodeGroup: gpu-worker
+          diskType: pd-ssd
+          zones:
+            - us-central1-a
+          guestAccelerator:
+            type: nvidia-h100-80gb
+            count: 8
+          nodeConfig:
+            capacityReservations:
+              - projects/my-project/reservations/my-reservation
+            labels:
+              nodeGroup: gpu-worker
 ```
 
 Notes:
-- GPU availability varies by region and zone — verify before enabling: `gcloud compute accelerator-types list --filter="zone:YOUR_REGION"`
+- GPU machine types (e.g., `a3-highgpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
+- Pin GPU pools to specific `zones` where the accelerator type is available
+- Use `guestAccelerator` (object, not list) with `type` and `count` fields
+- Capacity reservations go under `nodeConfig.capacityReservations`
+- Verify GPU availability: `gcloud compute accelerator-types list --filter="zone:YOUR_REGION"`
 - Your egress IP is automatically added to the API server authorized networks during deployment
 - When `cluster.gke.version` is null, the latest version in the release channel is used
 
@@ -310,9 +317,12 @@ compute:
         - name: ""               # Required, unique per worker
           machineType: ""        # Required
           imageType: COS_CONTAINERD
-          diskType: pd-standard
+          diskType: pd-standard  # Use pd-ssd for GPU machine types
           diskSizeGb: 100
-          accelerators: []       # [{type, count}] for GPU pools
+          zones: []              # Restrict to specific zones (useful for GPU availability)
+          guestAccelerator:      # GPU configuration (omit for CPU-only pools)
+            type: ""             # e.g., nvidia-h100-80gb, nvidia-tesla-t4
+            count: 0
           autoscaling:
             enabled: true
             minNodes: 1
@@ -323,6 +333,7 @@ compute:
             spot: false
             labels: {}
             taints: []
+            capacityReservations: []  # Specific reservation paths for GPU pools
 ```
 
 ### Defaults

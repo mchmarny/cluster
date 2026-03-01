@@ -32,7 +32,7 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 
 | Command | Description |
 |---------|-------------|
-| `init <path>` | Generate a starter configuration file |
+| `init <path>` | Generate a starter configuration file (provider-aware: `gke-*` prefix generates GKE template) |
 | `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
 | `output -c <config>` | Retrieve Terraform outputs and save to state directory |
 
@@ -44,7 +44,7 @@ Destroy is triggered by setting `deployment.destroy: true` in the config and run
 |--------|---------------|-------------|
 | File path | `-c` / `CONFIG_PATH` | Path to YAML config file |
 | Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML config |
-| Base64 key | `KEY_CONTENT` | Base64-encoded cloud key JSON (from setup) |
+| Base64 key | `KEY_CONTENT` | Base64-encoded credentials (AWS key JSON or GCP ADC JSON) |
 
 ## Architecture
 

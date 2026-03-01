@@ -2,7 +2,7 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: mini
+  id: mini-cpu
   provider: gke
   tenancy: eidosx
   location: us-central1
@@ -13,8 +13,7 @@ deployment:
 
 cluster:
   gke:
-    version: "1.33"
-    releaseChannel: STABLE
+    version: "1.35"
     controlPlane:
       authorizedNetworks:
         - cidr: 216.228.127.128/30
@@ -23,9 +22,6 @@ cluster:
           name: nw1
         - cidr: 54.68.11.139/32
           name: nw2
-    maintenance:
-      window:
-        startTime: "03:00"
 
 compute:
   gke:
@@ -49,14 +45,3 @@ compute:
           nodeConfig:
             labels:
               nodeGroup: cpu-worker
-
-        # GPU worker example:
-        # - name: gpu-worker
-        #   machineType: n1-standard-4
-        #   accelerators:
-        #     - type: nvidia-tesla-t4
-        #       count: 1
-        #   autoscaling:
-        #     enabled: true
-        #     minNodes: 0
-        #     maxNodes: 3

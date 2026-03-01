@@ -1,46 +1,67 @@
-# yaml-language-server: $schema=../schema/gke-config.schema.json
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: min-gpu
+  id: mini-gpu
   provider: gke
-  tenancy: "my-gcp-project"
-  location: us-west1
+  tenancy: eidosx
+  location: us-central1
   state: tenancy
   destroy: true
   tags:
-    env: dev
+    env: demo
 
 cluster:
   gke:
-    version: "1.33"
-    releaseChannel: STABLE
+    version: "1.35"
     controlPlane:
       authorizedNetworks:
         - cidr: 216.228.127.128/30
-          name: office-vpn
+          name: hq
         - cidr: 52.41.222.58/32
-          name: ci-runner
-
-network:
-  gke:
-    cidr: 10.0.0.0/16
+          name: nw1
+        - cidr: 54.68.11.139/32
+          name: nw2
 
 compute:
   gke:
     nodePools:
       system:
         machineType: e2-standard-4
+        autoscaling:
+          enabled: true
+          minNodes: 1
+          maxNodes: 3
+
       workers:
-        - name: cpu-worker-1
+        - name: cpu-worker
           machineType: n2-standard-8
-          labels:
-            nodeGroup: cpu-worker
+          diskType: pd-ssd
+          diskSizeGb: 200
+          zones:
+            - us-central1-c
+          autoscaling:
+            enabled: true
+            minNodes: 1
+            maxNodes: 1
+          nodeConfig:
+            labels:
+              nodeGroup: cpu-worker
         - name: gpu-worker
           machineType: a3-highgpu-8g
-          accelerators:
-            - type: nvidia-h100-80gb
-              count: 8
-          labels:
-            nodeGroup: gpu-worker
+          diskType: pd-ssd
+          diskSizeGb: 200
+          zones:
+            - us-central1-c
+          autoscaling:
+            enabled: true
+            minNodes: 2
+            maxNodes: 2
+          guestAccelerator:
+            type: nvidia-h100-80gb
+            count: 8
+          nodeConfig:
+            capacityReservations:
+              - projects/nv-dgxcloudprod-20240108/reservations/h100-a3-mega-phase-1-general-pool-384-us-c1-reservation
+            labels:
+              nodeGroup: gpu-worker

@@ -32,6 +32,8 @@ A [JSON Schema](../schema/cluster-config.schema.json) is provided for editor aut
 
 ### Configuration Schema
 
+Shared top-level structure; provider-specific fields nest under `cluster.gke`/`cluster.eks` and `compute.gke`/`compute.eks`.
+
 ```yaml
 deployment:
   id: <string>           # Deployment identifier (required)
@@ -42,16 +44,30 @@ deployment:
   destroy: false         # Set true to destroy
   tags: {}               # Resource tags (optional)
 
+# EKS
 cluster:
   name: <string>         # Cluster name (defaults to deployment.id)
   version: <string>      # K8s version (required)
   addOns:                # Optional EKS add-ons
     vpcCni: ""           # Enables custom networking (secondary CIDR, pod subnets, ENIConfig)
+compute:
+  nodeGroups:            # system + workers with instanceType, capacity
 
-network:                 # Optional -- auto-computed from VPC CIDR
-                         # Pod CIDR/subnets only apply when vpcCni is enabled
-compute:                 # Optional -- system + worker node groups
+# GKE
+cluster:
+  gke:
+    version: <string>    # K8s version (null = latest in release channel)
+    releaseChannel: STABLE
+    controlPlane:
+      authorizedNetworks: []
+compute:
+  gke:
+    nodePools:           # system + workers with machineType, guestAccelerator, zones
+
+network:                 # Optional -- auto-computed from VPC CIDR for both providers
 ```
+
+The `init` command generates the appropriate template based on the output filename prefix (`gke-*` produces a GKE template, anything else produces EKS).
 
 ## Node Pool Separation
 

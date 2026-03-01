@@ -2,14 +2,20 @@
 // Status to standard output
 // =====================================================================================
 
-output "deployment" {
-  description = "Deployment information"
+output "status" {
+  description = "Deployment"
   value = {
-    project = local.project
-    region  = local.region
-    updated = local.updateTime
-    prefix  = local.prefix
-    tags    = try(local.config.deployment.tags, {})
+    deployment = {
+      project    = local.project
+      region     = local.region
+      updated    = local.updateTime
+      prefix     = local.prefix
+      tags       = try(local.config.deployment.tags, {})
+      statusFile = local.statusFilePath
+    }
+    access = {
+      command = "gcloud container clusters get-credentials ${google_container_cluster.main.name} --region ${local.region} --project ${local.project}"
+    }
   }
 }
 
