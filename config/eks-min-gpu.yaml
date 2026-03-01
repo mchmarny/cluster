@@ -1,0 +1,74 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-gpu
+  provider: eks
+  tenancy: "615299774277"
+  location: us-east-1
+  state: tenancy
+  destroy: true
+  tags:
+    env: dev
+
+cluster:
+  version: "1.35"
+  adminRoles:
+    - AWSReservedSSO_CS-Admin_55d42b5a9a2a8c35
+  controlPlane:
+    allowedCidrs:
+      - 216.228.127.128/30
+      - 52.41.222.58/32
+      - 54.68.11.139/32
+  addOns:
+    coreDns: ""
+    ebsCsi: ""
+    kubeProxy: ""
+    vpcCni: ""
+
+network:
+  cidrs:
+    host: 10.0.0.0/16
+    pod: 100.65.0.0/16
+  subnets:
+    public:
+      - cidr: 10.0.1.0/27
+        zone: us-east-1a
+      - cidr: 10.0.2.0/27
+        zone: us-east-1c
+    system:
+      - cidr: 10.0.4.0/22
+        zone: us-east-1a
+      - cidr: 10.0.8.0/22
+        zone: us-east-1c
+    worker:
+      - cidr: 10.0.128.0/17
+        zone: us-east-1e
+        disableEndpoints: true
+    pod:
+      - cidr: 100.65.0.0/16
+        zone: us-east-1e
+        disableEndpoints: true
+
+compute:
+  nodeGroups:
+    system:
+      instanceType: m7i.xlarge
+      capacity:
+        desired: 2
+    workers:
+      - name: cpu-worker-1
+        instanceType: m4.16xlarge
+        capacity:
+          desired: 1
+        labels:
+          nodeGroup: cpu-worker
+      - name: gpu-worker
+        instanceType: p5.48xlarge
+        capacity:
+          desired: 2
+          reservation:
+            preference: capacity-reservations-only
+            target: cr-0cbe491320188dfa6
+        labels:
+          nodeGroup: gpu-worker

@@ -29,6 +29,8 @@ Bootstrap the AWS account with S3 state bucket, IAM user, and access key. Run as
 provider/eks/tools/setup -c config/eks-min-cpu.yaml -o provider/eks/keys
 ```
 
+> Make sure you safely store the generated key and never commit it to source control.
+
 ## 4. Apply
 
 Deploy using the service account key from setup:

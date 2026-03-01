@@ -1,0 +1,35 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-cpu
+  provider: eks
+  tenancy: "615299774277"
+  location: us-east-1
+  state: tenancy
+  destroy: false
+  tags:
+    env: demo
+    stack: mini
+
+cluster:
+  version: "1.35"
+  adminRoles:
+    - AWSReservedSSO_CS-Admin_55d42b5a9a2a8c35
+  addOns:
+    coreDns: ""
+    kubeProxy: ""
+
+compute:
+  nodeGroups:
+    system:
+      instanceType: m7i.xlarge
+      capacity:
+        desired: 2
+    workers:
+      - name: cpu-worker-1
+        instanceType: m7i.xlarge
+        capacity:
+          desired: 1
+        labels:
+          nodeGroup: cpu-worker
