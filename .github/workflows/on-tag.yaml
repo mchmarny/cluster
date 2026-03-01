@@ -221,10 +221,9 @@ jobs:
       security-events: write
 
     steps:
+      # persist-credentials required: trivy-action fetches default branch internally
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          persist-credentials: false
 
       - name: Load versions
         id: versions
