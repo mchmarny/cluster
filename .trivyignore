@@ -20,3 +20,5 @@ AVD-AWS-0041  # EKS Cluster should not have secrets encryption disabled
 # CloudFormation - Standard Kubernetes infrastructure patterns
 AVD-AWS-0130  # Launch template IMDS v2 tokens (standard for K8s nodes)
 AVD-AWS-0164  # Public subnet auto-assigns public IP (required for NAT gateways and load balancers)
+
+CVE-2025-68121  # Unexpected session resumption in crypto/tls (wiat for fix in 1.26)
