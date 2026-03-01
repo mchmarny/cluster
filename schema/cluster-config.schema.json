@@ -78,7 +78,7 @@
             },
             "vpcCni": {
               "type": "string",
-              "description": "VPC CNI add-on version (empty for latest)"
+              "description": "VPC CNI add-on version (empty for latest). Enables custom networking: secondary CIDR, pod subnets, pod SG, and ENIConfig. Omit to disable."
             },
             "kubeProxy": {
               "type": "string",
@@ -134,7 +134,7 @@
             },
             "pod": {
               "type": "string",
-              "description": "Pod CIDR block (default: 100.65.0.0/16)"
+              "description": "Pod CIDR block (default: 100.65.0.0/16). Only used when vpcCni add-on is enabled."
             }
           }
         },

@@ -92,6 +92,8 @@ resource "aws_flow_log" "main" {
 }
 
 resource "aws_vpc_ipv4_cidr_block_association" "secondary_cidr" {
+  count = local.vpc_cni_enabled ? 1 : 0
+
   vpc_id     = aws_vpc.main.id
   cidr_block = local.pod_cidr
 }
@@ -113,9 +115,7 @@ resource "aws_subnet" "main" {
     "kubernetes.io/cluster/${local.cluster_name}" = "shared"
   })
 
-  depends_on = [
-    aws_vpc_ipv4_cidr_block_association.secondary_cidr
-  ]
+  depends_on = [aws_vpc_ipv4_cidr_block_association.secondary_cidr]
 }
 
 # Internet Gateway
@@ -302,6 +302,8 @@ resource "aws_vpc_endpoint" "interface" {
 }
 
 resource "local_file" "eniconfig" {
+  count = local.vpc_cni_enabled ? 1 : 0
+
   filename        = "${path.module}/eni-config.yaml"
   file_permission = "0644"
   content = templatefile("${path.module}/templates/eni-config.ytpl", {

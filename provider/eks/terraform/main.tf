@@ -73,6 +73,9 @@ locals {
   // EKS version for AMI lookup (must be specified for Ubuntu AMI auto-selection)
   eks_version_for_ami = local.eks_version
 
+  // VPC CNI custom networking gate
+  vpc_cni_enabled = try(local.config.cluster.addOns.vpcCni, null) != null
+
   // Network defaults
   vpc_cidr     = try(local.config.network.cidrs.host, "10.0.0.0/16")
   pod_cidr     = try(local.config.network.cidrs.pod, "100.65.0.0/16")
@@ -140,6 +143,10 @@ locals {
   }
 
   // Effective config: user config if provided, otherwise defaults
-  effective_subnets = try(local.config.network.subnets, null) != null ? local.config.network.subnets : local.default_subnets
-  effective_tags    = try(local.config.deployment.tags, {})
+  _raw_subnets = try(local.config.network.subnets, null) != null ? local.config.network.subnets : local.default_subnets
+  effective_subnets = merge(
+    { for k, v in local._raw_subnets : k => v if k != "pod" },
+    { pod = local.vpc_cni_enabled ? try(local._raw_subnets.pod, local.default_subnets.pod) : [] }
+  )
+  effective_tags = try(local.config.deployment.tags, {})
 }

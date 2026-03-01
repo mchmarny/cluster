@@ -26,7 +26,7 @@ cluster:
   version: "1.33"
   addOns:
     coreDns: ""
-    vpcCni: ""
+    # vpcCni: ""              # Enables VPC CNI custom networking (secondary CIDR, pod subnets, ENIConfig)
     kubeProxy: ""
     ebsCsi: ""
   # controlPlane:
@@ -35,8 +35,8 @@ cluster:
   # adminRoles:               # Optional: IAM roles for cluster admin
   #   - ClusterAdmin
 
-# Network uses defaults: 10.0.0.0/16 VPC, 100.65.0.0/16 pods
-# Subnets auto-computed from VPC CIDR if not specified
+# Network uses defaults: 10.0.0.0/16 VPC CIDR, subnets auto-computed
+# Pod CIDR (100.65.0.0/16) and pod subnets only apply when vpcCni add-on is enabled
 # network:
 #   cidrs:
 #     host: 10.0.0.0/16

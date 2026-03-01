@@ -6,70 +6,18 @@ Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurat
 
 | Platform | Directory | Features |
 |----------|-----------|----------|
-| [AWS (EKS)](./provider/eks/) | `provider/eks/` | Multi-AZ, VPC CNI, self-managed nodes, CloudWatch |
+| [AWS (EKS)](./provider/eks/) | `provider/eks/` | Multi-AZ, optional VPC CNI custom networking, self-managed nodes, CloudWatch |
 | [Google Cloud (GKE)](./provider/gke/) | `provider/gke/` | Regional cluster, Workload Identity, Shielded Nodes |
 
-## Quick Start
+## Usage
 
-### 1. Prerequisites
+1. **Generate config** (optional) -- run `init` to create a starter YAML, or copy from `config/`
+2. **Discover versions** (optional) -- find latest K8s versions and AMIs for your region
+3. **Setup tenancy** (one-time) -- bootstrap cloud account with state bucket and IAM credentials
+4. **Apply** -- deploy the cluster using the container image with your config and key
+5. **Destroy** -- set `deployment.destroy: true` in config and re-run apply
 
-```bash
-terraform --version  # >= 1.14
-yq --version         # YAML processor
-aws --version        # AWS CLI (for EKS)
-gcloud --version     # GCP CLI (for GKE)
-```
-
-### 2. Generate Config
-
-```shell
-docker run --rm \
-  -v $PWD/config:/config \
-  ghcr.io/mchmarny/cluster/eks:latest init /config/eks-example.yaml
-```
-
-Or use an existing example:
-
-**EKS** (`config/eks-minimal.yaml`):
-```yaml
-deployment:
-  id: demo
-  provider: eks
-  tenancy: "123456789012"
-  location: us-east-1
-
-cluster:
-  version: "1.33"
-  controlPlane:
-    allowedCidrs:
-      - 1.2.3.4/32
-
-compute:
-  nodeGroups:
-    system:
-      instanceType: m6i.xlarge
-      capacity:
-        desired: 3
-```
-
-**GKE** (`config/gke-minimal.yaml`):
-```yaml
-deployment:
-  id: demo
-  provider: gke
-  tenancy: "my-project-id"
-  location: us-central1
-
-cluster:
-  controlPlane:
-    authorizedNetworks:
-      - cidr: 1.2.3.4/32
-        name: my-network
-```
-
-### 3. Deploy
-
-See [DEMO.md](DEMO.md) for the full init → setup → apply workflow.
+See provider-specific guides for detailed steps: [EKS](./provider/eks/) | [GKE](./provider/gke/)
 
 ## Container Images
 
@@ -85,7 +33,6 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 | Command | Description |
 |---------|-------------|
 | `init <path>` | Generate a starter configuration file |
-| `setup -c <config>` | Bootstrap cloud account (state bucket, IAM user, access key) |
 | `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
 | `output -c <config>` | Retrieve Terraform outputs and save to state directory |
 
@@ -96,38 +43,12 @@ Destroy is triggered by setting `deployment.destroy: true` in the config and run
 | Method | Flag / Env Var | Description |
 |--------|---------------|-------------|
 | File path | `-c` / `CONFIG_PATH` | Path to YAML config file |
-| Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML |
+| Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML config |
+| Base64 key | `KEY_CONTENT` | Base64-encoded cloud key JSON (from setup) |
 
-### Building Images
+## Architecture
 
-```bash
-make build-eks   # Mirror providers + build EKS image
-make build-gke   # Mirror providers + build GKE image
-```
-
-Tags matching `v*-eks` or `v*-gke` pushed to `main` trigger CI builds.
-
-## Configuration Schema
-
-A [JSON Schema](schema/cluster-config.schema.json) is provided for VS Code autocomplete (Red Hat YAML extension).
-
-```yaml
-deployment:
-  id: <string>           # Deployment identifier (required)
-  provider: <string>     # eks | gke (required)
-  tenancy: <string>      # Account/Project ID (required)
-  location: <string>     # Region (required)
-  state: tenancy         # tenancy (cloud) | local (tfstate)
-  destroy: false         # Set true to destroy
-  tags: {}               # Resource tags (optional)
-
-cluster:
-  name: <string>         # Cluster name (defaults to deployment.id)
-  version: <string>      # K8s version (required)
-
-network:                 # Optional — auto-computed from VPC CIDR
-compute:                 # Optional — system + worker node groups
-```
+See [docs/architecture.md](docs/architecture.md) for project layout, configuration design, security model, and image build details.
 
 ## Development
 
@@ -141,4 +62,4 @@ make tools-check  # Verify tool versions match .settings.yaml
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT -- see [LICENSE](LICENSE)

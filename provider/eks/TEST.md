@@ -113,7 +113,7 @@ compute:
         desired: 3
 ```
 
-> **Note:** This is the most minimal configuration. Network subnets, tags, and AMI are all auto-computed with sensible defaults.
+> **Note:** This is the most minimal configuration. No VPC CNI custom networking -- pods use the primary VPC CIDR. Network subnets, tags, and AMI are all auto-computed with sensible defaults.
 
 ### 2.2 Actuate
 
@@ -142,7 +142,7 @@ kubectl describe nodes | grep -A 3 Taints
 
 # Check system pods
 kubectl get pods -A
-# Expected: VPC CNI, kube-proxy running
+# Expected: kube-proxy running (no VPC CNI custom networking in this config)
 ```
 
 ### 2.4 Delete
@@ -363,11 +363,11 @@ Output will look something like this:
 [MSG] PASS: Cluster endpoint is configured
 [MSG] Checking VPC configuration...
 [MSG] PASS: VPC ID is set
-[MSG] PASS: VPC has subnets (expected >= 4)
+[MSG] PASS: VPC has subnets (expected >= 4)    # 4 when vpcCni enabled, 3 otherwise
 [MSG] PASS: Public subnets exist (expected >= 2)
 [MSG] PASS: System subnets exist (expected >= 2)
 [MSG] PASS: Worker subnets exist (expected >= 2)
-[MSG] PASS: Pod subnets exist (expected >= 1)
+[MSG] PASS: Pod subnets exist (expected >= 1)   # only when vpcCni enabled
 [MSG] Checking VPC endpoints...
 [MSG] PASS: VPC endpoints exist (expected >= 5)
 [MSG] PASS: VPC endpoint s3 is available
@@ -383,10 +383,10 @@ Output will look something like this:
 [MSG] PASS: System ASG exists
 [MSG] PASS: ASG desired capacity matches config (3)
 [MSG] PASS: ASG spans multiple AZs (expected >= 2)
-[MSG] Checking custom networking (ENI configs)...
+[MSG] Checking custom networking (ENI configs)...   # only when vpcCni enabled
 [MSG] PASS: ENI configs exist (expected >= 2)
 [MSG] Checking core components...
-[MSG] PASS: VPC CNI pods running (expected >= 5)
+[MSG] PASS: VPC CNI pods running (expected >= 5)    # only when vpcCni enabled
 [MSG] PASS: kube-proxy pods running (expected >= 5)
 [MSG] Checking security groups...
 [MSG] PASS: System security group exists

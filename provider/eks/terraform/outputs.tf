@@ -89,7 +89,7 @@ locals {
       vpc = {
         id            = aws_vpc.main.id
         cidr          = aws_vpc.main.cidr_block
-        secondaryCidr = aws_vpc_ipv4_cidr_block_association.secondary_cidr.cidr_block
+        secondaryCidr = local.vpc_cni_enabled ? aws_vpc_ipv4_cidr_block_association.secondary_cidr[0].cidr_block : null
       }
       subnets = {
         public = [
@@ -129,7 +129,7 @@ locals {
         cluster = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
         system  = aws_security_group.main["${local.prefix}-system"].id
         worker  = aws_security_group.main["${local.prefix}-worker"].id
-        pod     = aws_security_group.main["${local.prefix}-pod"].id
+        pod     = local.vpc_cni_enabled ? aws_security_group.main["${local.prefix}-pod"].id : null
       }
       natGateways = [
         for i, subnet in local.effective_subnets.public : {

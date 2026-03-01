@@ -41,6 +41,7 @@ CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.name)"
 REGION="$(config_get "$CONFIG_FILE" deployment.location)"
 ACCOUNT_ID="$(config_get "$CONFIG_FILE" deployment.tenancy)"
 EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.version)"
+VPC_CNI_ENABLED="$(yq -e '.cluster.addOns.vpcCni' "$CONFIG_FILE" >/dev/null 2>&1 && echo "true" || echo "false")"
 
 msg "Validating cluster: ${CLUSTER_NAME} in ${REGION}"
 
@@ -89,17 +90,20 @@ VPC_ID=$(echo "$CLUSTER_INFO" | jq -r '.cluster.resourcesVpcConfig.vpcId')
 check "VPC ID is set" "[[ -n '$VPC_ID' && '$VPC_ID' != 'null' ]]"
 
 SUBNET_COUNT=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" --region "$REGION" --query 'length(Subnets)' --output text 2>/dev/null || echo "0")
-check "VPC has subnets (expected >= 4)" "[[ $SUBNET_COUNT -ge 4 ]]"
+MIN_SUBNETS=$([[ "$VPC_CNI_ENABLED" == "true" ]] && echo 4 || echo 3)
+check "VPC has subnets (expected >= $MIN_SUBNETS)" "[[ $SUBNET_COUNT -ge $MIN_SUBNETS ]]"
 
 PUBLIC_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*public*" --region "$REGION" --query 'length(Subnets)' --output text 2>/dev/null || echo "0")
 SYSTEM_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*system*" --region "$REGION" --query 'length(Subnets)' --output text 2>/dev/null || echo "0")
 WORKER_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*worker*" --region "$REGION" --query 'length(Subnets)' --output text 2>/dev/null || echo "0")
-POD_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*pod*" --region "$REGION" --query 'length(Subnets)' --output text 2>/dev/null || echo "0")
-
 check "Public subnets exist (expected >= 2)" "[[ $PUBLIC_SUBNETS -ge 2 ]]"
 check "System subnets exist (expected >= 2)" "[[ $SYSTEM_SUBNETS -ge 2 ]]"
 check "Worker subnets exist (expected >= 2)" "[[ $WORKER_SUBNETS -ge 2 ]]"
-check "Pod subnets exist (expected >= 1)" "[[ $POD_SUBNETS -ge 1 ]]"
+
+if [[ "$VPC_CNI_ENABLED" == "true" ]]; then
+  POD_SUBNETS=$(aws ec2 describe-subnets --filters "Name=vpc-id,Values=$VPC_ID" "Name=tag:Name,Values=*pod*" --region "$REGION" --query 'length(Subnets)' --output text 2>/dev/null || echo "0")
+  check "Pod subnets exist (expected >= 1)" "[[ $POD_SUBNETS -ge 1 ]]"
+fi
 
 # =============================================================================
 # VPC Endpoints Validation
@@ -155,20 +159,23 @@ if [[ $ASG_EXISTS -gt 0 ]]; then
 fi
 
 # =============================================================================
-# ENI Config Validation (Custom Networking)
+# ENI Config Validation (Custom Networking — only when vpcCni enabled)
 # =============================================================================
-msg "Checking custom networking (ENI configs)..."
-
-ENICONFIG_COUNT=$(kubectl get eniconfigs --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
-check "ENI configs exist (expected >= 2)" "[[ $ENICONFIG_COUNT -ge 2 ]]"
+if [[ "$VPC_CNI_ENABLED" == "true" ]]; then
+  msg "Checking custom networking (ENI configs)..."
+  ENICONFIG_COUNT=$(kubectl get eniconfigs --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+  check "ENI configs exist (expected >= 2)" "[[ $ENICONFIG_COUNT -ge 2 ]]"
+fi
 
 # =============================================================================
 # Core Components Validation
 # =============================================================================
 msg "Checking core components..."
 
-AWS_NODE_PODS=$(kubectl get pods -n kube-system -l k8s-app=aws-node --no-headers 2>/dev/null | grep -c "Running" || echo "0")
-check "VPC CNI pods running (expected >= $NODE_COUNT)" "[[ $AWS_NODE_PODS -ge $NODE_COUNT ]]"
+if [[ "$VPC_CNI_ENABLED" == "true" ]]; then
+  AWS_NODE_PODS=$(kubectl get pods -n kube-system -l k8s-app=aws-node --no-headers 2>/dev/null | grep -c "Running" || echo "0")
+  check "VPC CNI pods running (expected >= $NODE_COUNT)" "[[ $AWS_NODE_PODS -ge $NODE_COUNT ]]"
+fi
 
 KUBE_PROXY_PODS=$(kubectl get pods -n kube-system -l k8s-app=kube-proxy --no-headers 2>/dev/null | grep -c "Running" || echo "0")
 check "kube-proxy pods running (expected >= $NODE_COUNT)" "[[ $KUBE_PROXY_PODS -ge $NODE_COUNT ]]"

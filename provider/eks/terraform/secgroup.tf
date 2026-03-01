@@ -1,4 +1,8 @@
 locals {
+  # CIDR block helpers: include pod_cidr only when VPC CNI custom networking is enabled
+  node_cidr_blocks     = compact(concat([local.vpc_cidr, local.service_cidr], local.vpc_cni_enabled ? [local.pod_cidr] : []))
+  node_pod_cidr_blocks = compact(concat([local.vpc_cidr], local.vpc_cni_enabled ? [local.pod_cidr] : []))
+
   # #14: Shared ingress rules for both system and worker SGs
   shared_node_ingress = [
     {
@@ -6,11 +10,7 @@ locals {
       from_port   = 443
       to_port     = 443
       protocol    = "tcp"
-      cidr_blocks = [
-        local.vpc_cidr,
-        local.pod_cidr,
-        local.service_cidr,
-      ]
+      cidr_blocks = local.node_cidr_blocks
     },
     {
       description = "Allow kubelet API from EKS control plane"
@@ -26,30 +26,21 @@ locals {
       from_port   = 10250
       to_port     = 10250
       protocol    = "tcp"
-      cidr_blocks = [
-        local.vpc_cidr,
-        local.pod_cidr,
-      ]
+      cidr_blocks = local.node_pod_cidr_blocks
     },
     {
       description = "Allow DNS TCP from all nodes and pods"
       from_port   = 53
       to_port     = 53
       protocol    = "tcp"
-      cidr_blocks = [
-        local.vpc_cidr,
-        local.pod_cidr,
-      ]
+      cidr_blocks = local.node_pod_cidr_blocks
     },
     {
       description = "Allow DNS UDP from all nodes and pods"
       from_port   = 53
       to_port     = 53
       protocol    = "udp"
-      cidr_blocks = [
-        local.vpc_cidr,
-        local.pod_cidr,
-      ]
+      cidr_blocks = local.node_pod_cidr_blocks
     },
     {
       description = "Allow NodePort services from public subnet"
@@ -83,7 +74,7 @@ locals {
   additional_sg_rules = try(local.config.network.securityGroups.additionalRules, [])
 
   additional_ingress_by_target = {
-    for target in ["system", "worker", "pod"] :
+    for target in(local.vpc_cni_enabled ? ["system", "worker", "pod"] : ["system", "worker"]) :
     target => [
       for rule in local.additional_sg_rules : {
         description = try(rule.description, "Custom rule")
@@ -97,7 +88,7 @@ locals {
   }
 
   additional_egress_by_target = {
-    for target in ["system", "worker", "pod"] :
+    for target in(local.vpc_cni_enabled ? ["system", "worker", "pod"] : ["system", "worker"]) :
     target => [
       for rule in local.additional_sg_rules : {
         description = try(rule.description, "Custom rule")
@@ -110,136 +101,135 @@ locals {
     ]
   }
 
-  security_groups = {
+  security_groups = merge(
+    {
+      ("${local.prefix}-efa") = {
+        description = "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html#efa-start-security"
+        ingress = [
+          {
+            from_port = 0
+            to_port   = 0
+            protocol  = "-1"
+            self      = true
+          }
+        ]
+        egress = [
+          {
+            from_port = 0
+            to_port   = 0
+            protocol  = "-1"
+            self      = true
+          }
+        ]
+      }
 
-    ("${local.prefix}-efa") = {
-      description = "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/efa-start.html#efa-start-security"
-      ingress = [
-        {
-          from_port = 0
-          to_port   = 0
-          protocol  = "-1"
-          self      = true
+      # System nodes
+      ("${local.prefix}-system") = {
+        tags = {
+          "kubernetes.io/cluster/${local.cluster_name}" = "owned"
         }
-      ]
-      egress = [
-        {
-          from_port = 0
-          to_port   = 0
-          protocol  = "-1"
-          self      = true
+        ingress = concat(
+          [
+            {
+              description = "Allow all traffic within system nodes"
+              from_port   = 0
+              to_port     = 0
+              protocol    = "-1"
+              self        = true
+            },
+            {
+              description = "Allow Node Feature Discovery traffic"
+              from_port   = 8080
+              to_port     = 8080
+              protocol    = "tcp"
+              cidr_blocks = local.node_pod_cidr_blocks
+            },
+          ],
+          local.shared_node_ingress,
+          local.additional_ingress_by_target["system"],
+        )
+        egress = concat(
+          local.shared_node_egress,
+          local.additional_egress_by_target["system"],
+        )
+      }
+
+      # Worker
+      ("${local.prefix}-worker") = {
+        tags = {
+          "kubernetes.io/cluster/${local.cluster_name}" = "owned"
         }
-      ]
-    }
-
-    # System nodes
-    ("${local.prefix}-system") = {
-      tags = {
-        "kubernetes.io/cluster/${local.cluster_name}" = "owned"
+        ingress = concat(
+          [
+            {
+              description = "Allow all traffic within worker nodes"
+              from_port   = 0
+              to_port     = 0
+              protocol    = "-1"
+              self        = true
+            },
+            {
+              description = "Allow all traffic from system nodes"
+              from_port   = 0
+              to_port     = 0
+              protocol    = "-1"
+              cidr_blocks = [
+                for subnet in local.effective_subnets.system : subnet.cidr
+              ]
+            },
+          ],
+          local.shared_node_ingress,
+          local.additional_ingress_by_target["worker"],
+        )
+        egress = concat(
+          local.shared_node_egress,
+          local.additional_egress_by_target["worker"],
+        )
       }
-      ingress = concat(
-        [
-          {
-            description = "Allow all traffic within system nodes"
-            from_port   = 0
-            to_port     = 0
-            protocol    = "-1"
-            self        = true
-          },
-          {
-            description = "Allow Node Feature Discovery traffic"
-            from_port   = 8080
-            to_port     = 8080
-            protocol    = "tcp"
-            cidr_blocks = [
-              local.vpc_cidr,
-              local.pod_cidr,
-            ]
-          },
-        ],
-        local.shared_node_ingress,
-        local.additional_ingress_by_target["system"],
-      )
-      egress = concat(
-        local.shared_node_egress,
-        local.additional_egress_by_target["system"],
-      )
-    }
-
-    # Pod
-    ("${local.prefix}-pod") = {
-      tags = {
-        "kubernetes.io/cluster/${local.cluster_name}" = "owned"
+    },
+    local.vpc_cni_enabled ? {
+      # Pod (VPC CNI custom networking only)
+      ("${local.prefix}-pod") = {
+        tags = {
+          "kubernetes.io/cluster/${local.cluster_name}" = "owned"
+        }
+        ingress = concat(
+          [
+            {
+              description = "Allow all traffic within pod security group"
+              from_port   = 0
+              to_port     = 0
+              protocol    = "-1"
+              self        = true
+            },
+            {
+              description = "Allow all TCP from VPC"
+              from_port   = 0
+              to_port     = 65535
+              protocol    = "tcp"
+              cidr_blocks = [
+                local.vpc_cidr,
+              ]
+            },
+            {
+              description = "Allow all UDP from VPC"
+              from_port   = 0
+              to_port     = 65535
+              protocol    = "udp"
+              cidr_blocks = [
+                local.vpc_cidr,
+              ]
+            },
+          ],
+          local.additional_ingress_by_target["pod"],
+        )
+        egress = concat(
+          local.shared_node_egress,
+          local.additional_egress_by_target["pod"],
+        )
       }
-      ingress = concat(
-        [
-          {
-            description = "Allow all traffic within pod security group"
-            from_port   = 0
-            to_port     = 0
-            protocol    = "-1"
-            self        = true
-          },
-          {
-            description = "Allow all TCP from VPC"
-            from_port   = 0
-            to_port     = 65535
-            protocol    = "tcp"
-            cidr_blocks = [
-              local.vpc_cidr,
-            ]
-          },
-          {
-            description = "Allow all UDP from VPC"
-            from_port   = 0
-            to_port     = 65535
-            protocol    = "udp"
-            cidr_blocks = [
-              local.vpc_cidr,
-            ]
-          },
-        ],
-        local.additional_ingress_by_target["pod"],
-      )
-      egress = concat(
-        local.shared_node_egress,
-        local.additional_egress_by_target["pod"],
-      )
-    }
-
-    # Worker
-    ("${local.prefix}-worker") = {
-      tags = {
-        "kubernetes.io/cluster/${local.cluster_name}" = "owned"
-      }
-      ingress = concat(
-        [
-          {
-            description = "Allow all traffic within worker nodes"
-            from_port   = 0
-            to_port     = 0
-            protocol    = "-1"
-            self        = true
-          },
-          {
-            description = "Allow all traffic from system nodes"
-            from_port   = 0
-            to_port     = 0
-            protocol    = "-1"
-            cidr_blocks = [
-              for subnet in local.effective_subnets.system : subnet.cidr
-            ]
-          },
-        ],
-        local.shared_node_ingress,
-        local.additional_ingress_by_target["worker"],
-      )
-      egress = concat(
-        local.shared_node_egress,
-        local.additional_egress_by_target["worker"],
-      )
-    }
-  }
+    } : {}
+  )
 }
 
 
