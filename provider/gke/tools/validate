@@ -1,0 +1,201 @@
+#!/bin/bash
+
+# Post-deployment validation of GKE cluster
+# Usage: ./validate -c config/gke-demo.yaml
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+
+CONFIG_FILE=""
+
+usage() {
+  echo "Usage: $0 -c <config.yaml>"
+  echo "  -c  Config file path (relative to repo root or absolute)"
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config)  CONFIG_FILE="$2"; shift 2 ;;
+    -h|--help)    usage ;;
+    *) err "Unknown option: $1" ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && usage
+CONFIG_FILE="$(resolve_config "$CONFIG_FILE")"
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+has_tools gcloud kubectl yq jq
+
+validate_config "$CONFIG_FILE"
+
+DEP_ID="$(config_get "$CONFIG_FILE" deployment.id)"
+REGION="$(config_get "$CONFIG_FILE" deployment.location)"
+PROJECT_ID="$(config_get "$CONFIG_FILE" deployment.tenancy)"
+CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.gke.name "$DEP_ID")"
+EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.gke.version "")"
+WORKER_COUNT="$(yq '.compute.gke.nodePools.workers | length' "$CONFIG_FILE" 2>/dev/null || echo "0")"
+VPC_NAME="${DEP_ID}-vpc"
+
+msg "Validating cluster: ${CLUSTER_NAME} in ${REGION} (project: ${PROJECT_ID})"
+
+FAILED=0
+PASSED=0
+
+check() {
+  local desc="$1"; shift
+  if eval "$@" &>/dev/null; then
+    msg "  PASS: $desc"
+    PASSED=$((PASSED + 1))
+  else
+    printf "${COLOR_RED}  FAIL: $desc${COLOR_RESET}\n" >&2
+    FAILED=$((FAILED + 1))
+  fi
+}
+
+# =============================================================================
+# Cluster Validation
+# =============================================================================
+msg "Checking GKE cluster..."
+
+CLUSTER_JSON=$(gcloud container clusters describe "$CLUSTER_NAME" \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --format json 2>/dev/null || echo "{}")
+
+if [[ "$CLUSTER_JSON" == "{}" ]]; then
+  err "Cluster '$CLUSTER_NAME' not found in region '$REGION' (project: $PROJECT_ID)"
+fi
+
+CLUSTER_STATUS=$(echo "$CLUSTER_JSON" | jq -r '.status')
+CLUSTER_VERSION=$(echo "$CLUSTER_JSON" | jq -r '.currentMasterVersion')
+CLUSTER_ENDPOINT=$(echo "$CLUSTER_JSON" | jq -r '.endpoint')
+PRIVATE_NODES=$(echo "$CLUSTER_JSON" | jq -r '.privateClusterConfig.enablePrivateNodes // "false"')
+SHIELDED_NODES=$(echo "$CLUSTER_JSON" | jq -r '.shieldedNodes.enabled // "false"')
+DATAPLANE_V2=$(echo "$CLUSTER_JSON" | jq -r '.networkConfig.datapathProvider // ""')
+
+check "Cluster status is RUNNING" "[[ '$CLUSTER_STATUS' == 'RUNNING' ]]"
+check "Cluster endpoint is set" "[[ -n '$CLUSTER_ENDPOINT' && '$CLUSTER_ENDPOINT' != 'null' ]]"
+check "Private nodes enabled" "[[ '$PRIVATE_NODES' == 'true' ]]"
+check "Shielded nodes enabled" "[[ '$SHIELDED_NODES' == 'true' ]]"
+check "Dataplane V2 enabled" "[[ '$DATAPLANE_V2' == 'ADVANCED_DATAPATH' ]]"
+
+if [[ -n "$EXPECTED_VERSION" ]]; then
+  check "Cluster version starts with $EXPECTED_VERSION" "[[ '$CLUSTER_VERSION' == ${EXPECTED_VERSION}* ]]"
+fi
+
+# =============================================================================
+# Network Validation
+# =============================================================================
+msg "Checking network configuration..."
+
+VPC_EXISTS=$(gcloud compute networks describe "$VPC_NAME" \
+  --project "$PROJECT_ID" \
+  --format "value(name)" 2>/dev/null || echo "")
+
+check "VPC exists ($VPC_NAME)" "[[ -n '$VPC_EXISTS' ]]"
+
+SUBNET_COUNT=$(gcloud compute networks subnets list \
+  --network "$VPC_NAME" \
+  --project "$PROJECT_ID" \
+  --format "value(name)" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+
+check "VPC has >= 2 subnets" "[[ $SUBNET_COUNT -ge 2 ]]"
+
+MASTER_FW=$(gcloud compute firewall-rules list \
+  --filter "name:${DEP_ID}-gke-master-to-nodes AND network:${VPC_NAME}" \
+  --project "$PROJECT_ID" \
+  --format "value(name)" 2>/dev/null || echo "")
+
+check "Master-to-nodes firewall rule exists" "[[ -n '$MASTER_FW' ]]"
+
+NODE_FW=$(gcloud compute firewall-rules list \
+  --filter "name:${DEP_ID}-gke-nodes AND network:${VPC_NAME}" \
+  --project "$PROJECT_ID" \
+  --format "value(name)" 2>/dev/null || echo "")
+
+check "Inter-node firewall rule exists" "[[ -n '$NODE_FW' ]]"
+
+NAT=$(gcloud compute routers nats list \
+  --router "${DEP_ID}-router" \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --format "value(name)" 2>/dev/null || echo "")
+
+check "Cloud NAT exists" "[[ -n '$NAT' ]]"
+
+# =============================================================================
+# Node Pool Validation
+# =============================================================================
+msg "Checking node pools..."
+
+POOL_NAMES=$(echo "$CLUSTER_JSON" | jq -r '.nodePools[].name' 2>/dev/null || echo "")
+POOL_COUNT=$(echo "$POOL_NAMES" | grep -c . || echo "0")
+EXPECTED_POOL_COUNT=$(( WORKER_COUNT + 1 ))
+
+check "System node pool exists" "echo '$POOL_NAMES' | grep -q '^system$'"
+check "Node pool count matches config (expected $EXPECTED_POOL_COUNT)" "[[ $POOL_COUNT -eq $EXPECTED_POOL_COUNT ]]"
+
+# =============================================================================
+# Node Validation
+# =============================================================================
+msg "Checking nodes..."
+
+gcloud container clusters get-credentials "$CLUSTER_NAME" \
+  --region "$REGION" \
+  --project "$PROJECT_ID" 2>/dev/null
+
+NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+READY_NODES=$(kubectl get nodes --no-headers 2>/dev/null | grep -c " Ready " || echo "0")
+
+check "At least 1 node exists" "[[ $NODE_COUNT -ge 1 ]]"
+check "All nodes are Ready" "[[ $READY_NODES -eq $NODE_COUNT && $NODE_COUNT -gt 0 ]]"
+
+TAINTED_NODES=$(kubectl get nodes -o json 2>/dev/null | \
+  jq '[.items[] | select(.spec.taints != null) | .spec.taints[] | select(.key == "dedicated" and .value == "CriticalAddonsOnly")] | length')
+
+check "System nodes have CriticalAddonsOnly taint" "[[ $TAINTED_NODES -gt 0 ]]"
+
+# =============================================================================
+# IAM Validation
+# =============================================================================
+msg "Checking service accounts..."
+
+SYSTEM_SA=$(gcloud iam service-accounts describe \
+  "${DEP_ID}-system-nodes@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --project "$PROJECT_ID" \
+  --format "value(email)" 2>/dev/null || echo "")
+
+check "system-nodes service account exists" "[[ -n '$SYSTEM_SA' ]]"
+
+WORKER_SA=$(gcloud iam service-accounts describe \
+  "${DEP_ID}-worker-nodes@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --project "$PROJECT_ID" \
+  --format "value(email)" 2>/dev/null || echo "")
+
+check "worker-nodes service account exists" "[[ -n '$WORKER_SA' ]]"
+
+# =============================================================================
+# Summary
+# =============================================================================
+echo ""
+echo "=============================================="
+echo "Validation Summary"
+echo "=============================================="
+msg "Passed: $PASSED"
+if [[ $FAILED -gt 0 ]]; then
+  printf "${COLOR_RED}Failed: $FAILED${COLOR_RESET}\n" >&2
+  echo ""
+  err "Cluster validation failed with $FAILED errors"
+else
+  msg "All checks passed!"
+  echo ""
+fi
