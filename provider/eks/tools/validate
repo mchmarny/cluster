@@ -37,7 +37,7 @@ CONFIG_FILE="$(resolve_config "$CONFIG_FILE")"
 
 has_tools aws kubectl jq yq
 
-CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.name)"
+CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.name "$(config_get "$CONFIG_FILE" deployment.id)")"
 REGION="$(config_get "$CONFIG_FILE" deployment.location)"
 ACCOUNT_ID="$(config_get "$CONFIG_FILE" deployment.tenancy)"
 EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.version)"
