@@ -48,7 +48,7 @@ provider/eks/tools/setup -c config/eks-example.yaml -o ./keys
 
 This creates:
 - S3 state bucket `cluster-state-{account-id}` with versioning and encryption
-- IAM user, policy, and access key (saved to the output directory)
+- IAM user, policy, and access key (saved to the output directory — store safely, never commit)
 
 ### 4. Apply
 
