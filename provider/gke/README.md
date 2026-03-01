@@ -75,8 +75,7 @@ Set `deployment.destroy: true` in the config and re-run apply (step 3).
 ### Local Deployment (without container)
 
 ```shell
-provider/gke/tools/actuate -c config/gke-example.yaml apply    # plan + apply
-provider/gke/tools/actuate -c config/gke-example.yaml plan     # plan only
+cluster apply -c config/gke-example.yaml
 ```
 
 ---

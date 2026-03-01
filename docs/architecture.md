@@ -8,7 +8,7 @@ Provider-generic architecture and design concepts for the Cluster toolkit.
 cmd/cluster/          Go CLI entrypoint
 pkg/                  Go packages (aws, cluster, config, run, state, terraform)
 provider/eks/         EKS Terraform + tools (actuate, setup, validate, disco)
-provider/gke/         GKE Terraform + tools (actuate, setup, common)
+provider/gke/         GKE Terraform + tools (setup, disco, validate)
 config/               Global config files (provider-prefixed: eks-demo.yaml, gke-demo.yaml)
 schema/               JSON Schema for config validation
 image/                Dockerfiles (eks.dockerfile, gke.dockerfile)
