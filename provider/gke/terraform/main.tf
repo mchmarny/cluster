@@ -29,6 +29,12 @@ locals {
   // Cluster name (defaults to deployment.id)
   cluster_name = try(local.config.cluster.name, local.prefix)
 
+  // Deployment state mode (tenancy = remote GCS backend, local = local backend)
+  state_mode = try(local.config.deployment.state, "tenancy")
+
+  // Destroy flag (used by shell tools, Terraform reads directly from config)
+  destroy = try(local.config.deployment.destroy, false)
+
   // Extract optional deployment settings with defaults
   gke_version         = try(local.config.cluster.version, null)
   release_channel     = try(local.config.cluster.releaseChannel, "STABLE")
@@ -46,8 +52,16 @@ locals {
   // Security
   binary_authorization_enabled = try(local.config.security.binaryAuthorization.enabled, false)
   secrets_encryption_enabled   = try(local.config.security.secretsEncryption.enabled, true)
+  kms_prevent_destroy          = try(local.config.security.secretsEncryption.preventDestroy, false)
   secure_boot_enabled          = try(local.config.security.shieldedNodes.secureBoot, true)
   integrity_monitoring_enabled = try(local.config.security.shieldedNodes.integrityMonitoring, true)
+
+  // KMS crypto key ID (selects protected vs unprotected resource based on kms_prevent_destroy)
+  kms_crypto_key_id = local.secrets_encryption_enabled ? (
+    local.kms_prevent_destroy
+    ? google_kms_crypto_key.gke_secrets_protected[0].id
+    : google_kms_crypto_key.gke_secrets[0].id
+  ) : null
 
   // Network defaults
   vpc_name = try(local.config.network.name, "${local.prefix}-vpc")

@@ -11,7 +11,7 @@ resource "google_kms_key_ring" "gke" {
 }
 
 resource "google_kms_crypto_key" "gke_secrets" {
-  count = local.secrets_encryption_enabled ? 1 : 0
+  count = (local.secrets_encryption_enabled && !local.kms_prevent_destroy) ? 1 : 0
 
   name     = "${local.prefix}-gke-secrets"
   key_ring = google_kms_key_ring.gke[0].id
@@ -20,14 +20,28 @@ resource "google_kms_crypto_key" "gke_secrets" {
   rotation_period = "7776000s" # 90 days
 
   lifecycle {
-    prevent_destroy = false # Set to true in production
+    prevent_destroy = false
+  }
+}
+
+resource "google_kms_crypto_key" "gke_secrets_protected" {
+  count = (local.secrets_encryption_enabled && local.kms_prevent_destroy) ? 1 : 0
+
+  name     = "${local.prefix}-gke-secrets"
+  key_ring = google_kms_key_ring.gke[0].id
+  purpose  = "ENCRYPT_DECRYPT"
+
+  rotation_period = "7776000s" # 90 days
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
 resource "google_kms_crypto_key_iam_member" "gke_secrets_encrypter" {
   count = local.secrets_encryption_enabled ? 1 : 0
 
-  crypto_key_id = google_kms_crypto_key.gke_secrets[0].id
+  crypto_key_id = local.kms_crypto_key_id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:service-${data.google_project.current.number}@container-engine-robot.iam.gserviceaccount.com"
 }
@@ -140,7 +154,7 @@ resource "google_container_cluster" "main" {
     for_each = local.secrets_encryption_enabled ? [1] : []
     content {
       state    = "ENCRYPTED"
-      key_name = google_kms_crypto_key.gke_secrets[0].id
+      key_name = local.kms_crypto_key_id
     }
   }
 

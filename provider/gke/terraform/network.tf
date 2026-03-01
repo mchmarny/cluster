@@ -157,32 +157,23 @@ resource "google_compute_firewall" "gke_nodes" {
   project = local.project
 
   direction = "INGRESS"
-  priority  = 1000
 
   source_tags = ["gke-${local.prefix}"]
   target_tags = ["gke-${local.prefix}"]
 
   allow {
     protocol = "tcp"
+    ports    = ["443", "10250", "10255", "8472"]
   }
 
   allow {
     protocol = "udp"
+    ports    = ["8472"]
   }
 
   allow {
     protocol = "icmp"
   }
 
-  allow {
-    protocol = "esp"
-  }
-
-  allow {
-    protocol = "ah"
-  }
-
-  allow {
-    protocol = "sctp"
-  }
+  depends_on = [google_compute_network.main]
 }

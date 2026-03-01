@@ -1,15 +1,4 @@
 // =====================================================================================
-// Service Account for GKE Cluster
-// =====================================================================================
-
-resource "google_service_account" "gke_cluster" {
-  account_id   = "${local.prefix}-gke-cluster"
-  display_name = "GKE Cluster Service Account for ${local.cluster_name}"
-  description  = "Service account used by GKE cluster control plane"
-  project      = local.project
-}
-
-// =====================================================================================
 // Service Account for System Node Pool
 // =====================================================================================
 
@@ -94,33 +83,3 @@ resource "google_project_iam_member" "worker_nodes_artifact_registry" {
 # For a general binding, we allow all K8s service accounts from specific namespaces
 # Format: serviceAccount:PROJECT_ID.svc.id.goog[K8S_NAMESPACE/K8S_SA_NAME]
 
-resource "google_service_account_iam_member" "workload_identity_user_system" {
-  count = local.workload_identity_enabled ? 1 : 0
-
-  service_account_id = google_service_account.system_nodes.name
-  role               = "roles/iam.workloadIdentityUser"
-  # Allow all K8s SAs in kube-system namespace
-  member = "serviceAccount:${local.project}.svc.id.goog[kube-system/default]"
-}
-
-resource "google_service_account_iam_member" "workload_identity_user_worker" {
-  count = local.workload_identity_enabled ? 1 : 0
-
-  service_account_id = google_service_account.worker_nodes.name
-  role               = "roles/iam.workloadIdentityUser"
-  # Allow all K8s SAs in default namespace
-  member = "serviceAccount:${local.project}.svc.id.goog[default/default]"
-}
-
-// =====================================================================================
-// KMS Service Account (for secrets encryption)
-// =====================================================================================
-
-resource "google_service_account" "kms" {
-  count = local.secrets_encryption_enabled ? 1 : 0
-
-  account_id   = "${local.prefix}-gke-kms"
-  display_name = "GKE KMS Service Account"
-  description  = "Service account for GKE secrets encryption"
-  project      = local.project
-}
