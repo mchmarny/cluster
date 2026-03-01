@@ -1,0 +1,153 @@
+#!/bin/bash
+
+# GKE discovery tool: shows identity, supported K8s versions, and machine type availability
+# Usage: ./disco [-r us-central1]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+has_tools gcloud jq curl
+
+# Default region from gcloud config if not overridden
+REGION="${CLOUDSDK_COMPUTE_REGION:-$(gcloud config get-value compute/region 2>/dev/null || true)}"
+
+while getopts "r:h" opt; do
+  case $opt in
+    r) REGION="$OPTARG" ;;
+    h)
+      echo "Usage: $0 [-r region]"
+      echo "  -r region    GCP region (default: gcloud config compute/region)"
+      exit 0
+      ;;
+    *) err "Invalid option: -$OPTARG" ;;
+  esac
+done
+
+[[ -z "$REGION" ]] && err "Region required. Set via -r or: gcloud config set compute/region <region>"
+
+msg "Discovering GKE information in region: ${REGION}"
+echo ""
+
+# =============================================================================
+# Identity
+# =============================================================================
+echo "Identity:"
+echo "---------"
+
+ACCOUNT=$(gcloud config get-value account 2>/dev/null || true)
+PROJECT_ID=$(gcloud config get-value project 2>/dev/null || true)
+
+[[ -z "$ACCOUNT" ]] && err "No active gcloud account. Run: gcloud auth login"
+[[ -z "$PROJECT_ID" ]] && err "No active project. Run: gcloud config set project <project-id>"
+
+PROJECT_NUMBER=$(gcloud projects describe "$PROJECT_ID" --format="value(projectNumber)" 2>/dev/null || true)
+EGRESS_IP=$(curl -sf https://checkip.amazonaws.com 2>/dev/null || curl -sf https://ifconfig.me 2>/dev/null || echo "unavailable")
+
+echo "  Account:        $ACCOUNT"
+echo "  Project:        $PROJECT_ID"
+echo "  Project Number: $PROJECT_NUMBER"
+echo "  Egress IP:      $EGRESS_IP"
+echo ""
+echo "  Ready-to-paste authorizedNetworks snippet:"
+echo "    cluster:"
+echo "      authorizedNetworks:"
+echo "        - \"${EGRESS_IP}/32\""
+echo ""
+
+# =============================================================================
+# Kubernetes Versions
+# =============================================================================
+echo "Kubernetes Versions:"
+echo "--------------------"
+
+SERVER_CONFIG=$(gcloud container get-server-config \
+  --region "$REGION" \
+  --project "$PROJECT_ID" \
+  --format json 2>/dev/null)
+
+if [[ -z "$SERVER_CONFIG" ]]; then
+  warn "Could not retrieve server config for region: $REGION"
+else
+  DEFAULT_VERSION=$(echo "$SERVER_CONFIG" | jq -r '.defaultClusterVersion // "unknown"')
+  echo "  Default version: $DEFAULT_VERSION"
+  echo ""
+
+  echo "  Top 5 available versions:"
+  echo "$SERVER_CONFIG" | jq -r '.validMasterVersions[]' 2>/dev/null | head -5 | while read -r v; do
+    echo "    - $v"
+  done
+  echo ""
+
+  echo "  Release channel defaults:"
+  for channel in RAPID REGULAR STABLE; do
+    channel_lower=$(echo "$channel" | tr '[:upper:]' '[:lower:]')
+    channel_version=$(echo "$SERVER_CONFIG" | jq -r \
+      --arg ch "$channel" \
+      '.channels[] | select(.channel == $ch) | .defaultVersion // "n/a"' 2>/dev/null || echo "n/a")
+    printf "    %-10s %s\n" "${channel_lower}:" "$channel_version"
+  done
+fi
+
+echo ""
+
+# =============================================================================
+# Common Machine Types
+# =============================================================================
+echo "Common Machine Types (availability in ${REGION}):"
+echo "--------------------------------------------------"
+
+CPU_TYPES=(
+  "e2-standard-4"
+  "e2-standard-8"
+  "n2-standard-8"
+  "n2-standard-16"
+)
+
+GPU_TYPES=(
+  "a3-highgpu-8g"
+  "g2-standard-4"
+  "a2-highgpu-1g"
+)
+
+check_machine_type() {
+  local machine_type="$1"
+  local available=false
+
+  # Query zones in the region; mark available if at least one zone has it
+  local zones
+  zones=$(gcloud compute zones list \
+    --filter="region:( ${REGION} ) AND status=UP" \
+    --format="value(name)" \
+    --project "$PROJECT_ID" 2>/dev/null)
+
+  for zone in $zones; do
+    if gcloud compute machine-types describe "$machine_type" \
+      --zone "$zone" \
+      --project "$PROJECT_ID" \
+      --format="value(name)" &>/dev/null 2>&1; then
+      available=true
+      break
+    fi
+  done
+
+  if $available; then
+    printf "    %-22s available\n" "${machine_type}"
+  else
+    printf "    %-22s not available\n" "${machine_type}"
+  fi
+}
+
+echo ""
+echo "  CPU types:"
+for mt in "${CPU_TYPES[@]}"; do
+  check_machine_type "$mt"
+done
+
+echo ""
+echo "  GPU types:"
+for mt in "${GPU_TYPES[@]}"; do
+  check_machine_type "$mt"
+done
+
+echo ""
+msg "Done"
