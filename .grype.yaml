@@ -1,5 +1,8 @@
 ignore:
   - vulnerability: CVE-2025-68121  # crypto/tls session resumption, no fix in Go 1.26.0
+  - vulnerability: CVE-2025-22871  # net/http in go1.22.x (bundled gcloud/terraform binaries)
+  - vulnerability: CVE-2024-24790  # net/netip in go1.22.3 (bundled gcloud/terraform binaries)
+  - vulnerability: CVE-2025-4517   # python 3.11.9 zipfile (bundled gcloud SDK)
 
 exclude:
   - '**/.terraform/**'
