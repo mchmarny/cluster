@@ -91,7 +91,7 @@ resource "google_compute_router_nat" "main" {
 
 resource "google_compute_firewall" "rules" {
   for_each = {
-    for rule in try(local.config.network.firewallRules, []) :
+    for rule in try(local.config.network.gke.firewallRules, []) :
     rule.name => rule
   }
 

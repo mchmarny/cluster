@@ -71,7 +71,7 @@ locals {
   ]
 
   # #14: Config-driven additional SG rules
-  additional_sg_rules = try(local.config.network.securityGroups.additionalRules, [])
+  additional_sg_rules = try(local.config.network.eks.securityGroups.additionalRules, [])
 
   additional_ingress_by_target = {
     for target in(local.vpc_cni_enabled ? ["system", "worker", "pod"] : ["system", "worker"]) :

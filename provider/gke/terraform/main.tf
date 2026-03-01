@@ -27,7 +27,7 @@ locals {
   egress_cidr = "${trimspace(data.http.egress_ip.response_body)}/32"
 
   // Cluster name (defaults to deployment.id)
-  cluster_name = try(local.config.cluster.name, local.prefix)
+  cluster_name = try(local.config.cluster.gke.name, local.prefix)
 
   // Deployment state mode (tenancy = remote GCS backend, local = local backend)
   state_mode = try(local.config.deployment.state, "tenancy")
@@ -36,18 +36,18 @@ locals {
   destroy = try(local.config.deployment.destroy, false)
 
   // Extract optional deployment settings with defaults
-  gke_version         = try(local.config.cluster.version, null)
-  release_channel     = try(local.config.cluster.releaseChannel, "STABLE")
-  deletion_protection = try(local.config.cluster.deletionProtection, false)
+  gke_version         = try(local.config.cluster.gke.version, null)
+  release_channel     = try(local.config.cluster.gke.releaseChannel, "STABLE")
+  deletion_protection = try(local.config.cluster.gke.deletionProtection, false)
 
   // Cluster features
-  workload_identity_enabled = try(local.config.cluster.features.workloadIdentity, true)
-  filestore_csi_enabled     = try(local.config.cluster.features.gcpFilestoreCsiDriver, false)
-  gcs_fuse_csi_enabled      = try(local.config.cluster.features.gcsFuseCsiDriver, false)
+  workload_identity_enabled = try(local.config.cluster.gke.features.workloadIdentity, true)
+  filestore_csi_enabled     = try(local.config.cluster.gke.features.gcpFilestoreCsiDriver, false)
+  gcs_fuse_csi_enabled      = try(local.config.cluster.gke.features.gcsFuseCsiDriver, false)
 
   // Private cluster
-  private_cluster_enabled = try(local.config.cluster.private.enabled, true)
-  master_ipv4_cidr_block  = try(local.config.cluster.private.masterIpv4CidrBlock, "172.16.0.0/28")
+  private_cluster_enabled = try(local.config.cluster.gke.private.enabled, true)
+  master_ipv4_cidr_block  = try(local.config.cluster.gke.private.masterIpv4CidrBlock, "172.16.0.0/28")
 
   // Security
   binary_authorization_enabled = try(local.config.security.binaryAuthorization.enabled, false)
@@ -64,16 +64,16 @@ locals {
   ) : null
 
   // Network defaults
-  vpc_name = try(local.config.network.name, "${local.prefix}-vpc")
-  vpc_cidr = try(local.config.network.cidr, "10.0.0.0/16")
+  vpc_name = try(local.config.network.gke.name, "${local.prefix}-vpc")
+  vpc_cidr = try(local.config.network.gke.cidr, "10.0.0.0/16")
 
   // NAT configuration
-  nat_enabled                     = try(local.config.network.nat.enabled, true)
-  nat_source_subnetwork_ip_ranges = try(local.config.network.nat.sourceSubnetIpRangesToNat, "ALL_SUBNETWORKS_ALL_IP_RANGES")
-  nat_min_ports_per_vm            = try(local.config.network.nat.minPortsPerVm, 64)
+  nat_enabled                     = try(local.config.network.gke.nat.enabled, true)
+  nat_source_subnetwork_ip_ranges = try(local.config.network.gke.nat.sourceSubnetIpRangesToNat, "ALL_SUBNETWORKS_ALL_IP_RANGES")
+  nat_min_ports_per_vm            = try(local.config.network.gke.nat.minPortsPerVm, 64)
 
   // Maintenance window
-  maintenance_start_time = try(local.config.cluster.maintenance.window.startTime, "03:00")
+  maintenance_start_time = try(local.config.cluster.gke.maintenance.window.startTime, "03:00")
 
   // Default subnet configuration (auto-computed from VPC CIDR)
   default_node_subnets = [
@@ -115,13 +115,13 @@ locals {
 
   // Process node subnets (use config or defaults)
   node_subnets = {
-    for subnet in try(local.config.network.subnets.nodes, local.default_node_subnets) :
+    for subnet in try(local.config.network.gke.subnets.nodes, local.default_node_subnets) :
     subnet.name => subnet
   }
 
   // Process secondary ranges (use config or defaults)
   secondary_ranges = {
-    for subnet_name, ranges in try(local.config.network.subnets.secondary, local.default_secondary_ranges) :
+    for subnet_name, ranges in try(local.config.network.gke.subnets.secondary, local.default_secondary_ranges) :
     subnet_name => ranges
   }
 
@@ -157,7 +157,7 @@ locals {
   }
 
   // Flatten node pools structure: system object + workers array
-  system_pool_config = try(local.config.compute.nodePools.system, local.default_system_pool)
+  system_pool_config = try(local.config.compute.gke.nodePools.system, local.default_system_pool)
 
   all_node_pools = concat(
     # Add system node pool with name and type
@@ -172,7 +172,7 @@ locals {
     ],
     # Add workers array with type attribute
     [
-      for worker in try(local.config.compute.nodePools.workers, []) :
+      for worker in try(local.config.compute.gke.nodePools.workers, []) :
       merge(
         worker,
         {
@@ -184,7 +184,7 @@ locals {
 
   // Create authorized networks list
   authorized_networks = concat(
-    [for net in try(local.config.cluster.controlPlane.authorizedNetworks, []) : {
+    [for net in try(local.config.cluster.gke.controlPlane.authorizedNetworks, []) : {
       cidr_block   = net.cidr
       display_name = net.name
     }],

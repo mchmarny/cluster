@@ -52,7 +52,7 @@ locals {
 
   # #10: Normalize addon versions — empty string means latest (null)
   addon_versions = {
-    for k, v in try(local.config.cluster.addOns, {}) :
+    for k, v in try(local.config.cluster.eks.addOns, {}) :
     k => v == "" ? null : v
   }
 }
@@ -149,7 +149,7 @@ resource "aws_eks_cluster" "main" {
     subnet_ids              = local.system_subnet_ids
 
     public_access_cidrs = concat(
-      try(local.config.cluster.controlPlane.allowedCidrs, []),
+      try(local.config.cluster.eks.controlPlane.allowedCidrs, []),
       [local.egress_cidr],
     )
 
@@ -183,7 +183,7 @@ resource "aws_eks_access_entry" "worker_nodes" {
 #   - Role name: MyRole or AWSReservedSSO_* (looked up via IAM data source)
 data "aws_iam_role" "admin_roles" {
   for_each = {
-    for role in try(local.config.cluster.adminRoles, []) :
+    for role in try(local.config.cluster.eks.adminRoles, []) :
     role => role if !startswith(role, "arn:")
   }
   name = each.value
@@ -194,7 +194,7 @@ locals {
     # Roles looked up via data source (by name)
     { for k, v in data.aws_iam_role.admin_roles : k => v.arn },
     # Roles provided as full ARNs (used as-is)
-    { for role in try(local.config.cluster.adminRoles, []) : role => role if startswith(role, "arn:") }
+    { for role in try(local.config.cluster.eks.adminRoles, []) : role => role if startswith(role, "arn:") }
   )
 }
 
@@ -225,7 +225,7 @@ resource "aws_eks_access_policy_association" "admin_cluster_admin" {
 
 # EKS Add-ons
 resource "aws_eks_addon" "coredns" {
-  count = try(local.config.cluster.addOns.coreDns, null) != null ? 1 : 0
+  count = try(local.config.cluster.eks.addOns.coreDns, null) != null ? 1 : 0
 
   addon_name                  = "coredns"
   addon_version               = try(local.addon_versions.coreDns, null)
@@ -262,7 +262,7 @@ EOT
 }
 
 resource "aws_eks_addon" "vpc_cni" {
-  count = try(local.config.cluster.addOns.vpcCni, null) != null ? 1 : 0
+  count = try(local.config.cluster.eks.addOns.vpcCni, null) != null ? 1 : 0
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "vpc-cni"
@@ -294,7 +294,7 @@ resource "aws_eks_addon" "vpc_cni" {
 }
 
 resource "aws_eks_addon" "kube_proxy" {
-  count = try(local.config.cluster.addOns.kubeProxy, null) != null ? 1 : 0
+  count = try(local.config.cluster.eks.addOns.kubeProxy, null) != null ? 1 : 0
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "kube-proxy"
@@ -306,7 +306,7 @@ resource "aws_eks_addon" "kube_proxy" {
 }
 
 resource "aws_eks_addon" "cloudwatch_observability" {
-  count = try(local.config.cluster.addOns.cloudwatchObservability, null) != null ? 1 : 0
+  count = try(local.config.cluster.eks.addOns.cloudwatchObservability, null) != null ? 1 : 0
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "amazon-cloudwatch-observability"
@@ -329,7 +329,7 @@ resource "aws_eks_addon" "cloudwatch_observability" {
 }
 
 resource "aws_eks_addon" "metrics_server" {
-  count = try(local.config.cluster.addOns.metricsServer, null) != null ? 1 : 0
+  count = try(local.config.cluster.eks.addOns.metricsServer, null) != null ? 1 : 0
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "metrics-server"
@@ -345,7 +345,7 @@ resource "aws_eks_addon" "metrics_server" {
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
-  count = try(local.config.cluster.addOns.ebsCsi, null) != null ? 1 : 0
+  count = try(local.config.cluster.eks.addOns.ebsCsi, null) != null ? 1 : 0
 
   cluster_name                = aws_eks_cluster.main.name
   addon_name                  = "aws-ebs-csi-driver"

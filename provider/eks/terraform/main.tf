@@ -67,23 +67,23 @@ locals {
   egress_cidr = "${trimspace(data.http.egress_ip.response_body)}/32"
 
   // Extract optional deployment settings with defaults
-  eks_version  = try(local.config.cluster.version, null)
-  cluster_name = try(local.config.cluster.name, local.prefix)
+  eks_version  = try(local.config.cluster.eks.version, null)
+  cluster_name = try(local.config.cluster.eks.name, local.prefix)
 
   // EKS version for AMI lookup (must be specified for Ubuntu AMI auto-selection)
   eks_version_for_ami = local.eks_version
 
   // VPC CNI custom networking gate
-  vpc_cni_enabled = try(local.config.cluster.addOns.vpcCni, null) != null
+  vpc_cni_enabled = try(local.config.cluster.eks.addOns.vpcCni, null) != null
 
   // Network defaults
-  vpc_cidr     = try(local.config.network.cidrs.host, "10.0.0.0/16")
-  pod_cidr     = try(local.config.network.cidrs.pod, "100.65.0.0/16")
-  service_cidr = try(local.config.cluster.controlPlane.cidr, "172.20.0.0/16")
+  vpc_cidr     = try(local.config.network.eks.cidrs.host, "10.0.0.0/16")
+  pod_cidr     = try(local.config.network.eks.cidrs.pod, "100.65.0.0/16")
+  service_cidr = try(local.config.cluster.eks.controlPlane.cidr, "172.20.0.0/16")
 
   // Default VPC endpoints for private clusters
   default_endpoints = ["s3", "ssm", "ec2messages", "ssmmessages", "logs"]
-  vpc_endpoints     = try(local.config.network.endpoints, local.default_endpoints)
+  vpc_endpoints     = try(local.config.network.eks.endpoints, local.default_endpoints)
 
   // Observability
   log_retention_days          = try(local.config.observability.logRetentionInDays, 7)
@@ -98,12 +98,12 @@ locals {
   vpc_cni_warm_ip_target    = tostring(try(local.config.networking.vpcCni.warmIpTarget, 20))
 
   // ASG Configuration
-  asg_health_check_grace_period = try(local.config.compute.autoscaling.healthCheck.gracePeriod, 300)
-  asg_capacity_timeout          = try(local.config.compute.autoscaling.capacityTimeout, "10m")
-  asg_delete_timeout            = try(local.config.compute.autoscaling.deleteTimeout, "30m")
-  asg_min_healthy_percentage    = try(local.config.compute.autoscaling.instanceRefresh.minHealthyPercentage, 90)
-  asg_instance_warmup           = try(local.config.compute.autoscaling.instanceRefresh.instanceWarmup, 300)
-  asg_checkpoint_percentages    = try(local.config.compute.autoscaling.instanceRefresh.checkpointPercentages, [50, 100])
+  asg_health_check_grace_period = try(local.config.compute.eks.autoscaling.healthCheck.gracePeriod, 300)
+  asg_capacity_timeout          = try(local.config.compute.eks.autoscaling.capacityTimeout, "10m")
+  asg_delete_timeout            = try(local.config.compute.eks.autoscaling.deleteTimeout, "30m")
+  asg_min_healthy_percentage    = try(local.config.compute.eks.autoscaling.instanceRefresh.minHealthyPercentage, 90)
+  asg_instance_warmup           = try(local.config.compute.eks.autoscaling.instanceRefresh.instanceWarmup, 300)
+  asg_checkpoint_percentages    = try(local.config.compute.eks.autoscaling.instanceRefresh.checkpointPercentages, [50, 100])
 
   // Storage
   block_volume_mount_default = "/dev/sda1" // Default mount point if not specified
@@ -143,7 +143,7 @@ locals {
   }
 
   // Effective config: user config if provided, otherwise defaults
-  _raw_subnets = try(local.config.network.subnets, null) != null ? local.config.network.subnets : local.default_subnets
+  _raw_subnets = try(local.config.network.eks.subnets, null) != null ? local.config.network.eks.subnets : local.default_subnets
   effective_subnets = merge(
     { for k, v in local._raw_subnets : k => v if k != "pod" },
     { pod = local.vpc_cni_enabled ? try(local._raw_subnets.pod, local.default_subnets.pod) : [] }

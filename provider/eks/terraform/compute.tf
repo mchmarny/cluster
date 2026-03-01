@@ -34,7 +34,7 @@ locals {
   # Worker node groups (self-managed via launch template + ASG)
   # System nodes use an EKS managed node group — see aws_eks_node_group.system
   worker_node_groups = [
-    for worker in try(local.config.compute.nodeGroups.workers, []) :
+    for worker in try(local.config.compute.eks.nodeGroups.workers, []) :
     merge(worker, { type = "worker", subnet = "worker" })
   ]
 
@@ -77,10 +77,10 @@ locals {
 
 # SSH Key Pair (optional - only created if sshPublicKey is provided)
 resource "aws_key_pair" "main" {
-  count = try(local.config.compute.sshPublicKey, null) != null ? 1 : 0
+  count = try(local.config.compute.eks.sshPublicKey, null) != null ? 1 : 0
 
   key_name   = "${local.prefix}-key"
-  public_key = local.config.compute.sshPublicKey
+  public_key = local.config.compute.eks.sshPublicKey
 }
 
 # Launch Templates for Node Groups
@@ -301,14 +301,14 @@ resource "aws_eks_node_group" "system" {
   node_role_arn   = aws_iam_role.system_nodes.arn
   subnet_ids      = local.system_subnet_ids
 
-  instance_types = [local.config.compute.nodeGroups.system.instanceType]
+  instance_types = [local.config.compute.eks.nodeGroups.system.instanceType]
   ami_type       = "AL2023_x86_64_STANDARD"
-  disk_size      = try(local.config.compute.nodeGroups.system.blockDevice.size, local.block_volume_size_default)
+  disk_size      = try(local.config.compute.eks.nodeGroups.system.blockDevice.size, local.block_volume_size_default)
 
   scaling_config {
-    desired_size = local.config.compute.nodeGroups.system.capacity.desired
-    min_size     = try(local.config.compute.nodeGroups.system.capacity.min, local.config.compute.nodeGroups.system.capacity.desired)
-    max_size     = try(local.config.compute.nodeGroups.system.capacity.max, local.config.compute.nodeGroups.system.capacity.desired)
+    desired_size = local.config.compute.eks.nodeGroups.system.capacity.desired
+    min_size     = try(local.config.compute.eks.nodeGroups.system.capacity.min, local.config.compute.eks.nodeGroups.system.capacity.desired)
+    max_size     = try(local.config.compute.eks.nodeGroups.system.capacity.max, local.config.compute.eks.nodeGroups.system.capacity.desired)
   }
 
   update_config {
@@ -327,7 +327,7 @@ resource "aws_eks_node_group" "system" {
     effect = "NO_EXECUTE"
   }
 
-  labels = try(local.config.compute.nodeGroups.system.labels, {})
+  labels = try(local.config.compute.eks.nodeGroups.system.labels, {})
 
   tags = merge(local.effective_tags, {
     Name = "${local.prefix}-system"

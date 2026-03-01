@@ -161,7 +161,7 @@ resource "google_container_cluster" "main" {
   # Addons
   addons_config {
     gce_persistent_disk_csi_driver_config {
-      enabled = try(local.config.cluster.addons.gcePersistentDiskCsiDriver, true)
+      enabled = try(local.config.cluster.gke.addons.gcePersistentDiskCsiDriver, true)
     }
 
     gcp_filestore_csi_driver_config {
