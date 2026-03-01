@@ -23,6 +23,9 @@ type RunConfig struct {
 	// AWS credentials passed explicitly (not via os.Setenv).
 	AccessKeyID     string
 	SecretAccessKey string
+
+	// GCP credentials file path (written from KEY_CONTENT).
+	CredentialsFile string
 }
 
 // Output runs terraform init and captures terraform output -json.
@@ -97,7 +100,8 @@ func buildEnv(cfg RunConfig) []string {
 		"TF_IN_AUTOMATION=1",
 	}
 
-	if cfg.Provider == config.ProviderEKS {
+	switch cfg.Provider {
+	case config.ProviderEKS:
 		if cfg.AccessKeyID != "" {
 			env = append(env, fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", cfg.AccessKeyID))
 		}
@@ -106,6 +110,10 @@ func buildEnv(cfg RunConfig) []string {
 		}
 		if cfg.Region != "" {
 			env = append(env, fmt.Sprintf("AWS_DEFAULT_REGION=%s", cfg.Region))
+		}
+	case config.ProviderGKE:
+		if cfg.CredentialsFile != "" {
+			env = append(env, fmt.Sprintf("GOOGLE_APPLICATION_CREDENTIALS=%s", cfg.CredentialsFile))
 		}
 	}
 

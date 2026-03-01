@@ -8,6 +8,8 @@ import (
 
 	"github.com/urfave/cli/v3"
 
+	"encoding/base64"
+
 	"github.com/mchmarny/cluster/pkg/aws"
 	"github.com/mchmarny/cluster/pkg/config"
 	"github.com/mchmarny/cluster/pkg/gcp"
@@ -122,6 +124,11 @@ func applyCmd() *cli.Command {
 			case config.ProviderGKE:
 				rc.Bucket = gcp.BucketName(cfg)
 				rc.StateKey = gcp.StatePrefix(cfg)
+				credFile, err := resolveGCPCredentials(kc)
+				if err != nil {
+					return err
+				}
+				rc.CredentialsFile = credFile
 			default:
 				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
 			}
@@ -173,6 +180,11 @@ func outputCmd() *cli.Command {
 				rc.Bucket = gcp.BucketName(cfg)
 				rc.StateKey = gcp.StatePrefix(cfg)
 				outFile = gcp.OutputFileName(cfg)
+				credFile, err := resolveGCPCredentials(kc)
+				if err != nil {
+					return err
+				}
+				rc.CredentialsFile = credFile
 			default:
 				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
 			}
@@ -207,7 +219,7 @@ func configFlags() []cli.Flag {
 		},
 		&cli.StringFlag{
 			Name:    "key-content",
-			Usage:   "Base64-encoded AWS key JSON (from setup)",
+			Usage:   "Base64-encoded credentials (AWS key JSON or GCP ADC JSON)",
 			Sources: cli.EnvVars("KEY_CONTENT"),
 		},
 		&cli.StringFlag{
@@ -239,6 +251,41 @@ func loadConfig(cmd *cli.Command) (*config.Config, string, error) {
 	}
 
 	return cfg, configPath, nil
+}
+
+// resolveGCPCredentials decodes base64 KEY_CONTENT to a temp file and returns
+// the file path for GOOGLE_APPLICATION_CREDENTIALS. Returns "" if no key provided.
+func resolveGCPCredentials(keyContent string) (string, error) {
+	if keyContent == "" {
+		if p := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); p != "" {
+			slog.Info("using GCP credentials from GOOGLE_APPLICATION_CREDENTIALS")
+			return p, nil
+		}
+		slog.Info("no GCP credentials provided, terraform will use default provider chain")
+		return "", nil
+	}
+
+	data, err := base64.StdEncoding.DecodeString(keyContent)
+	if err != nil {
+		return "", fmt.Errorf("decoding KEY_CONTENT: %w", err)
+	}
+
+	f, err := os.CreateTemp("", "gcp-credentials-*.json")
+	if err != nil {
+		return "", fmt.Errorf("creating credentials temp file: %w", err)
+	}
+
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		return "", fmt.Errorf("writing credentials: %w", err)
+	}
+
+	if err := f.Close(); err != nil {
+		return "", fmt.Errorf("closing credentials file: %w", err)
+	}
+
+	slog.Info("using GCP credentials from KEY_CONTENT", "path", f.Name())
+	return f.Name(), nil
 }
 
 // resolveCredentials returns AWS credentials using the following priority:
