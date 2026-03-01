@@ -10,6 +10,7 @@ import (
 
 	"github.com/mchmarny/cluster/pkg/aws"
 	"github.com/mchmarny/cluster/pkg/config"
+	"github.com/mchmarny/cluster/pkg/gcp"
 	"github.com/mchmarny/cluster/pkg/state"
 	"github.com/mchmarny/cluster/pkg/terraform"
 )
@@ -103,19 +104,29 @@ func applyCmd() *cli.Command {
 			tfDir := cmd.String("terraform-dir")
 			kc := cmd.String("key-content")
 
-			keyID, secret := resolveCredentials(kc, sd, cfg)
+			rc := terraform.RunConfig{
+				TerraformDir: tfDir,
+				ConfigPath:   configPath,
+				Provider:     cfg.Deployment.Provider,
+				State:        cfg.Deployment.State,
+				Region:       cfg.Deployment.Location,
+				Destroy:      cfg.Deployment.Destroy,
+			}
+			switch cfg.Deployment.Provider {
+			case config.ProviderEKS:
+				keyID, secret := resolveCredentials(kc, sd, cfg)
+				rc.Bucket = aws.BucketName(cfg)
+				rc.StateKey = aws.StateKey(cfg)
+				rc.AccessKeyID = keyID
+				rc.SecretAccessKey = secret
+			case config.ProviderGKE:
+				rc.Bucket = gcp.BucketName(cfg)
+				rc.StateKey = gcp.StatePrefix(cfg)
+			default:
+				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
+			}
 
-			return terraform.Run(ctx, terraform.RunConfig{
-				TerraformDir:    tfDir,
-				ConfigPath:      configPath,
-				State:           cfg.Deployment.State,
-				Bucket:          aws.BucketName(cfg),
-				Region:          cfg.Deployment.Location,
-				StateKey:        aws.StateKey(cfg),
-				Destroy:         cfg.Deployment.Destroy,
-				AccessKeyID:     keyID,
-				SecretAccessKey: secret,
-			})
+			return terraform.Run(ctx, rc)
 		},
 	}
 }
@@ -142,23 +153,35 @@ func outputCmd() *cli.Command {
 			tfDir := cmd.String("terraform-dir")
 			kc := cmd.String("key-content")
 
-			keyID, secret := resolveCredentials(kc, sd, cfg)
+			rc := terraform.RunConfig{
+				TerraformDir: tfDir,
+				ConfigPath:   configPath,
+				Provider:     cfg.Deployment.Provider,
+				State:        cfg.Deployment.State,
+				Region:       cfg.Deployment.Location,
+			}
+			var outFile string
+			switch cfg.Deployment.Provider {
+			case config.ProviderEKS:
+				keyID, secret := resolveCredentials(kc, sd, cfg)
+				rc.Bucket = aws.BucketName(cfg)
+				rc.StateKey = aws.StateKey(cfg)
+				rc.AccessKeyID = keyID
+				rc.SecretAccessKey = secret
+				outFile = aws.OutputFileName(cfg)
+			case config.ProviderGKE:
+				rc.Bucket = gcp.BucketName(cfg)
+				rc.StateKey = gcp.StatePrefix(cfg)
+				outFile = gcp.OutputFileName(cfg)
+			default:
+				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
+			}
 
-			data, err := terraform.Output(ctx, terraform.RunConfig{
-				TerraformDir:    tfDir,
-				ConfigPath:      configPath,
-				State:           cfg.Deployment.State,
-				Bucket:          aws.BucketName(cfg),
-				Region:          cfg.Deployment.Location,
-				StateKey:        aws.StateKey(cfg),
-				AccessKeyID:     keyID,
-				SecretAccessKey: secret,
-			})
+			data, err := terraform.Output(ctx, rc)
 			if err != nil {
 				return err
 			}
 
-			outFile := aws.OutputFileName(cfg)
 			if err := state.WriteFile(sd, outFile, data); err != nil {
 				return fmt.Errorf("saving output: %w", err)
 			}
