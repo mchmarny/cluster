@@ -7,8 +7,8 @@ import (
 	"testing"
 )
 
-func TestGenerateTemplate(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
+func TestGenerateTemplateEKS(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "eks-test.yaml")
 
 	if err := GenerateTemplate(path); err != nil {
 		t.Fatalf("GenerateTemplate() error: %v", err)
@@ -24,14 +24,49 @@ func TestGenerateTemplate(t *testing.T) {
 	for _, want := range []string{
 		"apiVersion:",
 		"deployment:",
+		"provider: eks",
 		"cluster:",
 		"compute:",
 		"tenancy:",
 		"location:",
 		"state: tenancy",
+		"instanceType",
+		"nodeGroups",
 	} {
 		if !strings.Contains(content, want) {
-			t.Errorf("missing %q in template", want)
+			t.Errorf("missing %q in EKS template", want)
+		}
+	}
+}
+
+func TestGenerateTemplateGKE(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "gke-test.yaml")
+
+	if err := GenerateTemplate(path); err != nil {
+		t.Fatalf("GenerateTemplate() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading generated file: %v", err)
+	}
+
+	content := string(data)
+
+	for _, want := range []string{
+		"apiVersion:",
+		"deployment:",
+		"provider: gke",
+		"cluster:",
+		"compute:",
+		"tenancy:",
+		"location:",
+		"state: tenancy",
+		"machineType",
+		"nodePools",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing %q in GKE template", want)
 		}
 	}
 }
