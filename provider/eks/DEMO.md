@@ -1,55 +1,67 @@
 # EKS Demo
 
-## Discovery (optional)
+Walkthrough using `config/eks-min-cpu.yaml` -- a minimal CPU cluster without VPC CNI custom networking.
 
-If you are deploying into new tenancy...
+## 1. Discover versions (optional)
+
+Find supported K8s versions, add-on versions, and your IAM role name for `cluster.adminRoles`:
 
 ```shell
 provider/eks/tools/disco -r us-east-1
 ```
 
-## Init (optional)
+## 2. Generate config (optional)
 
 Generate a starter config if you don't already have one:
 
 ```shell
 docker run --rm -v $PWD/config:/config \
-  ghcr.io/mchmarny/cluster/eks:latest init /config/eks-min.test.yaml
+  ghcr.io/mchmarny/cluster/eks:latest init /config/eks-min-cpu.yaml
 ```
 
-## Setup
+Or copy and edit an existing example from `config/`.
 
-Bootstrap the target tenancy (one-time, as yourself with admin credentials):
+## 3. Setup tenancy (one-time)
+
+Bootstrap the AWS account with S3 state bucket, IAM user, and access key. Run as yourself with admin credentials:
 
 ```shell
-provider/eks/tools/setup -c config/eks-min.test.yaml -o provider/eks/keys
+provider/eks/tools/setup -c config/eks-min-cpu.yaml -o provider/eks/keys
 ```
 
-This creates the S3 state bucket, IAM user, policy, and access key (in the target folder)
+## 4. Apply
 
-## Apply
-
-Deploy the desired cluster state using the service account key from setup:
-
-> Set `deployment.destroy: true` in the config to destroy the cluster.
+Deploy using the service account key from setup:
 
 ```shell
 docker run --rm \
-  -e KEY_CONTENT="$(base64 < provider/eks/keys/.mini-615299774277-key.json)" \
-  -e CONFIG_CONTENT="$(base64 < config/eks-min.test.yaml)" \
+  -e KEY_CONTENT="$(base64 < provider/eks/keys/.min-cpu-615299774277-key.json)" \
+  -e CONFIG_CONTENT="$(base64 < config/eks-min-cpu.yaml)" \
   ghcr.io/mchmarny/cluster/eks:latest apply
 ```
 
-## Output
+## 5. Validate (optional)
 
-Retrieve deployment outputs (endpoint, access command, etc.) and save to the state volume:
+Run post-deployment checks:
+
+```shell
+provider/eks/tools/validate -c config/eks-min-cpu.yaml
+```
+
+## 6. Output (optional)
+
+Retrieve deployment outputs and save to a local directory:
 
 ```shell
 docker run --rm \
   -v $PWD/state:/state \
-  -e KEY_CONTENT="$(base64 < provider/eks/keys/.mini-615299774277-key.json)" \
-  -e CONFIG_CONTENT="$(base64 < config/eks-min.test.yaml)" \
+  -e KEY_CONTENT="$(base64 < provider/eks/keys/.min-cpu-615299774277-key.json)" \
+  -e CONFIG_CONTENT="$(base64 < config/eks-min-cpu.yaml)" \
   ghcr.io/mchmarny/cluster/eks:latest output
 ```
 
-The output JSON is saved to `/state/mini-615299774277-output.json`.
+The output JSON is saved to `/state/min-cpu-615299774277-output.json`.
+
+## 7. Destroy
+
+Set `deployment.destroy: true` in the config and re-run apply (step 4).
