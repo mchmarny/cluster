@@ -48,7 +48,7 @@ compute:
             labels:
               nodeGroup: cpu-worker
         - name: gpu-worker
-          machineType: a3-highgpu-8g
+          machineType: a3-megagpu-8g
           diskType: pd-ssd
           diskSizeGb: 200
           zones:

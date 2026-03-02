@@ -149,14 +149,30 @@ compute:
               nodeGroup: cpu-worker
         # GPU worker example:
         # - name: gpu-worker
-        #   machineType: n1-standard-4
-        #   accelerators:
-        #     - type: nvidia-tesla-t4
-        #       count: 1
+        #   machineType: a3-megagpu-8g
+        #   diskType: pd-ssd
+        #   zones:
+        #     - us-west1-a
         #   autoscaling:
         #     enabled: true
         #     minNodes: 0
         #     maxNodes: 3
+        #   guestAccelerator:
+        #     type: nvidia-h100-mega-80gb
+        #     count: 8
+        #     gpuDriverInstallation:
+        #       gpuDriverVersion: DEFAULT
+        #   hostMaintenancePolicy:
+        #     maintenanceInterval: PERIODIC
+        #   nodeConfig:
+        #     # capacityReservations:
+        #     #   - projects/my-project/reservations/my-reservation
+        #     taints:
+        #       - key: dedicated
+        #         value: gpu-workload
+        #         effect: NO_SCHEDULE
+        #     labels:
+        #       nodeGroup: gpu-worker
 `
 
 // GenerateTemplate writes a starter config file to the given path.

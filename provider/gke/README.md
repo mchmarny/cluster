@@ -199,7 +199,7 @@ compute:
             labels:
               nodeGroup: cpu-worker
         - name: gpu-worker
-          machineType: a3-highgpu-8g
+          machineType: a3-megagpu-8g
           diskType: pd-ssd
           zones:
             - us-central1-a
@@ -222,7 +222,7 @@ compute:
 ```
 
 Notes:
-- GPU machine types (e.g., `a3-highgpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
+- GPU machine types (e.g., `a3-megagpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
 - A3 High uses `nvidia-h100-mega-80gb` (not `nvidia-h100-80gb`)
 - `hostMaintenancePolicy.maintenanceInterval: PERIODIC` is required for GPU nodes with capacity reservations
 - Pin GPU pools to specific `zones` where the accelerator type is available
