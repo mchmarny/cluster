@@ -52,7 +52,7 @@ compute:
           diskType: pd-ssd
           diskSizeGb: 200
           zones:
-            - us-central1-b
+            - us-central1-c
           autoscaling:
             enabled: true
             minNodes: 2

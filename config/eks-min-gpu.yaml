@@ -3,7 +3,7 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: demo2
+  id: demo3
   provider: eks
   tenancy: "615299774277"
   location: us-east-1
@@ -24,7 +24,6 @@ cluster:
         - 54.68.11.139/32
     addOns:
       coreDns: ""
-      ebsCsi: ""
       kubeProxy: ""
       vpcCni: ""
 
@@ -59,9 +58,9 @@ compute:
       system:
         instanceType: m7i.xlarge
         capacity:
-          desired: 2
+          desired: 3
       workers:
-        - name: cpu-worker-1
+        - name: cpu-worker
           instanceType: m4.16xlarge
           capacity:
             desired: 1
