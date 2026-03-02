@@ -204,20 +204,31 @@ compute:
           zones:
             - us-central1-a
           guestAccelerator:
-            type: nvidia-h100-80gb
+            type: nvidia-h100-mega-80gb
             count: 8
+            gpuDriverInstallation:
+              gpuDriverVersion: DEFAULT
+          hostMaintenancePolicy:
+            maintenanceInterval: PERIODIC
           nodeConfig:
             capacityReservations:
               - projects/my-project/reservations/my-reservation
+            taints:
+              - key: dedicated
+                value: gpu-workload
+                effect: NO_SCHEDULE
             labels:
               nodeGroup: gpu-worker
 ```
 
 Notes:
 - GPU machine types (e.g., `a3-highgpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
+- A3 High uses `nvidia-h100-mega-80gb` (not `nvidia-h100-80gb`)
+- `hostMaintenancePolicy.maintenanceInterval: PERIODIC` is required for GPU nodes with capacity reservations
 - Pin GPU pools to specific `zones` where the accelerator type is available
-- Use `guestAccelerator` (object, not list) with `type` and `count` fields
+- `gpuDriverInstallation.gpuDriverVersion` controls driver version (`DEFAULT`, `LATEST`, or specific version)
 - Capacity reservations go under `nodeConfig.capacityReservations`
+- Taints under `nodeConfig.taints` with `key`, `value`, `effect` (`NO_SCHEDULE`, `NO_EXECUTE`, `PREFER_NO_SCHEDULE`)
 - Verify GPU availability: `gcloud compute accelerator-types list --filter="zone:YOUR_REGION"`
 - Your egress IP is automatically added to the API server authorized networks during deployment
 - When `cluster.gke.version` is null, the latest version in the release channel is used

@@ -7,7 +7,7 @@ deployment:
   tenancy: eidosx
   location: us-central1
   state: tenancy
-  destroy: true
+  destroy: false
   tags:
     env: demo
 
@@ -52,16 +52,24 @@ compute:
           diskType: pd-ssd
           diskSizeGb: 200
           zones:
-            - us-central1-c
+            - us-central1-a
           autoscaling:
             enabled: true
             minNodes: 2
             maxNodes: 2
           guestAccelerator:
-            type: nvidia-h100-80gb
+            type: nvidia-h100-mega-80gb
             count: 8
+            gpuDriverInstallation:
+              gpuDriverVersion: DEFAULT
+          hostMaintenancePolicy:
+            maintenanceInterval: PERIODIC
           nodeConfig:
             capacityReservations:
               - projects/nv-dgxcloudprod-20240108/reservations/h100-a3-mega-phase-1-general-pool-384-us-c1-reservation
+            taints:
+              - key: dedicated
+                value: gpu-workload
+                effect: NO_SCHEDULE
             labels:
               nodeGroup: gpu-worker
