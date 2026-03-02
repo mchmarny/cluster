@@ -68,6 +68,12 @@ resource "google_project_iam_member" "worker_nodes_resource_metadata_writer" {
   member  = "serviceAccount:${google_service_account.worker_nodes.email}"
 }
 
+resource "google_project_iam_member" "worker_nodes_compute_admin" {
+  project = local.project
+  role    = "roles/compute.admin"
+  member  = "serviceAccount:${google_service_account.worker_nodes.email}"
+}
+
 resource "google_project_iam_member" "worker_nodes_artifact_registry" {
   project = local.project
   role    = "roles/artifactregistry.reader"
