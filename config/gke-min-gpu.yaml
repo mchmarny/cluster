@@ -52,7 +52,7 @@ compute:
           diskType: pd-ssd
           diskSizeGb: 200
           zones:
-            - us-central1-a
+            - us-central1-b
           autoscaling:
             enabled: true
             minNodes: 2
@@ -62,8 +62,8 @@ compute:
             count: 8
             gpuDriverInstallation:
               gpuDriverVersion: DEFAULT
-          # hostMaintenancePolicy:
-          #   maintenanceInterval: PERIODIC
+          hostMaintenancePolicy:
+            maintenanceInterval: PERIODIC
           nodeConfig:
             gvnic: true
             capacityReservations:

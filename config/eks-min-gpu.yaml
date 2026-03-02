@@ -3,12 +3,12 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: min-gpu
+  id: demo2
   provider: eks
   tenancy: "615299774277"
   location: us-east-1
   state: tenancy
-  destroy: true
+  destroy: false
   tags:
     env: dev
 
