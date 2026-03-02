@@ -64,6 +64,12 @@ func TestGenerateTemplateGKE(t *testing.T) {
 		"state: tenancy",
 		"machineType",
 		"nodePools",
+		"guestAccelerator",
+		"gpuDriverInstallation",
+		"hostMaintenancePolicy",
+		"maintenanceInterval: PERIODIC",
+		"capacityReservations",
+		"taints",
 	} {
 		if !strings.Contains(content, want) {
 			t.Errorf("missing %q in GKE template", want)
