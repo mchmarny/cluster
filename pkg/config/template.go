@@ -165,6 +165,7 @@ compute:
         #   hostMaintenancePolicy:
         #     maintenanceInterval: PERIODIC
         #   nodeConfig:
+        #     gvnic: true
         #     # capacityReservations:
         #     #   - projects/my-project/reservations/my-reservation
         #     taints:

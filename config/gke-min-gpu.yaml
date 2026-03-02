@@ -62,9 +62,10 @@ compute:
             count: 8
             gpuDriverInstallation:
               gpuDriverVersion: DEFAULT
-          hostMaintenancePolicy:
-            maintenanceInterval: PERIODIC
+          # hostMaintenancePolicy:
+          #   maintenanceInterval: PERIODIC
           nodeConfig:
+            gvnic: true
             capacityReservations:
               - projects/nv-dgxcloudprod-20240108/reservations/h100-a3-mega-phase-1-general-pool-384-us-c1-reservation
             taints:

@@ -51,6 +51,14 @@ resource "google_container_node_pool" "pools" {
       "https://www.googleapis.com/auth/cloud-platform"
     ])
 
+    # gVNIC (required for A3/A3 Mega machine types)
+    dynamic "gvnic" {
+      for_each = try(each.value.nodeConfig.gvnic, false) ? [1] : []
+      content {
+        enabled = true
+      }
+    }
+
     # Preemptible/Spot instances
     preemptible = try(each.value.nodeConfig.preemptible, false)
     spot        = try(each.value.nodeConfig.spot, false)
