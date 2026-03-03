@@ -306,6 +306,15 @@ resource "aws_launch_template" "system" {
     http_put_response_hop_limit = 2
   }
 
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size = try(local.config.compute.eks.nodeGroups.system.blockDevice.size, local.block_volume_size_default)
+      volume_type = try(local.config.compute.eks.nodeGroups.system.blockDevice.type, local.block_volume_type_default)
+      encrypted   = true
+    }
+  }
+
   tags = merge(local.effective_tags, {
     Name = "${local.prefix}-system"
   })
@@ -321,7 +330,6 @@ resource "aws_eks_node_group" "system" {
 
   instance_types = [local.config.compute.eks.nodeGroups.system.instanceType]
   ami_type       = "AL2023_x86_64_STANDARD"
-  disk_size      = try(local.config.compute.eks.nodeGroups.system.blockDevice.size, local.block_volume_size_default)
 
   launch_template {
     id      = aws_launch_template.system.id
