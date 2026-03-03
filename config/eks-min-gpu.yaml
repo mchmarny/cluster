@@ -3,7 +3,7 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: demo4
+  id: demo
   provider: eks
   tenancy: "615299774277"
   location: us-east-1
