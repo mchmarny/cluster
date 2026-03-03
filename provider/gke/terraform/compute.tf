@@ -65,11 +65,11 @@ resource "google_container_node_pool" "pools" {
 
     # Capacity reservation
     dynamic "reservation_affinity" {
-      for_each = try(each.value.nodeConfig.capacityReservations, [])
+      for_each = length(try(each.value.nodeConfig.capacityReservations, [])) > 0 ? [1] : []
       content {
         consume_reservation_type = "SPECIFIC_RESERVATION"
         key                      = "compute.googleapis.com/reservation-name"
-        values                   = [reservation_affinity.value]
+        values                   = each.value.nodeConfig.capacityReservations
       }
     }
 
