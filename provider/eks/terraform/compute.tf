@@ -293,8 +293,24 @@ resource "aws_autoscaling_group" "node_groups" {
   }
 }
 
+# Launch template for system nodes — sets IMDS hop limit to 2 so containerized
+# workloads (e.g. EBS CSI driver) can reach the instance metadata endpoint.
+resource "aws_launch_template" "system" {
+  name                   = "${local.prefix}-system"
+  update_default_version = true
+
+  metadata_options {
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 2
+  }
+
+  tags = merge(local.effective_tags, {
+    Name = "${local.prefix}-system"
+  })
+}
+
 # EKS Managed Node Group for System Nodes
-# Uses AL2023 defaults — no custom AMI, launch template, or bootstrap script needed
+# Uses AL2023 defaults — launch template only overrides IMDS metadata options
 resource "aws_eks_node_group" "system" {
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${local.prefix}-system"
@@ -304,6 +320,11 @@ resource "aws_eks_node_group" "system" {
   instance_types = [local.config.compute.eks.nodeGroups.system.instanceType]
   ami_type       = "AL2023_x86_64_STANDARD"
   disk_size      = try(local.config.compute.eks.nodeGroups.system.blockDevice.size, local.block_volume_size_default)
+
+  launch_template {
+    id      = aws_launch_template.system.id
+    version = aws_launch_template.system.latest_version
+  }
 
   scaling_config {
     desired_size = local.config.compute.eks.nodeGroups.system.capacity.desired
