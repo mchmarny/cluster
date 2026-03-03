@@ -59,6 +59,9 @@ compute:
         instanceType: m7i.xlarge
         capacity:
           desired: 3
+        labels:
+            nodeGroup: system-worker
+            dedicated: system-workload
       workers:
         - name: cpu-worker
           instanceType: m4.16xlarge
@@ -66,6 +69,7 @@ compute:
             desired: 1
           labels:
             nodeGroup: cpu-worker
+            dedicated: user-workload
         - name: gpu-worker
           instanceType: p5.48xlarge
           capacity:
@@ -75,3 +79,4 @@ compute:
               target: cr-0cbe491320188dfa6
           labels:
             nodeGroup: gpu-worker
+            dedicated: user-workload

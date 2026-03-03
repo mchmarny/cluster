@@ -117,7 +117,12 @@
                       "type": "string",
                       "description": "EC2 instance type for system nodes"
                     },
-                    "capacity": { "$ref": "#/$defs/capacity" }
+                    "capacity": { "$ref": "#/$defs/capacity" },
+                    "labels": {
+                      "type": "object",
+                      "additionalProperties": { "type": "string" },
+                      "description": "Kubernetes node labels"
+                    }
                   }
                 },
                 "workers": {
