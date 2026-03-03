@@ -108,7 +108,8 @@ resource "aws_launch_template" "node_groups" {
   }
 
   metadata_options {
-    http_tokens                 = "required"
+    http_endpoint               = "enabled"
+    http_tokens                 = "required" # Enforces IMDSv2
     http_put_response_hop_limit = 2
   }
 
@@ -300,7 +301,8 @@ resource "aws_launch_template" "system" {
   update_default_version = true
 
   metadata_options {
-    http_tokens                 = "required"
+    http_endpoint               = "enabled"
+    http_tokens                 = "required" # Enforces IMDSv2
     http_put_response_hop_limit = 2
   }
 
