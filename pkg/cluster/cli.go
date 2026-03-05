@@ -48,6 +48,7 @@ func Execute(version, commit string) {
 		},
 		Commands: []*cli.Command{
 			initCmd(),
+			planCmd(),
 			applyCmd(),
 			outputCmd(),
 		},
@@ -134,6 +135,59 @@ func applyCmd() *cli.Command {
 			}
 
 			return terraform.Run(ctx, rc)
+		},
+	}
+}
+
+func planCmd() *cli.Command {
+	return &cli.Command{
+		Name:  "plan",
+		Usage: "Validate configuration and display Terraform plan",
+		Flags: append(configFlags(),
+			&cli.StringFlag{
+				Name:    "terraform-dir",
+				Usage:   "Terraform working directory",
+				Value:   "/builder/terraform",
+				Sources: cli.EnvVars("TERRAFORM_DIR"),
+			},
+		),
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			cfg, configPath, err := loadConfig(cmd)
+			if err != nil {
+				return err
+			}
+
+			tfDir := cmd.String("terraform-dir")
+			sd := cmd.String("state-dir")
+			kc := cmd.String("key-content")
+
+			rc := terraform.RunConfig{
+				TerraformDir: tfDir,
+				ConfigPath:   configPath,
+				Provider:     cfg.Deployment.Provider,
+				State:        cfg.Deployment.State,
+				Region:       cfg.Deployment.Location,
+			}
+			switch cfg.Deployment.Provider {
+			case config.ProviderEKS:
+				keyID, secret := resolveCredentials(kc, sd, cfg)
+				rc.Bucket = aws.BucketName(cfg)
+				rc.StateKey = aws.StateKey(cfg)
+				rc.AccessKeyID = keyID
+				rc.SecretAccessKey = secret
+			case config.ProviderGKE:
+				rc.Bucket = gcp.BucketName(cfg)
+				rc.StateKey = gcp.StatePrefix(cfg)
+				credFile, err := resolveGCPCredentials(kc)
+				if err != nil {
+					return err
+				}
+				rc.CredentialsFile = credFile
+			default:
+				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
+			}
+
+			return terraform.Plan(ctx, rc)
 		},
 	}
 }
