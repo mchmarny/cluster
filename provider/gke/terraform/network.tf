@@ -163,7 +163,7 @@ resource "google_compute_firewall" "gke_nodes" {
 
   allow {
     protocol = "tcp"
-    ports    = ["443", "10250", "10255", "8472"]
+    ports    = ["443", "8080", "8472", "9090", "10250", "10255"]
   }
 
   allow {

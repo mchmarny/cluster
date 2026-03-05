@@ -144,6 +144,13 @@ locals {
               protocol    = "tcp"
               cidr_blocks = local.node_pod_cidr_blocks
             },
+            {
+              description = "Allow Prometheus metrics traffic"
+              from_port   = 9090
+              to_port     = 9090
+              protocol    = "tcp"
+              cidr_blocks = local.node_pod_cidr_blocks
+            },
           ],
           local.shared_node_ingress,
           local.additional_ingress_by_target["system"],
