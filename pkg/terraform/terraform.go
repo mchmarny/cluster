@@ -51,6 +51,29 @@ func Output(ctx context.Context, cfg RunConfig) ([]byte, error) {
 	return []byte(out), nil
 }
 
+// Plan runs terraform init and plan, streaming output without applying.
+func Plan(ctx context.Context, cfg RunConfig) error {
+	if cfg.TerraformDir == "" {
+		return fmt.Errorf("terraform dir is required")
+	}
+
+	slog.Info("terraform plan", "dir", cfg.TerraformDir, "state", cfg.State,
+		"configPath", cfg.ConfigPath)
+
+	env := buildEnv(cfg)
+
+	initArgs := buildInitArgs(cfg)
+	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
+		return fmt.Errorf("terraform init: %w", err)
+	}
+
+	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "plan"); err != nil {
+		return fmt.Errorf("terraform plan: %w", err)
+	}
+
+	return nil
+}
+
 // Run orchestrates the full Terraform lifecycle.
 func Run(ctx context.Context, cfg RunConfig) error {
 	if cfg.TerraformDir == "" {
