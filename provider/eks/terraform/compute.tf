@@ -1,36 +1,4 @@
 locals {
-  # AWS recommended spec for P6e and P6i GB200 instances
-  # NCI0 as ENA (EFA) for 100Gbps for N/S
-  # NCI1, 5, 9, & 13 as EFA-only for 400Gbps for E/W for a total of 1600G E/W
-  efa_network_interfaces = {
-    gb200 = [
-      for i in [0, 1, 5, 9, 13] : {
-        associate_public_ip_address = false
-        delete_on_termination       = true
-        device_index                = 0
-        interface_type              = i == 0 ? "interface" : "efa-only"
-        network_card_index          = i
-        security_groups = [
-          aws_security_group.main["${local.prefix}-efa"].id,
-          aws_security_group.main["${local.prefix}-worker"].id
-        ]
-      }
-    ]
-    h100 = [
-      for i in range(4) : {
-        associate_public_ip_address = false
-        delete_on_termination       = true
-        device_index                = i == 0 ? 0 : 1
-        interface_type              = i == 0 ? "efa" : "efa-only"
-        network_card_index          = i
-        security_groups = [
-          aws_security_group.main["${local.prefix}-efa"].id,
-          aws_security_group.main["${local.prefix}-worker"].id
-        ]
-      }
-    ]
-  }
-
   # Worker node groups (self-managed via launch template + ASG)
   # System nodes use an EKS managed node group — see aws_eks_node_group.system
   worker_node_groups = [
@@ -47,21 +15,55 @@ locals {
     )
   }
 
-  # Map instance type prefix to EFA accelerator type
-  # p5 = H100, p6e/p6i = GB200
-  instance_type_accelerators = {
-    "p5"  = "h100"
-    "p6e" = "gb200"
-    "p6i" = "gb200"
-  }
-
-  # Effective accelerator per worker: explicit config wins, otherwise derive from instance type prefix
-  effective_accelerators = {
+  # Map instance type prefix to GPU family for EFA interface layout
+  # p5 = H100 (all network cards are EFA-capable)
+  # p6e/p6i = GB200 (AWS-recommended card indices: 0, 1, 5, 9, 13)
+  gpu_family = {
     for ng in local.worker_node_groups :
     ng.name => coalesce(
       try(ng.accelerator, null),
-      try(local.instance_type_accelerators[split(".", ng.instanceType)[0]], null),
+      try({
+        "p5"  = "h100"
+        "p6e" = "gb200"
+        "p6i" = "gb200"
+      }[split(".", ng.instanceType)[0]], null),
       "na"
+    )
+  }
+
+  # Per-node-group EFA network interfaces
+  # GB200: AWS-recommended card indices (0, 1, 5, 9, 13)
+  # GPU (h100 etc.): all network cards, count from instance type data source
+  # Non-GPU: no EFA interfaces
+  efa_network_interfaces = {
+    for ng in local.worker_node_groups :
+    ng.name => (
+      local.gpu_family[ng.name] == "gb200" ? [
+        for i in [0, 1, 5, 9, 13] : {
+          associate_public_ip_address = false
+          delete_on_termination       = true
+          device_index                = 0
+          interface_type              = i == 0 ? "interface" : "efa-only"
+          network_card_index          = i
+          security_groups = [
+            aws_security_group.main["${local.prefix}-efa"].id,
+            aws_security_group.main["${local.prefix}-worker"].id
+          ]
+        }
+      ] :
+      length(data.aws_ec2_instance_type.worker[ng.name].gpus) > 0 ? [
+        for i in range(data.aws_ec2_instance_type.worker[ng.name].maximum_network_cards) : {
+          associate_public_ip_address = false
+          delete_on_termination       = true
+          device_index                = i == 0 ? 0 : 1
+          interface_type              = i == 0 ? "efa" : "efa-only"
+          network_card_index          = i
+          security_groups = [
+            aws_security_group.main["${local.prefix}-efa"].id,
+            aws_security_group.main["${local.prefix}-worker"].id
+          ]
+        }
+      ] : []
     )
   }
 
@@ -94,7 +96,7 @@ resource "aws_launch_template" "node_groups" {
   key_name               = length(aws_key_pair.main) > 0 ? aws_key_pair.main[0].key_name : null
 
   # Only set vpc_security_group_ids if no network interfaces are specified
-  vpc_security_group_ids = contains(keys(local.efa_network_interfaces), local.effective_accelerators[each.value.name]) ? null : [
+  vpc_security_group_ids = length(local.efa_network_interfaces[each.value.name]) > 0 ? null : [
     aws_security_group.main["${local.prefix}-efa"].id,
     aws_security_group.main["${local.prefix}-worker"].id
   ]
@@ -125,7 +127,7 @@ resource "aws_launch_template" "node_groups" {
   # EFA network interfaces for supported instance types
   # EFA instances must be in the same subnet, so we use the first subnet of the appropriate type
   dynamic "network_interfaces" {
-    for_each = contains(keys(local.efa_network_interfaces), local.effective_accelerators[each.value.name]) ? local.efa_network_interfaces[local.effective_accelerators[each.value.name]] : []
+    for_each = local.efa_network_interfaces[each.value.name]
     content {
       associate_public_ip_address = network_interfaces.value.associate_public_ip_address
       delete_on_termination       = network_interfaces.value.delete_on_termination

@@ -1,5 +1,13 @@
 data "aws_caller_identity" "current" {}
 
+# Instance type metadata for worker nodes (used to determine EFA network card count)
+data "aws_ec2_instance_type" "worker" {
+  for_each = {
+    for ng in try(local.worker_node_groups, []) : ng.name => ng.instanceType
+  }
+  instance_type = each.value
+}
+
 # Query available AZs for default subnet generation
 data "aws_availability_zones" "available" {
   state = "available"
