@@ -57,6 +57,8 @@ terraform.rc
 # Generated files (may contain secerts or sensitive data)
 *-backend.yaml
 *-pv.yaml
+gpu-net-config.yaml
+eni-config.yaml
 deployments/eks/runai
 
 

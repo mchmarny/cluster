@@ -280,3 +280,42 @@ resource "google_compute_firewall" "gpu_internal" {
     protocol = "icmp"
   }
 }
+
+// =====================================================================================
+// GPU Network K8s CRDs (Network + GKENetworkParamSet)
+// =====================================================================================
+
+resource "local_file" "gpu_net_config" {
+  count = local.gpu_nets_enabled ? 1 : 0
+
+  filename        = "${path.module}/gpu-net-config.yaml"
+  file_permission = "0644"
+  content = templatefile("${path.module}/templates/gpu-net-config.ytpl", {
+    gvnic_enabled = local.gvnic_net_enabled
+    gvnic_name    = "${local.prefix}-gvnic"
+    gvnic_vpc     = local.gvnic_net_enabled ? google_compute_network.gvnic[0].name : ""
+    gvnic_subnet  = local.gvnic_net_enabled ? google_compute_subnetwork.gvnic[0].name : ""
+    gpu_nets = [
+      for i, net in local.gpu_nets : {
+        name   = net.name
+        vpc    = google_compute_network.gpu[i].name
+        subnet = google_compute_subnetwork.gpu[i].name
+      }
+    ]
+  })
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/sh", "-c"]
+    command     = <<-EOC
+      set -eu
+      gcloud container clusters get-credentials ${google_container_cluster.main.name} \
+        --region ${local.region} --project ${local.project}
+      kubectl apply -f ${self.filename}
+    EOC
+  }
+
+  depends_on = [
+    google_container_cluster.main,
+    google_container_node_pool.pools,
+  ]
+}

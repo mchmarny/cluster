@@ -27,11 +27,21 @@ cluster:
 network:
   gke:
     gpuNets:
-      count: 4
+      count: 8
       mtu: 8244
       cidrBase: "10.0.32.0/16"
       gvnicCidr: "10.0.16.0/20"
       # networkProfile: "us-central1-c-vpc-roce"
+    firewallRules:
+      - name: nccl-internal
+        direction: INGRESS
+        priority: 900
+        sourceRanges:
+          - "10.0.0.0/8"
+        allowed:
+          - protocol: tcp
+          - protocol: udp
+          - protocol: icmp
 
 compute:
   gke:

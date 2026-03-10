@@ -1,0 +1,44 @@
+%{~ if gvnic_enabled ~}
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: ${gvnic_name}
+spec:
+  vpc: ${gvnic_vpc}
+  vpcSubnet: ${gvnic_subnet}
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: ${gvnic_name}
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: ${gvnic_name}
+---
+%{~ endif ~}
+%{~ for net in gpu_nets ~}
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: ${net.name}
+spec:
+  vpc: ${net.vpc}
+  vpcSubnet: ${net.subnet}
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: ${net.name}
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: ${net.name}
+---
+%{~ endfor ~}
