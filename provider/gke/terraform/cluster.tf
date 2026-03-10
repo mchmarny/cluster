@@ -67,9 +67,10 @@ resource "google_container_cluster" "main" {
   initial_node_count       = 1
 
   # Delete protection
-  deletion_protection   = local.deletion_protection
-  enable_shielded_nodes = true
-  datapath_provider     = "ADVANCED_DATAPATH" # Dataplane V2
+  deletion_protection     = local.deletion_protection
+  enable_shielded_nodes   = true
+  enable_multi_networking = local.gpu_nets_enabled
+  datapath_provider       = "ADVANCED_DATAPATH" # Dataplane V2
 
   network    = google_compute_network.main.id
   subnetwork = google_compute_subnetwork.main[keys(local.node_subnets)[0]].id
@@ -79,6 +80,14 @@ resource "google_container_cluster" "main" {
     for_each = local.release_channel != null ? [1] : []
     content {
       channel = local.release_channel
+    }
+  }
+
+  # K8s beta APIs for Dynamic Resource Allocation (GPU scheduling, required < 1.35)
+  dynamic "enable_k8s_beta_apis" {
+    for_each = length(local.k8s_beta_apis) > 0 ? [1] : []
+    content {
+      enabled_apis = local.k8s_beta_apis
     }
   }
 

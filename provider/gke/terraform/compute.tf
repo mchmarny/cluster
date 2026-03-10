@@ -75,6 +75,9 @@ resource "google_container_node_pool" "pools" {
 
     # Labels
     labels = merge(
+      {
+        "nodeGroup" = each.value.type == "system" ? "system" : each.key
+      },
       try(each.value.nodeConfig.labels, {}),
       {
         "gke-cluster" = local.cluster_name
@@ -187,6 +190,24 @@ resource "google_container_node_pool" "pools" {
   network_config {
     create_pod_range     = false
     enable_private_nodes = local.private_cluster_enabled
+
+    # gVNIC network for GPU node pools
+    dynamic "additional_node_network_configs" {
+      for_each = (try(each.value.guestAccelerator, null) != null && local.gvnic_net_enabled) ? [1] : []
+      content {
+        network    = google_compute_network.gvnic[0].name
+        subnetwork = google_compute_subnetwork.gvnic[0].name
+      }
+    }
+
+    # GPU NIC networks for GPUDirect-TCPXO
+    dynamic "additional_node_network_configs" {
+      for_each = try(each.value.guestAccelerator, null) != null ? local.gpu_nets : {}
+      content {
+        network    = google_compute_network.gpu[additional_node_network_configs.key].name
+        subnetwork = google_compute_subnetwork.gpu[additional_node_network_configs.key].name
+      }
+    }
   }
 
   timeouts {

@@ -37,7 +37,7 @@ locals {
 
   // Extract optional deployment settings with defaults
   gke_version         = try(local.config.cluster.gke.version, null)
-  release_channel     = try(local.config.cluster.gke.releaseChannel, "STABLE")
+  release_channel     = local.gke_version != null ? null : try(local.config.cluster.gke.releaseChannel, "STABLE")
   deletion_protection = try(local.config.cluster.gke.deletionProtection, false)
 
   // Cluster features
@@ -112,6 +112,33 @@ locals {
       }
     }
   }
+
+  // GPU multi-NIC networking (for GPUDirect-TCPXO)
+  gpu_nets_config  = try(local.config.network.gke.gpuNets, null)
+  gpu_nets_count   = try(local.gpu_nets_config.count, 0)
+  gpu_nets_mtu     = try(local.gpu_nets_config.mtu, 8244)
+  gpu_nets_enabled = local.gpu_nets_count > 0
+
+  // Dedicated gVNIC network for high-bandwidth non-GPU traffic
+  gvnic_net_enabled = try(local.gpu_nets_config.gvnic, local.gpu_nets_enabled)
+  gvnic_net_cidr    = try(local.gpu_nets_config.gvnicCidr, "10.0.16.0/20")
+
+  // Generate GPU network definitions: {0: {name: "gpu-nic-0", cidr: "10.0.32.0/20"}, ...}
+  gpu_nets = {
+    for i in range(local.gpu_nets_count) : i => {
+      name           = "${local.prefix}-gpu-nic-${i}"
+      cidr           = cidrsubnet(try(local.gpu_nets_config.cidrBase, "10.0.32.0/16"), 4, i)
+      networkProfile = try(local.gpu_nets_config.networkProfile, null)
+    }
+  }
+
+  // K8s beta APIs for Dynamic Resource Allocation (required for GKE < 1.35)
+  k8s_beta_apis = local.gpu_nets_enabled ? [
+    "resource.k8s.io/v1beta1/deviceclasses",
+    "resource.k8s.io/v1beta1/resourceclaims",
+    "resource.k8s.io/v1beta1/resourceclaimtemplates",
+    "resource.k8s.io/v1beta1/resourceslices",
+  ] : []
 
   // Process node subnets (use config or defaults)
   node_subnets = {

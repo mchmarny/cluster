@@ -177,3 +177,106 @@ resource "google_compute_firewall" "gke_nodes" {
 
   depends_on = [google_compute_network.main]
 }
+
+// =====================================================================================
+// gVNIC Network (dedicated high-bandwidth non-GPU traffic)
+// =====================================================================================
+
+resource "google_compute_network" "gvnic" {
+  count = local.gvnic_net_enabled ? 1 : 0
+
+  name                            = "${local.prefix}-gvnic"
+  auto_create_subnetworks         = false
+  routing_mode                    = "REGIONAL"
+  mtu                             = local.gpu_nets_mtu
+  delete_default_routes_on_create = false
+
+  project = local.project
+}
+
+resource "google_compute_subnetwork" "gvnic" {
+  count = local.gvnic_net_enabled ? 1 : 0
+
+  name          = "${local.prefix}-gvnic-subnet"
+  ip_cidr_range = local.gvnic_net_cidr
+  region        = local.region
+  network       = google_compute_network.gvnic[0].id
+
+  project = local.project
+}
+
+resource "google_compute_firewall" "gvnic_internal" {
+  count = local.gvnic_net_enabled ? 1 : 0
+
+  name    = "${local.prefix}-gvnic-internal"
+  network = google_compute_network.gvnic[0].name
+  project = local.project
+
+  direction     = "INGRESS"
+  priority      = 1000
+  source_ranges = [local.gvnic_net_cidr]
+
+  allow {
+    protocol = "tcp"
+  }
+
+  allow {
+    protocol = "udp"
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+}
+
+// =====================================================================================
+// GPU Multi-NIC Networks (for GPUDirect-TCPXO)
+// =====================================================================================
+
+resource "google_compute_network" "gpu" {
+  for_each = local.gpu_nets
+
+  name                            = each.value.name
+  auto_create_subnetworks         = false
+  routing_mode                    = "REGIONAL"
+  mtu                             = local.gpu_nets_mtu
+  network_profile                 = each.value.networkProfile
+  delete_default_routes_on_create = false
+
+  project = local.project
+}
+
+resource "google_compute_subnetwork" "gpu" {
+  for_each = local.gpu_nets
+
+  name          = "${each.value.name}-subnet"
+  ip_cidr_range = each.value.cidr
+  region        = local.region
+  network       = google_compute_network.gpu[each.key].id
+
+  project = local.project
+}
+
+resource "google_compute_firewall" "gpu_internal" {
+  for_each = local.gpu_nets
+
+  name    = "${each.value.name}-internal"
+  network = google_compute_network.gpu[each.key].name
+  project = local.project
+
+  direction     = "INGRESS"
+  priority      = 1000
+  source_ranges = [for _, net in local.gpu_nets : net.cidr]
+
+  allow {
+    protocol = "tcp"
+  }
+
+  allow {
+    protocol = "udp"
+  }
+
+  allow {
+    protocol = "icmp"
+  }
+}

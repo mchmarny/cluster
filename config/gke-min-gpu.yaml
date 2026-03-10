@@ -2,18 +2,19 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: mini-gpu
+  id: aicr-demo
   provider: gke
   tenancy: eidosx
   location: us-central1
   state: tenancy
-  destroy: false
+  destroy: true
   tags:
     env: demo
 
 cluster:
   gke:
     version: "1.35"
+    releaseChannel: null
     controlPlane:
       authorizedNetworks:
         - cidr: 216.228.127.128/30
@@ -22,6 +23,15 @@ cluster:
           name: nw1
         - cidr: 54.68.11.139/32
           name: nw2
+
+network:
+  gke:
+    gpuNets:
+      count: 4
+      mtu: 8244
+      cidrBase: "10.0.32.0/16"
+      gvnicCidr: "10.0.16.0/20"
+      # networkProfile: "us-central1-c-vpc-roce"
 
 compute:
   gke:
@@ -32,6 +42,10 @@ compute:
           enabled: true
           minNodes: 1
           maxNodes: 3
+        nodeConfig:
+          labels:
+            nodeGroup: system-worker
+            dedicated: system-workload
 
       workers:
         - name: cpu-worker
@@ -47,6 +61,8 @@ compute:
           nodeConfig:
             labels:
               nodeGroup: cpu-worker
+              dedicated: user-workload
+
         - name: gpu-worker
           machineType: a3-megagpu-8g
           diskType: pd-ssd
@@ -74,3 +90,4 @@ compute:
                 effect: NO_SCHEDULE
             labels:
               nodeGroup: gpu-worker
+              dedicated: user-workload

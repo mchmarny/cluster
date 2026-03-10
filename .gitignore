@@ -85,6 +85,7 @@ test-*.yaml
 test-*.json
 TEMP_DEMO.md
 *.test.yaml
+test*.yaml
 
 
 # Mirror directory (build artifact)
