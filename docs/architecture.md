@@ -69,6 +69,15 @@ network:                 # Optional -- auto-computed from VPC CIDR for both prov
 
 The `init` command generates the appropriate template based on the output filename prefix (`gke-*` produces a GKE template, anything else produces EKS).
 
+### CLI Commands
+
+| Command | Description |
+|---------|-------------|
+| `init <path>` | Generate a starter configuration file |
+| `plan -c <config>` | Show Terraform plan output without applying |
+| `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
+| `output -c <config>` | Retrieve Terraform outputs and save to state directory |
+
 ## Node Pool Separation
 
 Every cluster uses two pool tiers:
@@ -112,6 +121,19 @@ make build-gke   # Mirror providers + build GKE image
 ```
 
 Tags matching `v*-eks` or `v*-gke` pushed to `main` trigger CI builds.
+
+## GKE: GPU Multi-NIC Networking
+
+Optional support for multi-NIC GPU networking (GPUDirect-TCPXO) on instances like `a3-megagpu-8g`, driven by the `network.gke.gpuNets` config block.
+
+- **Separate VPCs per GPU NIC** -- creates dedicated VPC networks for each GPU NIC plus a gVNIC network, with their own subnets and firewall rules.
+- **Cluster flags** -- auto-enables `enable_multi_networking` on the cluster and activates Kubernetes beta APIs for Dynamic Resource Allocation (DRA).
+- **Post-deploy CRDs** -- generates and applies `Network` and `GKENetworkParamSet` custom resources to wire GPU NICs into the cluster networking layer.
+- **Conditional** -- only activates when `gpuNets.count > 0`. CPU-only clusters are unaffected.
+
+## EKS: EFA Networking
+
+EFA (Elastic Fabric Adapter) support for GPU instances uses dynamic network card count discovery. The EFA network card count is determined automatically from instance type metadata rather than being hardcoded, ensuring correct configuration across different instance types (e.g., `p5.48xlarge`, `p4d.24xlarge`).
 
 ## Security Model
 

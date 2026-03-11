@@ -29,12 +29,6 @@ locals {
   // Cluster name (defaults to deployment.id)
   cluster_name = try(local.config.cluster.gke.name, local.prefix)
 
-  // Deployment state mode (tenancy = remote GCS backend, local = local backend)
-  state_mode = try(local.config.deployment.state, "tenancy")
-
-  // Destroy flag (used by shell tools, Terraform reads directly from config)
-  destroy = try(local.config.deployment.destroy, false)
-
   // Extract optional deployment settings with defaults
   gke_version         = try(local.config.cluster.gke.version, null)
   release_channel     = local.gke_version != null ? null : try(local.config.cluster.gke.releaseChannel, "STABLE")

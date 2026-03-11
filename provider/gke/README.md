@@ -186,6 +186,24 @@ cluster:
         - cidr: 216.228.127.128/30
           name: office-vpn
 
+network:
+  gke:
+    gpuNets:
+      count: 8
+      mtu: 8244
+      cidrBase: "192.168.0.0/16"
+      gvnicCidr: "192.168.128.0/20"
+    firewallRules:
+      - name: nccl-internal
+        direction: INGRESS
+        priority: 900
+        sourceRanges:
+          - "10.0.0.0/8"
+        allowed:
+          - protocol: tcp
+          - protocol: udp
+          - protocol: icmp
+
 compute:
   gke:
     nodePools:
@@ -233,6 +251,76 @@ Notes:
 - Verify GPU availability: `gcloud compute accelerator-types list --filter="zone:YOUR_REGION"`
 - Your egress IP is automatically added to the API server authorized networks during deployment
 - When `cluster.gke.version` is null, the latest version in the release channel is used
+
+### GPU Multi-NIC Networking
+
+The `network.gke.gpuNets` config enables dedicated GPU NIC networks for GPUDirect-TCPXO, used by A3 machine types for high-bandwidth inter-node GPU communication.
+
+**Config fields** (`network.gke.gpuNets`):
+
+| Field | Description |
+|-------|-------------|
+| `count` | Number of GPU NIC networks to create. Set to 8 for `a3-megagpu-8g`, 4 for `a3-highgpu-8g`. |
+| `mtu` | MTU for all GPU and gVNIC networks (default: `8244`). |
+| `cidrBase` | Base CIDR subdivided into `count` subnets (default: `10.0.32.0/16`). |
+| `gvnicCidr` | CIDR for the dedicated gVNIC subnet (default: `10.0.16.0/20`). |
+| `networkProfile` | GCP network profile for GPU VPCs (optional, null by default). |
+
+**What gets created when enabled:**
+
+1. **gVNIC network** -- dedicated VPC + subnet + internal firewall for high-bandwidth non-GPU traffic. Auto-created when `gpuNets.count > 0`.
+2. **GPU NIC networks** -- N separate VPCs (one per NIC), each with a subnet and internal firewall allowing tcp/udp/icmp across all GPU subnets.
+3. **K8s CRDs** -- `Network` and `GKENetworkParamSet` resources for each GPU NIC and gVNIC network, auto-applied to the cluster via a `local-exec` provisioner after deploy.
+
+The CRD manifest is generated from `templates/gpu-net-config.ytpl` and written to `<config-basename>-gpu-net-config.yaml` alongside the config file.
+
+**When to use:**
+
+| Machine Type | GPU NIC Count | Accelerator |
+|-------------|---------------|-------------|
+| `a3-megagpu-8g` | 8 | `nvidia-h100-mega-80gb` |
+| `a3-highgpu-8g` | 4 | `nvidia-h100-80gb` |
+
+### Custom Firewall Rules
+
+Optional custom firewall rules can be added under `network.gke.firewallRules`. Each rule specifies name, direction, priority, source ranges, and allowed protocols:
+
+```yaml
+network:
+  gke:
+    firewallRules:
+      - name: nccl-internal
+        direction: INGRESS
+        priority: 900
+        sourceRanges:
+          - "10.0.0.0/8"
+        allowed:
+          - protocol: tcp
+          - protocol: udp
+          - protocol: icmp
+```
+
+Rules are created on the main VPC. This is useful for opening NCCL/RDMA ports across node subnets for distributed GPU training.
+
+### File Layout
+
+```
+provider/gke/
+  terraform/
+    main.tf          # Config loading, locals, validation
+    cluster.tf       # GKE cluster resource
+    compute.tf       # Node pools (system + workers)
+    network.tf       # VPC, subnets, NAT, firewall, GPU networks
+    iam.tf           # Service accounts, IAM bindings
+    outputs.tf       # Status JSON output
+    variables.tf     # Single CONFIG_PATH variable
+    templates/
+      gpu-net-config.ytpl  # K8s CRD template for GPU multi-NIC
+  tools/
+    actuate          # Plan + apply wrapper
+    setup            # Bootstrap GCP project
+    common           # Shared shell functions
+```
 
 ### Complete Config Reference
 
@@ -302,6 +390,21 @@ network:
       enabled: true
       sourceSubnetIpRangesToNat: ALL_SUBNETWORKS_ALL_IP_RANGES
       minPortsPerVm: 64
+    gpuNets:                     # GPU multi-NIC networking (disabled by default)
+      count: 0                   # Number of GPU NIC networks (8 for a3-megagpu-8g, 4 for a3-highgpu-8g)
+      mtu: 8244                  # Jumbo frames for GPUDirect-TCPXO
+      cidrBase: "10.0.32.0/16"  # Base CIDR for GPU networks (subdivided by count)
+      gvnic: true                # Auto-enabled when gpuNets.count > 0
+      gvnicCidr: "10.0.16.0/20" # Dedicated gVNIC subnet CIDR
+      networkProfile: null       # GCP network profile (optional)
+    firewallRules: []            # Custom firewall rules (optional array)
+      # - name: nccl-internal
+      #   direction: INGRESS
+      #   priority: 900
+      #   sourceRanges: ["10.0.0.0/8"]
+      #   allowed:
+      #     - protocol: tcp
+      #     - protocol: udp
 
 compute:
   gke:
@@ -320,9 +423,9 @@ compute:
           preemptible: false
           spot: false
           labels: {}
-          taints:                # Auto-applied: dedicated=system-workload:NoSchedule
+          taints:                # Auto-applied: dedicated=CriticalAddonsOnly:NoSchedule
             - key: dedicated
-              value: system-workload
+              value: CriticalAddonsOnly
               effect: NO_SCHEDULE
 
       workers:                   # Application workload node pools
@@ -372,6 +475,11 @@ compute:
 | Location policy | BALANCED |
 | NAT min ports/VM | 64 |
 | Maintenance window | 03:00 UTC |
+| GPU multi-NIC | Disabled (`gpuNets.count: 0`) |
+| GPU NIC MTU | 8244 |
+| GPU NIC CIDR base | `10.0.32.0/16` |
+| gVNIC CIDR | `10.0.16.0/20` |
+| Custom firewall rules | `[]` (none) |
 
 ---
 
@@ -379,7 +487,8 @@ compute:
 
 | Category | Resources |
 |----------|-----------|
-| Network | VPC, system/worker subnets with secondary ranges, Cloud Router, Cloud NAT |
+| Network | VPC, system/worker subnets with secondary ranges, Cloud Router, Cloud NAT, custom firewall rules |
+| GPU Network | (when `gpuNets` enabled) gVNIC VPC + subnet, N GPU VPCs + subnets, internal firewall rules, K8s Network + GKENetworkParamSet CRDs |
 | Security | KMS key ring and crypto key for secrets encryption, firewall rules |
 | GKE | Regional cluster, OIDC/Workload Identity, authorized networks |
 | Compute | System node pool, worker node pools (CPU and/or GPU) |
@@ -419,7 +528,7 @@ System nodes have taints. Add tolerations to your pod spec:
 tolerations:
 - key: "dedicated"
   operator: "Equal"
-  value: "system-workload"
+  value: "CriticalAddonsOnly"
   effect: "NoSchedule"
 ```
 

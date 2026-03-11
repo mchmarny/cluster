@@ -7,7 +7,7 @@ Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurat
 | Platform | Directory | Features |
 |----------|-----------|----------|
 | [AWS (EKS)](./provider/eks/) | `provider/eks/` | Multi-AZ, optional VPC CNI custom networking, self-managed nodes, CloudWatch |
-| [Google Cloud (GKE)](./provider/gke/) | `provider/gke/` | Regional cluster, Workload Identity, Shielded Nodes |
+| [Google Cloud (GKE)](./provider/gke/) | `provider/gke/` | Regional cluster, Workload Identity, Shielded Nodes, multi-NIC GPU networking for GPUDirect-TCPXO (a3-megagpu-8g) |
 
 ## Usage
 
@@ -33,6 +33,7 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 | Command | Description |
 |---------|-------------|
 | `init <path>` | Generate a starter configuration file (provider-aware: `gke-*` prefix generates GKE template) |
+| `plan -c <config>` | Show Terraform plan output without applying |
 | `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
 | `output -c <config>` | Retrieve Terraform outputs and save to state directory |
 
