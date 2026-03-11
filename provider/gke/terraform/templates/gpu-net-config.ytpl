@@ -1,4 +1,4 @@
-%{~ if gvnic_enabled ~}
+%{ if gvnic_enabled ~}
 apiVersion: networking.gke.io/v1
 kind: GKENetworkParamSet
 metadata:
@@ -19,8 +19,8 @@ spec:
     kind: GKENetworkParamSet
     name: ${gvnic_name}
 ---
-%{~ endif ~}
-%{~ for net in gpu_nets ~}
+%{ endif ~}
+%{ for net in gpu_nets ~}
 apiVersion: networking.gke.io/v1
 kind: GKENetworkParamSet
 metadata:
@@ -41,4 +41,4 @@ spec:
     kind: GKENetworkParamSet
     name: ${net.name}
 ---
-%{~ endfor ~}
+%{ endfor ~}
