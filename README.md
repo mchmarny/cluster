@@ -28,6 +28,13 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 | EKS | `ghcr.io/mchmarny/cluster/eks:<version>` |
 | GKE | `ghcr.io/mchmarny/cluster/gke:<version>` |
 
+Check image version:
+
+```bash
+docker run --rm ghcr.io/mchmarny/cluster/gke:<version> --version
+docker run --rm ghcr.io/mchmarny/cluster/eks:<version> --version
+```
+
 ### CLI Commands
 
 | Command | Description |
