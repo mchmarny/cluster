@@ -71,17 +71,33 @@ if echo "$EXISTING" | tr ',' '\n' | grep -qF "$NEW_CIDR"; then
   exit 0
 fi
 
-msg "Existing CIDRs: ${EXISTING}"
+EXISTING_COUNT=$(echo "$EXISTING" | tr ',' '\n' | wc -l | tr -d ' ')
+msg "Current authorized CIDRs (${EXISTING_COUNT}):"
+echo "$EXISTING" | tr ',' '\n' | while read -r cidr; do
+  msg "  ${cidr}"
+done
 
 # ---------------------------------------------------------------------------
 # Update authorized networks
 # ---------------------------------------------------------------------------
 
 msg "Adding ${NEW_CIDR} to authorized networks..."
-gcloud container clusters update "$CLUSTER_NAME" \
+if ! gcloud container clusters update "$CLUSTER_NAME" \
   --region "$REGION" --project "$PROJECT_ID" \
   --enable-master-authorized-networks \
   --master-authorized-networks "${EXISTING},${NEW_CIDR}" \
-  --quiet
+  --quiet 2>&1; then
+  err "Failed to update authorized networks"
+fi
 
-msg "Done. Authorized networks updated."
+# Confirm
+UPDATED=$(gcloud container clusters describe "$CLUSTER_NAME" \
+  --region "$REGION" --project "$PROJECT_ID" \
+  --format='value(masterAuthorizedNetworksConfig.cidrBlocks.map().cidrBlock)' 2>/dev/null | tr ';' ',')
+
+if echo "$UPDATED" | tr ',' '\n' | grep -qF "$NEW_CIDR"; then
+  UPDATED_COUNT=$(echo "$UPDATED" | tr ',' '\n' | wc -l | tr -d ' ')
+  msg "Confirmed: ${NEW_CIDR} added (${UPDATED_COUNT} CIDRs total)"
+else
+  err "Verification failed: ${NEW_CIDR} not found in updated authorized networks"
+fi
