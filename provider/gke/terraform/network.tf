@@ -304,6 +304,19 @@ resource "local_file" "gpu_net_config" {
     ]
   })
 
+  provisioner "local-exec" {
+    interpreter = ["/bin/sh", "-c"]
+    command     = <<-EOC
+      set -eu
+      if [ -n "$${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
+        gcloud auth activate-service-account --key-file="$$GOOGLE_APPLICATION_CREDENTIALS"
+      fi
+      gcloud container clusters get-credentials ${google_container_cluster.main.name} \
+        --region ${local.region} --project ${local.project}
+      kubectl apply -f ${self.filename}
+    EOC
+  }
+
   depends_on = [
     google_container_cluster.main,
     google_container_node_pool.pools,
