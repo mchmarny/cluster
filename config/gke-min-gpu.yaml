@@ -22,6 +22,8 @@ cluster:
           name: nw1
         - cidr: 54.68.11.139/32
           name: nw2
+        - cidr: 128.77.49.34/32
+          name: nw3
 
 network:
   gke:
