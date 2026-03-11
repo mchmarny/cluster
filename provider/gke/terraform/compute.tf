@@ -221,6 +221,7 @@ resource "google_container_node_pool" "pools" {
       initial_node_count,
       node_config[0].labels,
       node_config[0].taint,
+      node_config[0].ephemeral_storage_local_ssd_config,
     ]
   }
 
