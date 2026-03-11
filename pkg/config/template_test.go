@@ -66,8 +66,6 @@ func TestGenerateTemplateGKE(t *testing.T) {
 		"nodePools",
 		"guestAccelerator",
 		"gpuDriverInstallation",
-		"hostMaintenancePolicy",
-		"maintenanceInterval: PERIODIC",
 		"capacityReservations",
 		"taints",
 	} {

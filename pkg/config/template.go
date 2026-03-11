@@ -162,8 +162,6 @@ compute:
         #     count: 8
         #     gpuDriverInstallation:
         #       gpuDriverVersion: DEFAULT
-        #   hostMaintenancePolicy:
-        #     maintenanceInterval: PERIODIC
         #   nodeConfig:
         #     gvnic: true
         #     # capacityReservations:

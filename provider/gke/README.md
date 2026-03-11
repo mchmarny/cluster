@@ -226,8 +226,6 @@ compute:
             count: 8
             gpuDriverInstallation:
               gpuDriverVersion: DEFAULT
-          hostMaintenancePolicy:
-            maintenanceInterval: PERIODIC
           nodeConfig:
             gvnic: true
             capacityReservations:
@@ -243,7 +241,7 @@ compute:
 Notes:
 - GPU machine types (e.g., `a3-megagpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
 - A3 High uses `nvidia-h100-mega-80gb` (not `nvidia-h100-80gb`)
-- `hostMaintenancePolicy.maintenanceInterval: PERIODIC` is required for GPU nodes with capacity reservations
+- `hostMaintenancePolicy` is managed automatically by GKE for GPU nodes with capacity reservations (do not set in config — causes perpetual node pool replacements)
 - Pin GPU pools to specific `zones` where the accelerator type is available
 - `gpuDriverInstallation.gpuDriverVersion` controls driver version (`DEFAULT`, `LATEST`, or specific version)
 - Capacity reservations go under `nodeConfig.capacityReservations`
