@@ -250,6 +250,27 @@ Notes:
 - Your egress IP is automatically added to the API server authorized networks during deployment
 - When `cluster.gke.version` is null, the latest version in the release channel is used
 
+### Adding Authorized Networks
+
+To access the cluster API from a new location, add your egress CIDR to the config and re-apply:
+
+```bash
+# Get your current egress CIDR
+tools/cidr
+# 128.77.49.34/32
+```
+
+Add it to the config under `cluster.gke.controlPlane.authorizedNetworks`:
+
+```yaml
+controlPlane:
+  authorizedNetworks:
+    - cidr: 128.77.49.34/32
+      name: my-laptop
+```
+
+Then re-apply with the same container image. This persists the CIDR in config for future applies.
+
 ### GPU Multi-NIC Networking
 
 The `network.gke.gpuNets` config enables dedicated GPU NIC networks for GPUDirect-TCPXO, used by A3 machine types for high-bandwidth inter-node GPU communication.

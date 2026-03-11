@@ -220,6 +220,26 @@ Notes:
 - System nodes use the AL2023 EKS AMI (managed node group); workers use Ubuntu EKS AMI
 - When using automatic AMI selection, `cluster.version` must be specified
 
+### Adding Allowed CIDRs
+
+To access the cluster API from a new location, add your egress CIDR to the config and re-apply:
+
+```bash
+# Get your current egress CIDR
+tools/cidr
+# 128.77.49.34/32
+```
+
+Add it to the config under `cluster.eks.controlPlane.allowedCidrs`:
+
+```yaml
+controlPlane:
+  allowedCidrs:
+    - 128.77.49.34/32
+```
+
+Then re-apply with the same container image. This persists the CIDR in config for future applies.
+
 ### Complete Config Reference
 
 Every field Terraform reads, annotated with defaults. Omit any field to use its default.
