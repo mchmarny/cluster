@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Print current egress IP as a CIDR
+# Usage: tools/cidr
+
+IP=$(curl -s https://checkip.amazonaws.com | tr -d '[:space:]')
+[[ -z "$IP" ]] && echo "error: failed to detect egress IP" >&2 && exit 1
+echo "${IP}/32"
