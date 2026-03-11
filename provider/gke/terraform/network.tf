@@ -309,7 +309,7 @@ resource "local_file" "gpu_net_config" {
     command     = <<-EOC
       set -eu
       if [ -n "$${GOOGLE_APPLICATION_CREDENTIALS:-}" ]; then
-        gcloud auth activate-service-account --key-file="$$GOOGLE_APPLICATION_CREDENTIALS"
+        gcloud auth activate-service-account --key-file="$GOOGLE_APPLICATION_CREDENTIALS"
       fi
       gcloud container clusters get-credentials ${google_container_cluster.main.name} \
         --region ${local.region} --project ${local.project}
