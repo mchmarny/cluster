@@ -135,13 +135,10 @@ resource "google_container_node_pool" "pools" {
       }
     }
 
-    # Host maintenance policy (required for GPU nodes with capacity reservations)
-    dynamic "host_maintenance_policy" {
-      for_each = try(each.value.hostMaintenancePolicy.maintenanceInterval, null) != null ? [1] : []
-      content {
-        maintenance_interval = each.value.hostMaintenancePolicy.maintenanceInterval
-      }
-    }
+    # Host maintenance policy — GKE manages this for GPU nodes with reservations.
+    # Setting it in Terraform causes perpetual ForceNew replacements because
+    # the API does not return it, so Terraform always sees it as "new".
+    # Configure via gcloud or console if needed.
 
     # Workload metadata configuration
     dynamic "workload_metadata_config" {
