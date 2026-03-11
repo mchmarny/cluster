@@ -33,6 +33,12 @@ resource "google_project_iam_member" "system_nodes_resource_metadata_writer" {
   member  = "serviceAccount:${google_service_account.system_nodes.email}"
 }
 
+resource "google_project_iam_member" "system_nodes_default_sa" {
+  project = local.project
+  role    = "roles/container.defaultNodeServiceAccount"
+  member  = "serviceAccount:${google_service_account.system_nodes.email}"
+}
+
 // =====================================================================================
 // Service Account for Worker Node Pools
 // =====================================================================================
@@ -65,6 +71,12 @@ resource "google_project_iam_member" "worker_nodes_monitoring_viewer" {
 resource "google_project_iam_member" "worker_nodes_resource_metadata_writer" {
   project = local.project
   role    = "roles/stackdriver.resourceMetadata.writer"
+  member  = "serviceAccount:${google_service_account.worker_nodes.email}"
+}
+
+resource "google_project_iam_member" "worker_nodes_default_sa" {
+  project = local.project
+  role    = "roles/container.defaultNodeServiceAccount"
   member  = "serviceAccount:${google_service_account.worker_nodes.email}"
 }
 
