@@ -56,15 +56,18 @@ msg "Egress IP: ${NEW_CIDR}"
 # Get existing authorized CIDRs
 # ---------------------------------------------------------------------------
 
-msg "Reading authorized networks from cluster: ${CLUSTER_NAME}"
-EXISTING=$(timeout 10 gcloud container clusters describe "$CLUSTER_NAME" \
+msg "Reading authorized networks from config..."
+EXISTING=$(yq -r '[.cluster.gke.controlPlane.authorizedNetworks[].cidr] | join(",")' "$CONFIG_FILE")
+[[ -z "$EXISTING" ]] && err "No authorized networks found in config"
+
+# Also read live CIDRs (may include terraform-executor) if API is reachable
+LIVE=$(timeout 10 gcloud container clusters describe "$CLUSTER_NAME" \
   --region "$REGION" --project "$PROJECT_ID" \
   --format='value(masterAuthorizedNetworksConfig.cidrBlocks.map().cidrBlock)' 2>/dev/null | tr ';' ',')
 
-if [[ -z "$EXISTING" ]]; then
-  msg "Cannot reach cluster API (current IP may not be authorized). Reading CIDRs from config..."
-  EXISTING=$(yq -r '[.cluster.gke.controlPlane.authorizedNetworks[].cidr] | join(",")' "$CONFIG_FILE")
-  [[ -z "$EXISTING" ]] && err "No authorized networks found in config or cluster API"
+if [[ -n "$LIVE" ]]; then
+  # Merge live CIDRs with config (deduplicated)
+  EXISTING=$(echo "${EXISTING},${LIVE}" | tr ',' '\n' | sort -u | paste -sd ',' -)
 fi
 
 # Check if already authorized
