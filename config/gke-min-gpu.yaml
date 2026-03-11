@@ -2,12 +2,12 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: aicr-demo
+  id: aicr-demo1
   provider: gke
   tenancy: eidosx
   location: us-central1
   state: tenancy
-  destroy: true
+  destroy: false
   tags:
     env: demo
 
@@ -29,9 +29,8 @@ network:
     gpuNets:
       count: 8
       mtu: 8244
-      cidrBase: "10.0.32.0/16"
-      gvnicCidr: "10.0.16.0/20"
-      # networkProfile: "us-central1-c-vpc-roce"
+      cidrBase: "192.168.0.0/16"
+      gvnicCidr: "192.168.128.0/20"
     firewallRules:
       - name: nccl-internal
         direction: INGRESS

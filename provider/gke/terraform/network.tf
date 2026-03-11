@@ -288,7 +288,7 @@ resource "google_compute_firewall" "gpu_internal" {
 resource "local_file" "gpu_net_config" {
   count = local.gpu_nets_enabled ? 1 : 0
 
-  filename        = "${path.module}/gpu-net-config.yaml"
+  filename        = "${local.configDir}/${local.configBasename}-gpu-net-config.yaml"
   file_permission = "0644"
   content = templatefile("${path.module}/templates/gpu-net-config.ytpl", {
     gvnic_enabled = local.gvnic_net_enabled
@@ -303,16 +303,6 @@ resource "local_file" "gpu_net_config" {
       }
     ]
   })
-
-  provisioner "local-exec" {
-    interpreter = ["/bin/sh", "-c"]
-    command     = <<-EOC
-      set -eu
-      gcloud container clusters get-credentials ${google_container_cluster.main.name} \
-        --region ${local.region} --project ${local.project}
-      kubectl apply -f ${self.filename}
-    EOC
-  }
 
   depends_on = [
     google_container_cluster.main,
