@@ -57,12 +57,14 @@ msg "Egress IP: ${NEW_CIDR}"
 # ---------------------------------------------------------------------------
 
 msg "Reading authorized networks from cluster: ${CLUSTER_NAME}"
-EXISTING=$(gcloud container clusters describe "$CLUSTER_NAME" \
+EXISTING=$(timeout 10 gcloud container clusters describe "$CLUSTER_NAME" \
   --region "$REGION" --project "$PROJECT_ID" \
   --format='value(masterAuthorizedNetworksConfig.cidrBlocks.map().cidrBlock)' 2>/dev/null | tr ';' ',')
 
 if [[ -z "$EXISTING" ]]; then
-  err "Failed to read existing authorized networks (cluster may not exist)"
+  msg "Cannot reach cluster API (current IP may not be authorized). Reading CIDRs from config..."
+  EXISTING=$(yq -r '[.cluster.gke.controlPlane.authorizedNetworks[].cidr] | join(",")' "$CONFIG_FILE")
+  [[ -z "$EXISTING" ]] && err "No authorized networks found in config or cluster API"
 fi
 
 # Check if already authorized
