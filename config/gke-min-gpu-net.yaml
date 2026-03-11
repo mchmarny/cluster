@@ -1,0 +1,179 @@
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gvnic
+spec:
+  vpc: aicr-demo-gvnic
+  vpcSubnet: aicr-demo-gvnic-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gvnic
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gvnic
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-0
+spec:
+  vpc: aicr-demo-gpu-nic-0
+  vpcSubnet: aicr-demo-gpu-nic-0-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-0
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-0
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-1
+spec:
+  vpc: aicr-demo-gpu-nic-1
+  vpcSubnet: aicr-demo-gpu-nic-1-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-1
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-1
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-2
+spec:
+  vpc: aicr-demo-gpu-nic-2
+  vpcSubnet: aicr-demo-gpu-nic-2-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-2
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-2
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-3
+spec:
+  vpc: aicr-demo-gpu-nic-3
+  vpcSubnet: aicr-demo-gpu-nic-3-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-3
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-3
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-4
+spec:
+  vpc: aicr-demo-gpu-nic-4
+  vpcSubnet: aicr-demo-gpu-nic-4-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-4
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-4
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-5
+spec:
+  vpc: aicr-demo-gpu-nic-5
+  vpcSubnet: aicr-demo-gpu-nic-5-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-5
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-5
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-6
+spec:
+  vpc: aicr-demo-gpu-nic-6
+  vpcSubnet: aicr-demo-gpu-nic-6-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-6
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-6
+---
+apiVersion: networking.gke.io/v1
+kind: GKENetworkParamSet
+metadata:
+  name: aicr-demo-gpu-nic-7
+spec:
+  vpc: aicr-demo-gpu-nic-7
+  vpcSubnet: aicr-demo-gpu-nic-7-subnet
+  deviceMode: NetDevice
+---
+apiVersion: networking.gke.io/v1
+kind: Network
+metadata:
+  name: aicr-demo-gpu-nic-7
+spec:
+  type: Device
+  parametersRef:
+    group: networking.gke.io
+    kind: GKENetworkParamSet
+    name: aicr-demo-gpu-nic-7
