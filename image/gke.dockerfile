@@ -71,6 +71,7 @@ RUN set -eux; \
     curl -fsSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-cli-${GCLOUD_VERSION}-linux-${GCLOUD_ARCH}.tar.gz" -o /tmp/gcloud.tar.gz && \
     tar -xzf /tmp/gcloud.tar.gz -C /opt && \
     /opt/google-cloud-sdk/install.sh --quiet --path-update=false && \
+    /opt/google-cloud-sdk/bin/gcloud components install gke-gcloud-auth-plugin --quiet && \
     rm /tmp/gcloud.tar.gz
 
 # =============================================================================
