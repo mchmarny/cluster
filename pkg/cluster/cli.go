@@ -130,6 +130,7 @@ func applyCmd() *cli.Command {
 					return err
 				}
 				rc.CredentialsFile = credFile
+				rc.ImportTargets = gkeImportTargets(cfg)
 			default:
 				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
 			}
@@ -305,6 +306,22 @@ func loadConfig(cmd *cli.Command) (*config.Config, string, error) {
 	}
 
 	return cfg, configPath, nil
+}
+
+// gkeImportTargets returns resources that may exist outside Terraform state.
+// GCP KMS KeyRings cannot be deleted, so after a destroy/recreate cycle the
+// KeyRing persists in GCP but is absent from state, causing a 409 on create.
+func gkeImportTargets(cfg *config.Config) []terraform.ImportTarget {
+	prefix := cfg.Deployment.ID
+	project := cfg.Deployment.Tenancy
+	region := cfg.Deployment.Location
+
+	return []terraform.ImportTarget{
+		{
+			Address: "google_kms_key_ring.gke[0]",
+			ID:      fmt.Sprintf("projects/%s/locations/%s/keyRings/%s-gke-keyring", project, region, prefix),
+		},
+	}
 }
 
 // resolveGCPCredentials decodes base64 KEY_CONTENT to a temp file and returns

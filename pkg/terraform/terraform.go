@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/mchmarny/cluster/pkg/config"
 	"github.com/mchmarny/cluster/pkg/run"
@@ -26,6 +27,16 @@ type RunConfig struct {
 
 	// GCP credentials file path (written from KEY_CONTENT).
 	CredentialsFile string
+
+	// ImportTargets lists resources to import if missing from state.
+	// Each entry maps a Terraform resource address to its provider ID.
+	ImportTargets []ImportTarget
+}
+
+// ImportTarget represents a resource to import if not already in state.
+type ImportTarget struct {
+	Address string // e.g. "google_kms_key_ring.gke[0]"
+	ID      string // e.g. "projects/my-proj/locations/us-central1/keyRings/my-keyring"
 }
 
 // Output runs terraform init and captures terraform output -json.
@@ -91,6 +102,10 @@ func Run(ctx context.Context, cfg RunConfig) error {
 		return fmt.Errorf("terraform init: %w", err)
 	}
 
+	// Import resources that may exist outside state (e.g. GCP KMS KeyRings
+	// which cannot be deleted and persist across destroy/recreate cycles).
+	importIfMissing(ctx, cfg, env)
+
 	if cfg.Destroy {
 		slog.Info("refreshing state before destroy")
 		if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "refresh"); err != nil {
@@ -115,6 +130,36 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	}
 
 	return nil
+}
+
+// importIfMissing checks each ImportTarget and imports it if not already in state.
+// All failures are logged but non-fatal — the resource may not exist yet (first deploy).
+func importIfMissing(ctx context.Context, cfg RunConfig, env []string) {
+	if len(cfg.ImportTargets) == 0 {
+		return
+	}
+
+	out, err := run.Cmd(ctx, cfg.TerraformDir, env, "terraform", "state", "list")
+	if err != nil {
+		slog.Warn("terraform state list failed, skipping import check", "error", err)
+		return
+	}
+
+	existing := make(map[string]bool)
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		existing[strings.TrimSpace(line)] = true
+	}
+
+	for _, t := range cfg.ImportTargets {
+		if existing[t.Address] {
+			slog.Info("resource already in state, skipping import", "address", t.Address)
+			continue
+		}
+		slog.Info("importing resource into state", "address", t.Address, "id", t.ID)
+		if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "import", t.Address, t.ID); err != nil {
+			slog.Warn("import failed (resource may not exist yet)", "address", t.Address, "error", err)
+		}
+	}
 }
 
 func buildEnv(cfg RunConfig) []string {
