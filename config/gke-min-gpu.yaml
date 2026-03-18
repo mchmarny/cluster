@@ -2,7 +2,7 @@ apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
 deployment:
-  id: aicr-demo1
+  id: aicr-demo4
   provider: gke
   tenancy: eidosx
   location: us-central1
