@@ -114,7 +114,7 @@ locals {
   gpu_nets_enabled = local.gpu_nets_count > 0
 
   // Dedicated gVNIC network for high-bandwidth non-GPU traffic
-  gvnic_net_enabled = try(local.gpu_nets_config.gvnic, local.gpu_nets_enabled)
+  gvnic_net_enabled = try(local.gpu_nets_config.gvnic, false)
   gvnic_net_cidr    = try(local.gpu_nets_config.gvnicCidr, "10.0.16.0/20")
 
   // Generate GPU network definitions: {0: {name: "gpu-nic-0", cidr: "10.0.32.0/20"}, ...}
