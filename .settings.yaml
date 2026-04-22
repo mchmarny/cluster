@@ -12,7 +12,7 @@ tools:
   awscli: '2.32.18'
   gcloud: '503.0.0'
   tflint: '0.61.0'
-  trivy: '0.69.1'
+  trivy: '0.70.0'
   grype: '0.92.0'
 
 # Linting
