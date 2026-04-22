@@ -95,7 +95,9 @@ jobs:
       - name: Install Trivy
         run: |
           TRIVY_VERSION="${{ steps.versions.outputs.trivy }}"
-          wget -qO- "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" | sudo tar xz -C /usr/local/bin trivy
+          wget -q "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" -O /tmp/trivy.tar.gz
+          sudo tar xzf /tmp/trivy.tar.gz -C /usr/local/bin trivy
+          rm /tmp/trivy.tar.gz
 
       - name: Qualify
         run: make tf-qualify

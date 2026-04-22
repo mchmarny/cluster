@@ -301,20 +301,21 @@ func resolveGCPCredentials(keyContent string) (string, func(), error) {
 	if err != nil {
 		return "", noop, fmt.Errorf("creating credentials temp file: %w", err)
 	}
+	tmpPath := f.Name() // capture safe path from CreateTemp immediately
 
 	if _, err := f.Write(data); err != nil {
 		f.Close()
-		os.Remove(f.Name())
+		os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp, not user input
 		return "", noop, fmt.Errorf("writing credentials: %w", err)
 	}
 
 	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
+		os.Remove(tmpPath) //nolint:gosec // tmpPath is from os.CreateTemp, not user input
 		return "", noop, fmt.Errorf("closing credentials file: %w", err)
 	}
 
-	slog.Info("using GCP credentials from KEY_CONTENT", "path", f.Name())
-	return f.Name(), func() { os.Remove(f.Name()) }, nil
+	slog.Info("using GCP credentials from KEY_CONTENT", "path", tmpPath)
+	return tmpPath, func() { os.Remove(tmpPath) }, nil //nolint:gosec // tmpPath is from os.CreateTemp
 }
 
 // resolveCredentials returns AWS credentials using the following priority:
