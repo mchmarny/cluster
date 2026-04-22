@@ -80,9 +80,11 @@ resource "google_project_iam_member" "worker_nodes_default_sa" {
   member  = "serviceAccount:${google_service_account.worker_nodes.email}"
 }
 
-resource "google_project_iam_member" "worker_nodes_compute_admin" {
+// compute.instanceAdmin.v1 grants instance-level operations needed for GPU/multi-NIC
+// node pools without granting full Compute Engine control (firewall, network, etc.)
+resource "google_project_iam_member" "worker_nodes_compute_instance_admin" {
   project = local.project
-  role    = "roles/compute.admin"
+  role    = "roles/compute.instanceAdmin.v1"
   member  = "serviceAccount:${google_service_account.worker_nodes.email}"
 }
 

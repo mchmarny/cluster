@@ -126,13 +126,10 @@ resource "google_container_node_pool" "pools" {
       }
     }
 
-    # Shielded instance configuration
-    dynamic "shielded_instance_config" {
-      for_each = try(each.value.nodeConfig.shieldedInstanceConfig, null) != null ? [1] : []
-      content {
-        enable_secure_boot          = try(each.value.nodeConfig.shieldedInstanceConfig.enableSecureBoot, true)
-        enable_integrity_monitoring = try(each.value.nodeConfig.shieldedInstanceConfig.enableIntegrityMonitoring, true)
-      }
+    # Shielded instance configuration (always enabled, uses top-level security defaults as fallback)
+    shielded_instance_config {
+      enable_secure_boot          = try(each.value.nodeConfig.shieldedInstanceConfig.enableSecureBoot, local.secure_boot_enabled)
+      enable_integrity_monitoring = try(each.value.nodeConfig.shieldedInstanceConfig.enableIntegrityMonitoring, local.integrity_monitoring_enabled)
     }
 
     # Host maintenance policy — GKE manages this for GPU nodes with reservations.

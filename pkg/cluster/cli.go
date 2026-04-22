@@ -2,13 +2,12 @@ package cluster
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/urfave/cli/v3"
-
-	"encoding/base64"
 
 	"github.com/mchmarny/cluster/pkg/aws"
 	"github.com/mchmarny/cluster/pkg/config"
@@ -85,57 +84,33 @@ func initCmd() *cli.Command {
 	}
 }
 
+func terraformFlags() []cli.Flag {
+	return append(configFlags(),
+		&cli.StringFlag{
+			Name:    "terraform-dir",
+			Usage:   "Terraform working directory",
+			Value:   "/builder/terraform",
+			Sources: cli.EnvVars("TERRAFORM_DIR"),
+		},
+	)
+}
+
 func applyCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "apply",
 		Usage: "Deploy or destroy infrastructure via Terraform",
-		Flags: append(configFlags(),
-			&cli.StringFlag{
-				Name:    "terraform-dir",
-				Usage:   "Terraform working directory",
-				Value:   "/builder/terraform",
-				Sources: cli.EnvVars("TERRAFORM_DIR"),
-			},
-		),
+		Flags: terraformFlags(),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, configPath, err := loadConfig(cmd)
+			rc, cleanup, err := buildRunConfig(cmd)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 
-			sd := cmd.String("state-dir")
-			tfDir := cmd.String("terraform-dir")
-			kc := cmd.String("key-content")
+			rc.Destroy = rc.destroy
+			rc.ImportTargets = rc.importTargets
 
-			rc := terraform.RunConfig{
-				TerraformDir: tfDir,
-				ConfigPath:   configPath,
-				Provider:     cfg.Deployment.Provider,
-				State:        cfg.Deployment.State,
-				Region:       cfg.Deployment.Location,
-				Destroy:      cfg.Deployment.Destroy,
-			}
-			switch cfg.Deployment.Provider {
-			case config.ProviderEKS:
-				keyID, secret := resolveCredentials(kc, sd, cfg)
-				rc.Bucket = aws.BucketName(cfg)
-				rc.StateKey = aws.StateKey(cfg)
-				rc.AccessKeyID = keyID
-				rc.SecretAccessKey = secret
-			case config.ProviderGKE:
-				rc.Bucket = gcp.BucketName(cfg)
-				rc.StateKey = gcp.StatePrefix(cfg)
-				credFile, err := resolveGCPCredentials(kc)
-				if err != nil {
-					return err
-				}
-				rc.CredentialsFile = credFile
-				rc.ImportTargets = gkeImportTargets(cfg)
-			default:
-				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
-			}
-
-			return terraform.Run(ctx, rc)
+			return terraform.Run(ctx, rc.RunConfig)
 		},
 	}
 }
@@ -144,51 +119,15 @@ func planCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "plan",
 		Usage: "Validate configuration and display Terraform plan",
-		Flags: append(configFlags(),
-			&cli.StringFlag{
-				Name:    "terraform-dir",
-				Usage:   "Terraform working directory",
-				Value:   "/builder/terraform",
-				Sources: cli.EnvVars("TERRAFORM_DIR"),
-			},
-		),
+		Flags: terraformFlags(),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, configPath, err := loadConfig(cmd)
+			rc, cleanup, err := buildRunConfig(cmd)
 			if err != nil {
 				return err
 			}
+			defer cleanup()
 
-			tfDir := cmd.String("terraform-dir")
-			sd := cmd.String("state-dir")
-			kc := cmd.String("key-content")
-
-			rc := terraform.RunConfig{
-				TerraformDir: tfDir,
-				ConfigPath:   configPath,
-				Provider:     cfg.Deployment.Provider,
-				State:        cfg.Deployment.State,
-				Region:       cfg.Deployment.Location,
-			}
-			switch cfg.Deployment.Provider {
-			case config.ProviderEKS:
-				keyID, secret := resolveCredentials(kc, sd, cfg)
-				rc.Bucket = aws.BucketName(cfg)
-				rc.StateKey = aws.StateKey(cfg)
-				rc.AccessKeyID = keyID
-				rc.SecretAccessKey = secret
-			case config.ProviderGKE:
-				rc.Bucket = gcp.BucketName(cfg)
-				rc.StateKey = gcp.StatePrefix(cfg)
-				credFile, err := resolveGCPCredentials(kc)
-				if err != nil {
-					return err
-				}
-				rc.CredentialsFile = credFile
-			default:
-				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
-			}
-
-			return terraform.Plan(ctx, rc)
+			return terraform.Plan(ctx, rc.RunConfig)
 		},
 	}
 }
@@ -197,63 +136,24 @@ func outputCmd() *cli.Command {
 	return &cli.Command{
 		Name:  "output",
 		Usage: "Retrieve Terraform outputs and save to state directory",
-		Flags: append(configFlags(),
-			&cli.StringFlag{
-				Name:    "terraform-dir",
-				Usage:   "Terraform working directory",
-				Value:   "/builder/terraform",
-				Sources: cli.EnvVars("TERRAFORM_DIR"),
-			},
-		),
+		Flags: terraformFlags(),
 		Action: func(ctx context.Context, cmd *cli.Command) error {
-			cfg, configPath, err := loadConfig(cmd)
+			rc, cleanup, err := buildRunConfig(cmd)
+			if err != nil {
+				return err
+			}
+			defer cleanup()
+
+			data, err := terraform.Output(ctx, rc.RunConfig)
 			if err != nil {
 				return err
 			}
 
-			sd := cmd.String("state-dir")
-			tfDir := cmd.String("terraform-dir")
-			kc := cmd.String("key-content")
-
-			rc := terraform.RunConfig{
-				TerraformDir: tfDir,
-				ConfigPath:   configPath,
-				Provider:     cfg.Deployment.Provider,
-				State:        cfg.Deployment.State,
-				Region:       cfg.Deployment.Location,
-			}
-			var outFile string
-			switch cfg.Deployment.Provider {
-			case config.ProviderEKS:
-				keyID, secret := resolveCredentials(kc, sd, cfg)
-				rc.Bucket = aws.BucketName(cfg)
-				rc.StateKey = aws.StateKey(cfg)
-				rc.AccessKeyID = keyID
-				rc.SecretAccessKey = secret
-				outFile = aws.OutputFileName(cfg)
-			case config.ProviderGKE:
-				rc.Bucket = gcp.BucketName(cfg)
-				rc.StateKey = gcp.StatePrefix(cfg)
-				outFile = gcp.OutputFileName(cfg)
-				credFile, err := resolveGCPCredentials(kc)
-				if err != nil {
-					return err
-				}
-				rc.CredentialsFile = credFile
-			default:
-				return fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
-			}
-
-			data, err := terraform.Output(ctx, rc)
-			if err != nil {
-				return err
-			}
-
-			if err := state.WriteFile(sd, outFile, data); err != nil {
+			if err := state.WriteFile(rc.stateDir, rc.outputFile, data); err != nil {
 				return fmt.Errorf("saving output: %w", err)
 			}
 
-			fmt.Fprintf(os.Stderr, "Output saved to %s/%s\n", sd, outFile)
+			fmt.Fprintf(os.Stderr, "Output saved to %s/%s\n", rc.stateDir, rc.outputFile)
 			return nil
 		},
 	}
@@ -286,26 +186,80 @@ func configFlags() []cli.Flag {
 	}
 }
 
-// loadConfig resolves and loads the YAML config. Returns the loaded config,
-// the resolved file path (for passing to terraform), and any error.
-func loadConfig(cmd *cli.Command) (*config.Config, string, error) {
-	configPath, cleanup, err := config.Resolve(
+// runConfigResult bundles the terraform RunConfig with command-level metadata
+// that individual commands may need (output file, state dir, etc.).
+type runConfigResult struct {
+	terraform.RunConfig
+	stateDir      string
+	outputFile    string
+	destroy       bool
+	importTargets []terraform.ImportTarget
+}
+
+// buildRunConfig loads config, resolves credentials, and assembles a RunConfig.
+// Returns a cleanup function that removes any temp files (config, credentials).
+func buildRunConfig(cmd *cli.Command) (*runConfigResult, func(), error) {
+	noop := func() {}
+
+	configPath, cfgCleanup, err := config.Resolve(
 		cmd.String("config"),
 		cmd.String("config-content"),
 	)
 	if err != nil {
-		return nil, "", fmt.Errorf("resolving config: %w", err)
+		return nil, noop, fmt.Errorf("resolving config: %w", err)
 	}
-	// Note: cleanup deferred by caller or at process exit.
-	// In a CLI context, the temp file lives for the process lifetime.
-	_ = cleanup
 
 	cfg, err := config.Load(configPath)
 	if err != nil {
-		return nil, "", fmt.Errorf("loading config: %w", err)
+		cfgCleanup()
+		return nil, noop, fmt.Errorf("loading config: %w", err)
 	}
 
-	return cfg, configPath, nil
+	sd := cmd.String("state-dir")
+	tfDir := cmd.String("terraform-dir")
+	kc := cmd.String("key-content")
+
+	rc := &runConfigResult{
+		RunConfig: terraform.RunConfig{
+			TerraformDir: tfDir,
+			ConfigPath:   configPath,
+			Provider:     cfg.Deployment.Provider,
+			State:        cfg.Deployment.State,
+			Region:       cfg.Deployment.Location,
+			Destroy:      cfg.Deployment.Destroy,
+		},
+		stateDir: sd,
+		destroy:  cfg.Deployment.Destroy,
+	}
+
+	cleanup := cfgCleanup
+
+	switch cfg.Deployment.Provider {
+	case config.ProviderEKS:
+		keyID, secret := resolveCredentials(kc, sd, cfg)
+		rc.Bucket = aws.BucketName(cfg)
+		rc.StateKey = aws.StateKey(cfg)
+		rc.AccessKeyID = keyID
+		rc.SecretAccessKey = secret
+		rc.outputFile = aws.OutputFileName(cfg)
+	case config.ProviderGKE:
+		rc.Bucket = gcp.BucketName(cfg)
+		rc.StateKey = gcp.StatePrefix(cfg)
+		rc.outputFile = gcp.OutputFileName(cfg)
+		credFile, credCleanup, err := resolveGCPCredentials(kc)
+		if err != nil {
+			cfgCleanup()
+			return nil, noop, err
+		}
+		rc.CredentialsFile = credFile
+		rc.importTargets = gkeImportTargets(cfg)
+		cleanup = func() { credCleanup(); cfgCleanup() }
+	default:
+		cfgCleanup()
+		return nil, noop, fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
+	}
+
+	return rc, cleanup, nil
 }
 
 // gkeImportTargets returns resources that may exist outside Terraform state.
@@ -325,38 +279,42 @@ func gkeImportTargets(cfg *config.Config) []terraform.ImportTarget {
 }
 
 // resolveGCPCredentials decodes base64 KEY_CONTENT to a temp file and returns
-// the file path for GOOGLE_APPLICATION_CREDENTIALS. Returns "" if no key provided.
-func resolveGCPCredentials(keyContent string) (string, error) {
+// the file path, a cleanup function, and any error.
+func resolveGCPCredentials(keyContent string) (string, func(), error) {
+	noop := func() {}
+
 	if keyContent == "" {
 		if p := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"); p != "" {
 			slog.Info("using GCP credentials from GOOGLE_APPLICATION_CREDENTIALS")
-			return p, nil
+			return p, noop, nil
 		}
 		slog.Info("no GCP credentials provided, terraform will use default provider chain")
-		return "", nil
+		return "", noop, nil
 	}
 
 	data, err := base64.StdEncoding.DecodeString(keyContent)
 	if err != nil {
-		return "", fmt.Errorf("decoding KEY_CONTENT: %w", err)
+		return "", noop, fmt.Errorf("decoding KEY_CONTENT: %w", err)
 	}
 
 	f, err := os.CreateTemp("", "gcp-credentials-*.json")
 	if err != nil {
-		return "", fmt.Errorf("creating credentials temp file: %w", err)
+		return "", noop, fmt.Errorf("creating credentials temp file: %w", err)
 	}
 
 	if _, err := f.Write(data); err != nil {
 		f.Close()
-		return "", fmt.Errorf("writing credentials: %w", err)
+		os.Remove(f.Name())
+		return "", noop, fmt.Errorf("writing credentials: %w", err)
 	}
 
 	if err := f.Close(); err != nil {
-		return "", fmt.Errorf("closing credentials file: %w", err)
+		os.Remove(f.Name())
+		return "", noop, fmt.Errorf("closing credentials file: %w", err)
 	}
 
 	slog.Info("using GCP credentials from KEY_CONTENT", "path", f.Name())
-	return f.Name(), nil
+	return f.Name(), func() { os.Remove(f.Name()) }, nil
 }
 
 // resolveCredentials returns AWS credentials using the following priority:

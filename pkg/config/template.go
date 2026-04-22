@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const eksTemplate = `# yaml-language-server: $schema=https://raw.githubusercontent.com/mchmarny/cluster/main/schema/cluster-config.schema.json
+const eksTemplate = `# yaml-language-server: $schema=https://raw.githubusercontent.com/mchmarny/cluster/main/schema/eks-config.schema.json
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
@@ -23,18 +23,19 @@ deployment:
   #   env: dev
 
 cluster:
-  # name: my-cluster          # Optional: defaults to deployment.id
-  version: "1.33"
-  addOns:
-    coreDns: ""
-    # vpcCni: ""              # Enables VPC CNI custom networking (secondary CIDR, pod subnets, ENIConfig)
-    kubeProxy: ""
-    ebsCsi: ""
-  # controlPlane:
-  #   allowedCidrs:           # Optional: restrict API access (your IP auto-added)
-  #     - 0.0.0.0/32
-  # adminRoles:               # Optional: IAM roles for cluster admin
-  #   - ClusterAdmin
+  eks:
+    # name: my-cluster          # Optional: defaults to deployment.id
+    version: "1.33"
+    addOns:
+      coreDns: ""
+      # vpcCni: ""              # Enables VPC CNI custom networking (secondary CIDR, pod subnets, ENIConfig)
+      kubeProxy: ""
+      ebsCsi: ""
+    # controlPlane:
+    #   allowedCidrs:           # Optional: restrict API access (your IP auto-added)
+    #     - 0.0.0.0/32
+    # adminRoles:               # Optional: IAM roles for cluster admin
+    #   - ClusterAdmin
 
 # Network uses defaults: 10.0.0.0/16 VPC CIDR, subnets auto-computed
 # Pod CIDR (100.65.0.0/16) and pod subnets only apply when vpcCni add-on is enabled
@@ -61,28 +62,29 @@ cluster:
 #         zone: us-west-2a
 
 compute:
-  # sshPublicKey: "ssh-ed25519 AAAA..."  # Optional: SSH key for node access
-  nodeGroups:
-    system:
-      instanceType: m6i.xlarge
-      capacity:
-        desired: 3
-        min: 3
-        max: 6
-    workers:
-      - name: cpu-worker-1
+  eks:
+    # sshPublicKey: "ssh-ed25519 AAAA..."  # Optional: SSH key for node access
+    nodeGroups:
+      system:
         instanceType: m6i.xlarge
         capacity:
-          desired: 1
-        labels:
-          nodeGroup: cpu-worker
-      # GPU worker example:
-      # - name: gpu-worker-1
-      #   instanceType: p4d.24xlarge
-      #   gpuType: a100
-      #   imageId: ami-0b68ba66e5a106899
-      #   capacity:
-      #     desired: 0
+          desired: 3
+          min: 3
+          max: 6
+      workers:
+        - name: cpu-worker-1
+          instanceType: m6i.xlarge
+          capacity:
+            desired: 1
+          labels:
+            nodeGroup: cpu-worker
+        # GPU worker example:
+        # - name: gpu-worker-1
+        #   instanceType: p4d.24xlarge
+        #   gpuType: a100
+        #   imageId: ami-0b68ba66e5a106899
+        #   capacity:
+        #     desired: 0
 `
 
 const gkeTemplate = `# yaml-language-server: $schema=https://raw.githubusercontent.com/mchmarny/cluster/main/schema/gke-config.schema.json

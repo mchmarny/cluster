@@ -73,6 +73,36 @@ func TestParseKeyContentInvalidJSON(t *testing.T) {
 	}
 }
 
+func TestWriteFile(t *testing.T) {
+	dir := t.TempDir()
+	name := "test-output.json"
+	data := []byte(`{"status":"ok"}`)
+
+	if err := WriteFile(dir, name, data); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("reading written file: %v", err)
+	}
+	if string(got) != string(data) {
+		t.Errorf("content = %q, want %q", got, data)
+	}
+
+	info, _ := os.Stat(filepath.Join(dir, name))
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("permissions = %o, want 0600", info.Mode().Perm())
+	}
+}
+
+func TestWriteFilePathTraversal(t *testing.T) {
+	dir := t.TempDir()
+	if err := WriteFile(dir, "../escape.json", []byte("bad")); err == nil {
+		t.Error("expected error for path traversal, got nil")
+	}
+}
+
 func TestPathTraversal(t *testing.T) {
 	dir := t.TempDir()
 

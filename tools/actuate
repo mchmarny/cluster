@@ -188,10 +188,6 @@ detect_csp() {
     echo "eks"
   elif grep -q "google_container_cluster" "$tf_dir"/*.tf 2>/dev/null; then
     echo "gke"
-  elif grep -q "azurerm_kubernetes_cluster" "$tf_dir"/*.tf 2>/dev/null; then
-    echo "aks"
-  elif grep -q "oci_containerengine_cluster" "$tf_dir"/*.tf 2>/dev/null; then
-    echo "oke"
   else
     err "Unable to detect CSP from Terraform files"
   fi
@@ -225,25 +221,6 @@ init_terraform() {
         -backend-config="bucket=$bucket_name" \
         -backend-config="prefix=deployments/${dep_region}/${dep_id}"
       ;;
-    aks)
-      # AKS uses Azure Blob Storage
-      local resource_group storage_account container_name
-      resource_group="tfstate-${tenancy}"
-      storage_account="tfstate${tenancy:0:10}"
-      container_name="tfstate"
-      terraform -chdir="$tf_dir" init \
-        -backend-config="resource_group_name=$resource_group" \
-        -backend-config="storage_account_name=$storage_account" \
-        -backend-config="container_name=$container_name" \
-        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
-      ;;
-    oke)
-      bucket_name="cluster-state-${tenancy}"
-      terraform -chdir="$tf_dir" init \
-        -backend-config="bucket=$bucket_name" \
-        -backend-config="namespace=$tenancy" \
-        -backend-config="prefix=deployments/${dep_region}/${dep_id}"
-      ;;
     *)
       err "Unknown CSP: $csp"
       ;;
@@ -257,9 +234,9 @@ run_terraform() {
   local command="$3"
   local auto_approve="$4"
 
-  local approve_flag=""
+  local approve_args=()
   if [[ "$auto_approve" == "true" ]]; then
-    approve_flag="-auto-approve"
+    approve_args+=("-auto-approve")
   fi
 
   case "$command" in
@@ -270,18 +247,18 @@ run_terraform() {
     apply)
       if [[ -f "$tf_dir/plan.cache" ]]; then
         msg "Applying saved plan..."
-        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply $approve_flag "plan.cache"
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "${approve_args[@]}" "plan.cache"
         rm -f "$tf_dir/plan.cache"
       else
         msg "Applying deployment..."
-        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply $approve_flag
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "${approve_args[@]}"
       fi
       ;;
     destroy)
       msg "Refreshing state before destroy..."
       TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" refresh
       msg "Destroying deployment..."
-      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy $approve_flag
+      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy "${approve_args[@]}"
       ;;
     output)
       msg "Deployment outputs:"

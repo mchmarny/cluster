@@ -26,6 +26,7 @@ func TestAWSConfigHelpers(t *testing.T) {
 		want string
 	}{
 		{"KeyFileName", KeyFileName(cfg), "demo-123456789012-key.json"},
+		{"OutputFileName", OutputFileName(cfg), "demo-123456789012-output.json"},
 		{"BucketName", BucketName(cfg), "cluster-state-123456789012"},
 		{"StateKey", StateKey(cfg), "deployments/us-west-2/demo/terraform.tfstate"},
 	}

@@ -9,6 +9,13 @@ resource "google_compute_network" "main" {
   delete_default_routes_on_create = false
 
   project = local.project
+
+  lifecycle {
+    precondition {
+      condition     = data.google_project.current.project_id == local.project
+      error_message = "Invalid GCP project (want: ${local.project}, got: ${data.google_project.current.project_id})."
+    }
+  }
 }
 
 // =====================================================================================

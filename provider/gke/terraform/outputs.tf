@@ -108,7 +108,7 @@ locals {
     security = {
       kms = local.secrets_encryption_enabled ? {
         keyRing   = google_kms_key_ring.gke[0].name
-        cryptoKey = google_kms_crypto_key.gke_secrets[0].name
+        cryptoKey = local.kms_prevent_destroy ? google_kms_crypto_key.gke_secrets_protected[0].name : google_kms_crypto_key.gke_secrets[0].name
         location  = google_kms_key_ring.gke[0].location
       } : null
       serviceAccounts = {
@@ -131,7 +131,7 @@ locals {
   }
 }
 
-// Write status to YAML file
+// Write status to JSON file
 resource "local_file" "status" {
   filename = local.statusFilePath
   content  = jsonencode(local.status_data)

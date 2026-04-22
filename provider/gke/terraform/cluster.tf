@@ -111,10 +111,10 @@ resource "google_container_cluster" "main" {
   }
 
   # Network policy configuration
-  # Must be PROVIDER_UNSPECIFIED for Dataplane V2
+  # Must be disabled with PROVIDER_UNSPECIFIED for Dataplane V2 (Cilium handles network policy natively)
   network_policy {
     enabled  = false
-    provider = "PROVIDER_UNSPECIFIED" # Uses Calico as default provider
+    provider = "PROVIDER_UNSPECIFIED"
   }
 
   monitoring_config {
@@ -209,10 +209,8 @@ resource "google_container_cluster" "main" {
     enabled = false # We manage node pools manually
   }
 
-  # Cluster tags
-  resource_labels = merge(local.config.deployment.tags, {
-    "last-sync" = local.updateTime
-  })
+  # Cluster tags (no timestamp — causes perpetual plan drift)
+  resource_labels = try(local.config.deployment.tags, {})
 
   # Lifecycle
   lifecycle {

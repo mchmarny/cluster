@@ -37,6 +37,21 @@ func TestGenerateTemplateEKS(t *testing.T) {
 			t.Errorf("missing %q in EKS template", want)
 		}
 	}
+
+	// Verify EKS template nests correctly under cluster.eks / compute.eks
+	if !strings.Contains(content, "  eks:") {
+		t.Error("EKS template must nest config under 'cluster.eks:' and 'compute.eks:'")
+	}
+
+	// Verify the generated template produces a loadable config when required fields are filled
+	patched := strings.Replace(content, "# tenancy: \"123456789012\"", "tenancy: \"123456789012\"", 1)
+	patchedPath := filepath.Join(t.TempDir(), "eks-patched.yaml")
+	if err := os.WriteFile(patchedPath, []byte(patched), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(patchedPath); err != nil {
+		t.Errorf("EKS template failed to load after filling required fields: %v", err)
+	}
 }
 
 func TestGenerateTemplateGKE(t *testing.T) {

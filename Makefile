@@ -23,6 +23,10 @@ AWSCLI_VERSION ?= $(shell yq -r '.tools.awscli' .settings.yaml 2>/dev/null)
 ifeq ($(AWSCLI_VERSION),)
 AWSCLI_VERSION := 2.32.18
 endif
+GCLOUD_VERSION ?= $(shell yq -r '.tools.gcloud' .settings.yaml 2>/dev/null)
+ifeq ($(GCLOUD_VERSION),)
+GCLOUD_VERSION := 503.0.0
+endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)
 SCAN_SEVERITY := CRITICAL,HIGH
@@ -172,6 +176,9 @@ build-eks: ## Build EKS Docker image (mirrors providers, then builds)
 	@docker build -f image/eks.dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
+		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
+		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
+		--build-arg AWSCLI_VERSION=$(AWSCLI_VERSION) \
 		-t cluster-eks:$(VERSION) -t cluster-eks:latest .
 
 .PHONY: build-gke
@@ -180,6 +187,9 @@ build-gke: ## Build GKE Docker image (mirrors providers, then builds)
 	@docker build -f image/gke.dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
+		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
+		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
+		--build-arg GCLOUD_VERSION=$(GCLOUD_VERSION) \
 		-t cluster-gke:$(VERSION) -t cluster-gke:latest .
 
 # Version Bump Targets

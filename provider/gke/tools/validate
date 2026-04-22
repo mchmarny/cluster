@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 # Post-deployment validation of GKE cluster
 # Usage: ./validate -c config/gke-demo.yaml

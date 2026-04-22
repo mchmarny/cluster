@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${DIR}/common"
 
-CSPS="aks eks gke oke"
+CSPS="eks gke"
 
 # Check if required tools are installed
 has_tools git
@@ -96,7 +96,7 @@ if [ $# -lt 2 ]; then
   echo "Examples:"
   echo "  $0 patch eks   # v0.2.5-eks → v0.2.6-eks"
   echo "  $0 minor gke   # v0.1.0-gke → v0.2.0-gke"
-  echo "  $0 major aks   # v1.2.3-aks → v2.0.0-aks"
+  echo "  $0 major eks   # v1.2.3-eks → v2.0.0-eks"
   exit 1
 fi
 

@@ -31,12 +31,22 @@ type RunConfig struct {
 	// ImportTargets lists resources to import if missing from state.
 	// Each entry maps a Terraform resource address to its provider ID.
 	ImportTargets []ImportTarget
+
+	// Runner executes external commands. If nil, uses run.DefaultRunner.
+	Runner run.Runner
 }
 
 // ImportTarget represents a resource to import if not already in state.
 type ImportTarget struct {
 	Address string // e.g. "google_kms_key_ring.gke[0]"
 	ID      string // e.g. "projects/my-proj/locations/us-central1/keyRings/my-keyring"
+}
+
+func runner(cfg RunConfig) run.Runner {
+	if cfg.Runner != nil {
+		return cfg.Runner
+	}
+	return run.DefaultRunner{}
 }
 
 // Output runs terraform init and captures terraform output -json.
@@ -47,14 +57,15 @@ func Output(ctx context.Context, cfg RunConfig) ([]byte, error) {
 
 	slog.Info("terraform output", "dir", cfg.TerraformDir, "state", cfg.State)
 
+	r := runner(cfg)
 	env := buildEnv(cfg)
 
 	initArgs := buildInitArgs(cfg)
-	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
+	if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
 		return nil, fmt.Errorf("terraform init: %w", err)
 	}
 
-	out, err := run.Cmd(ctx, cfg.TerraformDir, env, "terraform", "output", "-json")
+	out, err := r.Cmd(ctx, cfg.TerraformDir, env, "terraform", "output", "-json")
 	if err != nil {
 		return nil, fmt.Errorf("terraform output: %w", err)
 	}
@@ -71,14 +82,15 @@ func Plan(ctx context.Context, cfg RunConfig) error {
 	slog.Info("terraform plan", "dir", cfg.TerraformDir, "state", cfg.State,
 		"configPath", cfg.ConfigPath)
 
+	r := runner(cfg)
 	env := buildEnv(cfg)
 
 	initArgs := buildInitArgs(cfg)
-	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
+	if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
 		return fmt.Errorf("terraform init: %w", err)
 	}
 
-	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "plan"); err != nil {
+	if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "plan"); err != nil {
 		return fmt.Errorf("terraform plan: %w", err)
 	}
 
@@ -94,11 +106,12 @@ func Run(ctx context.Context, cfg RunConfig) error {
 	slog.Info("terraform", "dir", cfg.TerraformDir, "state", cfg.State,
 		"destroy", cfg.Destroy, "configPath", cfg.ConfigPath)
 
+	r := runner(cfg)
 	env := buildEnv(cfg)
 
 	// Init
 	initArgs := buildInitArgs(cfg)
-	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
+	if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", initArgs...); err != nil {
 		return fmt.Errorf("terraform init: %w", err)
 	}
 
@@ -108,24 +121,24 @@ func Run(ctx context.Context, cfg RunConfig) error {
 
 	if cfg.Destroy {
 		slog.Info("refreshing state before destroy")
-		if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "refresh"); err != nil {
+		if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "refresh"); err != nil {
 			return fmt.Errorf("terraform refresh: %w", err)
 		}
 
 		slog.Info("destroying infrastructure")
-		if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "destroy", "-auto-approve"); err != nil {
+		if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "destroy", "-auto-approve"); err != nil {
 			return fmt.Errorf("terraform destroy: %w", err)
 		}
 		return nil
 	}
 
 	slog.Info("planning deployment")
-	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "plan", "-out=plan.cache"); err != nil {
+	if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "plan", "-out=plan.cache"); err != nil {
 		return fmt.Errorf("terraform plan: %w", err)
 	}
 
 	slog.Info("applying deployment")
-	if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "apply", "plan.cache"); err != nil {
+	if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "apply", "plan.cache"); err != nil {
 		return fmt.Errorf("terraform apply: %w", err)
 	}
 
@@ -139,7 +152,9 @@ func importIfMissing(ctx context.Context, cfg RunConfig, env []string) {
 		return
 	}
 
-	out, err := run.Cmd(ctx, cfg.TerraformDir, env, "terraform", "state", "list")
+	r := runner(cfg)
+
+	out, err := r.Cmd(ctx, cfg.TerraformDir, env, "terraform", "state", "list")
 	if err != nil {
 		slog.Warn("terraform state list failed, skipping import check", "error", err)
 		return
@@ -156,7 +171,7 @@ func importIfMissing(ctx context.Context, cfg RunConfig, env []string) {
 			continue
 		}
 		slog.Info("importing resource into state", "address", t.Address, "id", t.ID)
-		if err := run.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "import", t.Address, t.ID); err != nil {
+		if err := r.CmdStream(ctx, cfg.TerraformDir, env, "terraform", "import", t.Address, t.ID); err != nil {
 			slog.Warn("import failed (resource may not exist yet)", "address", t.Address, "error", err)
 		}
 	}

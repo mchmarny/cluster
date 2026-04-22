@@ -201,7 +201,7 @@ locals {
   }
 }
 
-// Write status to YAML file
+// Write status to JSON file
 resource "local_file" "status" {
   filename = local.status_file_path
   content  = jsonencode(local.status_data)

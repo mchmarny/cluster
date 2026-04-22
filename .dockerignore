@@ -8,3 +8,16 @@ plan.cache
 docs/
 *.md
 !mirror/
+
+# Credentials and sensitive files
+*.key
+*.pem
+*-key.json
+
+# Build artifacts
+coverage.out
+dist/
+
+# Shell tools (not needed in container images)
+tools/
+provider/*/tools/
