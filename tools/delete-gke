@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Delete GKE cluster resources that Terraform may leave behind.
-# Usage: tools/delete-gke -c config/gke-demo.yaml
+# Usage: tools/delete-gke -p <project> -x <prefix> -r <region> [-g <gpu-nic-count>]
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${DIR}/common"
@@ -11,37 +11,40 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Parse arguments
 # ---------------------------------------------------------------------------
 
-CONFIG_FILE=""
+PROJECT=""
+PREFIX=""
+REGION=""
+GPU_NIC_COUNT=0
 
 usage() {
-  echo "Usage: $0 -c <config.yaml>"
-  echo "  -c  Config file path (relative to repo root or absolute)"
+  echo "Usage: $0 -p <project> -x <prefix> -r <region> [-g <gpu-nic-count>]"
+  echo "  -p  GCP project ID"
+  echo "  -x  Deployment prefix (deployment.id)"
+  echo "  -r  Region"
+  echo "  -g  GPU NIC count (default: 0)"
   exit 1
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    -c|--config)  CONFIG_FILE="$2"; shift 2 ;;
-    -h|--help)    usage ;;
+    -p|--project)       PROJECT="$2"; shift 2 ;;
+    -x|--prefix)        PREFIX="$2"; shift 2 ;;
+    -r|--region)        REGION="$2"; shift 2 ;;
+    -g|--gpu-nic-count) GPU_NIC_COUNT="$2"; shift 2 ;;
+    -h|--help)          usage ;;
     *) err "Unknown option: $1" ;;
   esac
 done
 
-[[ -z "$CONFIG_FILE" ]] && usage
-CONFIG_FILE="$(resolve_config "$CONFIG_FILE")"
+[[ -z "$PROJECT" ]] && err "Missing required flag: -p <project>"
+[[ -z "$PREFIX" ]]  && err "Missing required flag: -x <prefix>"
+[[ -z "$REGION" ]]  && err "Missing required flag: -r <region>"
 
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 
-has_tools gcloud yq
-
-validate_config "$CONFIG_FILE"
-
-PREFIX="$(config_get "$CONFIG_FILE" deployment.id)"
-PROJECT="$(config_get "$CONFIG_FILE" deployment.tenancy)"
-REGION="$(config_get "$CONFIG_FILE" deployment.location)"
-GPU_NIC_COUNT="$(config_get "$CONFIG_FILE" network.gke.gpuNets.count 0)"
+has_tools gcloud
 
 msg "Deleting GKE resources: prefix=${PREFIX} project=${PROJECT} region=${REGION}"
 
