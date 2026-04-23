@@ -1,0 +1,146 @@
+#!/bin/bash
+set -euo pipefail
+
+# Delete GKE cluster resources that Terraform may leave behind.
+# Usage: tools/delete-gke -c config/gke-demo.yaml
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+
+CONFIG_FILE=""
+
+usage() {
+  echo "Usage: $0 -c <config.yaml>"
+  echo "  -c  Config file path (relative to repo root or absolute)"
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config)  CONFIG_FILE="$2"; shift 2 ;;
+    -h|--help)    usage ;;
+    *) err "Unknown option: $1" ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && usage
+CONFIG_FILE="$(resolve_config "$CONFIG_FILE")"
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+has_tools gcloud yq
+
+validate_config "$CONFIG_FILE"
+
+PREFIX="$(config_get "$CONFIG_FILE" deployment.id)"
+PROJECT="$(config_get "$CONFIG_FILE" deployment.tenancy)"
+REGION="$(config_get "$CONFIG_FILE" deployment.location)"
+GPU_NIC_COUNT="$(config_get "$CONFIG_FILE" network.gke.gpuNets.count 0)"
+
+msg "Deleting GKE resources: prefix=${PREFIX} project=${PROJECT} region=${REGION}"
+
+# ---------------------------------------------------------------------------
+# 1. Firewall rules (must delete before networks)
+# ---------------------------------------------------------------------------
+msg "Deleting firewall rules..."
+
+for fw in \
+  "${PREFIX}-gke-master-to-nodes" \
+  "${PREFIX}-gke-nodes" \
+  "${PREFIX}-nccl-internal" \
+  "${PREFIX}-gvnic-internal"; do
+  gcloud compute firewall-rules delete "$fw" \
+    --project="$PROJECT" --quiet 2>/dev/null || true
+done
+
+for i in $(seq 0 $((GPU_NIC_COUNT - 1))); do
+  gcloud compute firewall-rules delete "${PREFIX}-gpu-nic-${i}-internal" \
+    --project="$PROJECT" --quiet 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 2. Cloud NAT
+# ---------------------------------------------------------------------------
+msg "Deleting Cloud NAT..."
+gcloud compute routers nats delete "${PREFIX}-nat" \
+  --router="${PREFIX}-router" --region="$REGION" \
+  --project="$PROJECT" --quiet 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 3. Cloud Router
+# ---------------------------------------------------------------------------
+msg "Deleting Cloud Router..."
+gcloud compute routers delete "${PREFIX}-router" \
+  --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 4. Subnets (main VPC)
+# ---------------------------------------------------------------------------
+msg "Deleting main VPC subnets..."
+for sub in "${PREFIX}-system-subnet" "${PREFIX}-worker-subnet"; do
+  gcloud compute networks subnets delete "$sub" \
+    --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 5. gVNIC subnet + network
+# ---------------------------------------------------------------------------
+msg "Deleting gVNIC network..."
+gcloud compute networks subnets delete "${PREFIX}-gvnic-subnet" \
+  --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || true
+gcloud compute networks delete "${PREFIX}-gvnic" \
+  --project="$PROJECT" --quiet 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 6. GPU NIC subnets + networks
+# ---------------------------------------------------------------------------
+if [[ "$GPU_NIC_COUNT" -gt 0 ]]; then
+  msg "Deleting ${GPU_NIC_COUNT} GPU NIC networks..."
+  for i in $(seq 0 $((GPU_NIC_COUNT - 1))); do
+    gcloud compute networks subnets delete "${PREFIX}-gpu-nic-${i}-subnet" \
+      --region="$REGION" --project="$PROJECT" --quiet 2>/dev/null || true
+    gcloud compute networks delete "${PREFIX}-gpu-nic-${i}" \
+      --project="$PROJECT" --quiet 2>/dev/null || true
+  done
+fi
+
+# ---------------------------------------------------------------------------
+# 7. Main VPC
+# ---------------------------------------------------------------------------
+msg "Deleting main VPC..."
+gcloud compute networks delete "${PREFIX}-vpc" \
+  --project="$PROJECT" --quiet 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 8. Service accounts (IAM bindings auto-removed with SA)
+# ---------------------------------------------------------------------------
+msg "Deleting service accounts..."
+for sa in "${PREFIX}-system-nodes" "${PREFIX}-worker-nodes"; do
+  gcloud iam service-accounts delete "${sa}@${PROJECT}.iam.gserviceaccount.com" \
+    --project="$PROJECT" --quiet 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 9. KMS crypto key (schedule destruction; key ring cannot be deleted)
+# ---------------------------------------------------------------------------
+msg "Scheduling KMS key destruction..."
+gcloud kms keys versions destroy 1 \
+  --key="${PREFIX}-gke-secrets" \
+  --keyring="${PREFIX}-gke-keyring" \
+  --location="$REGION" \
+  --project="$PROJECT" 2>/dev/null || true
+
+# ---------------------------------------------------------------------------
+# 10. Clean up Terraform state in GCS
+# ---------------------------------------------------------------------------
+msg "Cleaning Terraform state from GCS..."
+gcloud storage rm -r \
+  "gs://cluster-state-${PROJECT}/deployments/${REGION}/${PREFIX}/" 2>/dev/null || true
+
+msg "Done"
