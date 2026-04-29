@@ -7,7 +7,7 @@ deployment:
   tenancy: eidosx
   location: us-central1
   state: tenancy
-  destroy: false
+  destroy: true
   tags:
     env: demo
 

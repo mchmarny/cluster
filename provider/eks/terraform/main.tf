@@ -157,4 +157,11 @@ locals {
     { pod = local.vpc_cni_enabled ? try(local._raw_subnets.pod, local.default_subnets.pod) : [] }
   )
   effective_tags = try(local.config.deployment.tags, {})
+
+  // Stable identity tags applied to every taggable resource via default_tags.
+  // Used by tools/delete-eks for tag-based discovery of orphaned resources.
+  common_tags = {
+    Cluster   = local.prefix
+    ManagedBy = "cluster-toolkit"
+  }
 }

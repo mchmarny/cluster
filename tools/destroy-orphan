@@ -1,0 +1,272 @@
+#!/bin/bash
+
+# State-driven destroy for orphan clusters with no local config file.
+# Pulls Terraform state from cloud storage, synthesizes a minimal config YAML
+# that satisfies the Terraform locals/for_each evaluations, and runs
+# `terraform destroy`. Cleanest teardown when state is intact.
+#
+# Currently supports EKS only.
+#
+# Usage: tools/destroy-orphan -p eks -x <prefix> -r <region> [-a <account>] [--yes] [--dry-run]
+
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+has_tools aws jq yq terraform
+
+PROVIDER=""
+PREFIX=""
+REGION=""
+ACCOUNT=""
+ASSUME_YES=false
+DRY_RUN=false
+
+usage() {
+  cat <<EOH
+Usage: $0 -p <eks> -x <prefix> -r <region> [-a <account>] [--yes] [--dry-run]
+  -p           Cloud provider (currently: eks)
+  -x           Deployment prefix (deployment.id from original config)
+  -r           Cloud region
+  -a           Account / Project ID (default: from sts get-caller-identity)
+  --yes        Skip confirmation prompt
+  --dry-run    Synthesize config and print, but do NOT destroy
+EOH
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p|--provider) PROVIDER="$2"; shift 2 ;;
+    -x|--prefix)   PREFIX="$2"; shift 2 ;;
+    -r|--region)   REGION="$2"; shift 2 ;;
+    -a|--account)  ACCOUNT="$2"; shift 2 ;;
+    --yes)         ASSUME_YES=true; shift ;;
+    --dry-run)     DRY_RUN=true; shift ;;
+    -h|--help)     usage ;;
+    *) err "Unknown option: $1" ;;
+  esac
+done
+
+[[ -z "$PROVIDER" ]] && err "Missing required flag: -p"
+[[ -z "$PREFIX"   ]] && err "Missing required flag: -x"
+[[ -z "$REGION"   ]] && err "Missing required flag: -r"
+[[ "$PROVIDER" != "eks" ]] && err "Only -p eks is supported (gke not yet implemented)"
+
+if [[ -z "$ACCOUNT" ]]; then
+  ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+fi
+
+REPO_ROOT=$(cd "$DIR/.." && pwd)
+TF_SOURCE="$REPO_ROOT/provider/eks/terraform"
+WORK=$(mktemp -d)
+trap 'rm -rf "$WORK"' EXIT
+
+STATE_BUCKET="cluster-state-${ACCOUNT}"
+STATE_KEY="deployments/${REGION}/${PREFIX}/terraform.tfstate"
+STATE_FILE="$WORK/terraform.tfstate"
+CONFIG_FILE="$WORK/${PREFIX}.yaml"
+
+# ---------------------------------------------------------------------------
+# 1. Pull state from S3
+# ---------------------------------------------------------------------------
+msg "Fetching state: s3://${STATE_BUCKET}/${STATE_KEY}"
+aws s3 cp "s3://${STATE_BUCKET}/${STATE_KEY}" "$STATE_FILE" --region us-east-1 \
+  >/dev/null 2>&1 \
+  || err "Failed to fetch state. Verify -x prefix, -r region, -a account match the orphan cluster."
+
+# ---------------------------------------------------------------------------
+# 2. Synthesize config YAML from state
+# ---------------------------------------------------------------------------
+msg "Synthesizing config from state..."
+
+jq --arg pfx "$PREFIX" --arg acct "$ACCOUNT" --arg reg "$REGION" '
+  # Build lookup map "type.name" -> [instances]
+  ([.resources[] | {key: "\(.type).\(.name)", value: .instances}] | from_entries) as $R |
+
+  def has_res($t; $n): ($R | has("\($t).\($n)"));
+  def first($t; $n):   $R["\($t).\($n)"][0].attributes;
+  def all_inst($t; $n): $R["\($t).\($n)"] // [];
+  def keyed($t; $n):
+    $R["\($t).\($n)"] // [] | map({key: .index_key, attrs: .attributes});
+
+  (first("aws_eks_cluster"; "main")) as $cluster |
+  (first("aws_vpc"; "main"))         as $vpc |
+
+  # Subnets — keys like "demo-public-us-east-1a" → group by type
+  (keyed("aws_subnet"; "main")
+    | map(
+        (.key | sub("^"+$pfx+"-"; "") | capture("^(?<type>[a-z]+)-(?<zone>.+)$")) as $p
+        | {type: $p.type, zone: $p.zone, cidr: .attrs.cidr_block}
+      )
+    | group_by(.type)
+    | map({key: .[0].type, value: map({cidr, zone})})
+    | from_entries) as $subnets |
+
+  # Addons present in state (count = 1 if config key present)
+  ([
+    {k:"coreDns",                 t:"aws_eks_addon", n:"coredns"},
+    {k:"vpcCni",                  t:"aws_eks_addon", n:"vpc_cni"},
+    {k:"kubeProxy",               t:"aws_eks_addon", n:"kube_proxy"},
+    {k:"cloudwatchObservability", t:"aws_eks_addon", n:"cloudwatch_observability"},
+    {k:"metricsServer",           t:"aws_eks_addon", n:"metrics_server"},
+    {k:"ebsCsi",                  t:"aws_eks_addon", n:"ebs_csi_driver"}
+   ]
+    | map(select(has_res(.t; .n)) | {key: .k, value: ""})
+    | from_entries) as $addons |
+
+  # VPC endpoints
+  ((all_inst("aws_vpc_endpoint"; "gateway") + all_inst("aws_vpc_endpoint"; "interface"))
+    | map(.attributes.service_name | split(".") | last)
+    | unique) as $endpoints |
+
+  # System nodegroup
+  (if has_res("aws_eks_node_group"; "system") then
+     (first("aws_eks_node_group"; "system")) as $s |
+     {
+       instanceType: $s.instance_types[0],
+       capacity: {
+         desired: $s.scaling_config[0].desired_size,
+         min:     $s.scaling_config[0].min_size,
+         max:     $s.scaling_config[0].max_size
+       }
+     }
+   else null end) as $system |
+
+  # Worker node groups — pair launch templates with ASGs by index_key
+  (keyed("aws_launch_template"; "node_groups")
+    | map(
+        .key as $k | .attrs as $lt |
+        ((all_inst("aws_autoscaling_group"; "node_groups")
+          | map(select(.index_key == $k))[0].attributes) // {}) as $asg |
+        ({
+          name:         ($k | sub("^"+$pfx+"-"; "")),
+          instanceType: $lt.instance_type,
+          # imageId pinned from state to bypass Ubuntu AMI data-source lookup
+          imageId:      $lt.image_id,
+          capacity: {
+            desired: ($asg.desired_capacity // 0),
+            min:     ($asg.min_size // 0),
+            max:     ($asg.max_size // 0)
+          }
+        })
+      )) as $workers |
+
+  # Admin role principal ARNs (use ARN form to skip data.aws_iam_role lookup)
+  ((all_inst("aws_eks_access_entry"; "admin_roles")
+    | map(.attributes.principal_arn)) // []) as $admins |
+
+  # Extra IAM policies attached to node roles (beyond the hardcoded base set)
+  ((all_inst("aws_iam_role_policy_attachment"; "system_nodes_extra")
+    | map(.index_key) // [])) as $sysExtraIam |
+  ((all_inst("aws_iam_role_policy_attachment"; "worker_nodes_extra")
+    | map(.index_key) // [])) as $workerExtraIam |
+
+  # SSH public key
+  (if has_res("aws_key_pair"; "main") then
+     first("aws_key_pair"; "main").public_key
+   else null end) as $ssh |
+
+  # Final document
+  {
+    apiVersion: "github.com/mchmarny/cluster/v1alpha1",
+    kind: "Cluster",
+    deployment: {
+      id:       $pfx,
+      provider: "eks",
+      tenancy:  $acct,
+      location: $reg,
+      destroy:  true
+    },
+    cluster: {
+      eks: ({
+        version: $cluster.version,
+        name:    $cluster.name
+      }
+      + (if ($admins | length) > 0 then {adminRoles: $admins} else {} end)
+      + {
+        controlPlane: {
+          cidr:         $cluster.kubernetes_network_config[0].service_ipv4_cidr,
+          allowedCidrs: ($cluster.vpc_config[0].public_access_cidrs // [])
+        }
+      }
+      + (if ($addons | length) > 0 then {addOns: $addons} else {} end))
+    },
+    network: {
+      eks: ({
+        cidrs: ({host: $vpc.cidr_block}
+          + (if has_res("aws_vpc_ipv4_cidr_block_association"; "secondary_cidr") then
+              {pod: first("aws_vpc_ipv4_cidr_block_association"; "secondary_cidr").cidr_block}
+             else {} end)),
+        subnets: $subnets
+      }
+      + (if ($endpoints | length) > 0 then {endpoints: $endpoints} else {} end))
+    },
+    compute: {
+      eks: ({
+        nodeGroups: ({}
+          + (if $system then {system: $system} else {} end)
+          + (if ($workers | length) > 0 then {workers: $workers} else {} end))
+      }
+      + (if $ssh then {sshPublicKey: $ssh} else {} end))
+    }
+  }
+  + (if (($sysExtraIam | length) + ($workerExtraIam | length)) > 0 then
+      {iam: ({}
+        + (if ($sysExtraIam    | length) > 0 then {systemNodePolicies: $sysExtraIam} else {} end)
+        + (if ($workerExtraIam | length) > 0 then {workerNodePolicies: $workerExtraIam} else {} end))}
+     else {} end)
+' "$STATE_FILE" | yq -P -o=yaml '.' > "$CONFIG_FILE"
+
+msg "Synthesized config: $CONFIG_FILE"
+echo "----- BEGIN synthesized config -----" >&2
+cat "$CONFIG_FILE" >&2
+echo "----- END synthesized config -----" >&2
+
+if [[ "$DRY_RUN" == "true" ]]; then
+  msg "Dry run — skipping destroy. Config written to $CONFIG_FILE"
+  cp "$CONFIG_FILE" "$REPO_ROOT/${PREFIX}-orphan.yaml"
+  msg "Saved a copy at $REPO_ROOT/${PREFIX}-orphan.yaml"
+  exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Confirm
+# ---------------------------------------------------------------------------
+if [[ "$ASSUME_YES" != "true" ]]; then
+  echo "" >&2
+  echo "About to DESTROY all resources for cluster '${PREFIX}' in account ${ACCOUNT} (${REGION})." >&2
+  read -r -p "Type 'destroy' to proceed: " answer
+  [[ "$answer" == "destroy" ]] || err "Aborted by user"
+fi
+
+# ---------------------------------------------------------------------------
+# 4. Run terraform destroy in an isolated copy of the TF module
+# ---------------------------------------------------------------------------
+WORK_TF="$WORK/terraform"
+cp -R "$TF_SOURCE" "$WORK_TF"
+
+cat > "$WORK_TF/backend.generated.hcl" <<EOC
+bucket  = "${STATE_BUCKET}"
+region  = "us-east-1"
+encrypt = true
+EOC
+
+msg "Initializing Terraform with orphan backend..."
+( cd "$WORK_TF" && terraform init -reconfigure -input=false \
+    -backend-config="backend.generated.hcl" \
+    -backend-config="key=${STATE_KEY}" )
+
+msg "Running terraform destroy..."
+( cd "$WORK_TF" && terraform destroy -auto-approve -input=false \
+    -var "CONFIG_PATH=${CONFIG_FILE}" )
+
+# ---------------------------------------------------------------------------
+# 5. Clean up state object in S3
+# ---------------------------------------------------------------------------
+msg "Cleaning Terraform state from S3..."
+aws s3 rm "s3://${STATE_BUCKET}/deployments/${REGION}/${PREFIX}/" \
+  --recursive --region us-east-1 2>/dev/null || true
+
+msg "Done"

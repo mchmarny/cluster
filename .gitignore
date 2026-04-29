@@ -104,3 +104,6 @@ dist/
 
 # keys 
 provider/eks/keys
+
+# config
+config/aicr*

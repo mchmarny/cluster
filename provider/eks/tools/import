@@ -1,0 +1,309 @@
+#!/bin/bash
+
+# EKS reverse-engineer: discover an existing cluster and emit an enriched
+# config YAML on stdout. Takes a seed config providing deployment.{id,tenancy,
+# location} and queries AWS to fill in cluster, network, compute, etc.
+#
+# Usage: ./import -c <seed.yaml>
+
+set -euo pipefail
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$DIR" && git rev-parse --show-toplevel)/tools/common"
+
+has_tools aws jq yq
+
+CONFIG_FILE=""
+
+usage() {
+  echo "Usage: $0 -c <seed.yaml>"
+  echo "  -c  Seed config with deployment.{id,tenancy,location}"
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config) CONFIG_FILE="$2"; shift 2 ;;
+    -h|--help)   usage ;;
+    *) err "Unknown option: $1" ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && err "Missing required flag: -c <seed.yaml>"
+[[ ! -f "$CONFIG_FILE" ]] && err "Config file not found: $CONFIG_FILE"
+
+# ---------------------------------------------------------------------------
+# Read seed
+# ---------------------------------------------------------------------------
+PREFIX=$(yq -r '.deployment.id' "$CONFIG_FILE")
+ACCOUNT=$(yq -r '.deployment.tenancy' "$CONFIG_FILE")
+REGION=$(yq -r '.deployment.location' "$CONFIG_FILE")
+
+[[ -z "$PREFIX"  || "$PREFIX"  == "null" ]] && err "deployment.id is required in seed"
+[[ -z "$ACCOUNT" || "$ACCOUNT" == "null" ]] && err "deployment.tenancy is required in seed"
+[[ -z "$REGION"  || "$REGION"  == "null" ]] && err "deployment.location is required in seed"
+
+# Cluster name defaults to prefix unless overridden in seed
+CLUSTER=$(yq -r '.cluster.eks.name // .deployment.id' "$CONFIG_FILE")
+
+msg "Importing cluster=${CLUSTER} prefix=${PREFIX} region=${REGION} account=${ACCOUNT}" >&2
+
+# ---------------------------------------------------------------------------
+# Cluster
+# ---------------------------------------------------------------------------
+CLUSTER_JSON=$(aws eks describe-cluster --name "$CLUSTER" --region "$REGION" \
+  --output json 2>/dev/null) || err "Cluster not found: ${CLUSTER}"
+
+EKS_VERSION=$(echo "$CLUSTER_JSON" | jq -r '.cluster.version')
+SERVICE_CIDR=$(echo "$CLUSTER_JSON" | jq -r '.cluster.kubernetesNetworkConfig.serviceIpv4Cidr // empty')
+VPC_ID=$(echo "$CLUSTER_JSON" | jq -r '.cluster.resourcesVpcConfig.vpcId')
+PUB_CIDRS_JSON=$(echo "$CLUSTER_JSON" | jq -c '.cluster.resourcesVpcConfig.publicAccessCidrs // []')
+
+# ---------------------------------------------------------------------------
+# Admin roles via access entries with cluster-admin policy
+# ---------------------------------------------------------------------------
+ADMIN_ROLES_JSON='[]'
+ENTRIES=$(aws eks list-access-entries --cluster-name "$CLUSTER" --region "$REGION" \
+  --query "accessEntries[]" --output text 2>/dev/null || echo "")
+for arn in $ENTRIES; do
+  POLS=$(aws eks list-associated-access-policies --cluster-name "$CLUSTER" \
+    --region "$REGION" --principal-arn "$arn" \
+    --query "associatedAccessPolicies[].policyArn" --output text 2>/dev/null || echo "")
+  if echo "$POLS" | grep -q "AmazonEKSClusterAdminPolicy"; then
+    name="${arn##*/}"
+    ADMIN_ROLES_JSON=$(echo "$ADMIN_ROLES_JSON" | jq --arg r "$name" '. + [$r]')
+  fi
+done
+
+# ---------------------------------------------------------------------------
+# Addons (camelCase keys; "" means installed-with-default-version)
+# ---------------------------------------------------------------------------
+ADDONS_JSON='{}'
+declare -A ADDON_KEYS=(
+  [coredns]=coreDns
+  [vpc-cni]=vpcCni
+  [kube-proxy]=kubeProxy
+  [amazon-cloudwatch-observability]=cloudwatchObservability
+  [metrics-server]=metricsServer
+  [aws-ebs-csi-driver]=ebsCsi
+)
+for addon in $(aws eks list-addons --cluster-name "$CLUSTER" --region "$REGION" \
+  --query "addons[]" --output text 2>/dev/null || true); do
+  key="${ADDON_KEYS[$addon]:-$addon}"
+  ADDONS_JSON=$(echo "$ADDONS_JSON" | jq --arg k "$key" '. + {($k): ""}')
+done
+
+# ---------------------------------------------------------------------------
+# VPC primary + secondary CIDRs
+# ---------------------------------------------------------------------------
+VPC_JSON=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$REGION" --output json)
+HOST_CIDR=$(echo "$VPC_JSON" | jq -r '.Vpcs[0].CidrBlock')
+POD_CIDR=$(echo "$VPC_JSON" | jq -r --arg p "$HOST_CIDR" \
+  '.Vpcs[0].CidrBlockAssociationSet
+   | map(select(.CidrBlockState.State == "associated") | .CidrBlock)
+   | map(select(. != $p))
+   | .[0] // empty')
+
+# ---------------------------------------------------------------------------
+# Subnets grouped by Name tag pattern <prefix>-<type>-<az>-subnet
+# ---------------------------------------------------------------------------
+SUBNETS_RAW=$(aws ec2 describe-subnets --region "$REGION" \
+  --filters "Name=vpc-id,Values=$VPC_ID" --output json)
+
+# Build {public:[{cidr,zone}], system:[...], worker:[...], pod:[...]}
+SUBNETS_JSON=$(echo "$SUBNETS_RAW" | jq --arg pfx "$PREFIX" '
+  .Subnets
+  | map({
+      cidr: .CidrBlock,
+      zone: .AvailabilityZone,
+      name: ((.Tags // []) | from_entries | .Name // "")
+    })
+  | map(select(.name | startswith($pfx + "-")))
+  | map(.type = (.name | sub("^" + $pfx + "-"; "") | sub("-[a-z0-9-]+-subnet$"; "")))
+  | group_by(.type)
+  | map({key: .[0].type, value: map({cidr, zone})})
+  | from_entries
+')
+
+# ---------------------------------------------------------------------------
+# VPC endpoints (last segment of service name, e.g. com.amazonaws.us-east-1.s3 → s3)
+# ---------------------------------------------------------------------------
+ENDPOINTS_JSON=$(aws ec2 describe-vpc-endpoints --region "$REGION" \
+  --filters "Name=vpc-id,Values=$VPC_ID" \
+  --query "VpcEndpoints[].ServiceName" --output json 2>/dev/null \
+  | jq '[.[] | split(".") | last] | unique')
+
+# ---------------------------------------------------------------------------
+# System node group
+# ---------------------------------------------------------------------------
+SYSTEM_NG=$(aws eks describe-nodegroup --cluster-name "$CLUSTER" \
+  --nodegroup-name "${PREFIX}-system" --region "$REGION" --output json 2>/dev/null \
+  | jq '{
+      instanceType: .nodegroup.instanceTypes[0],
+      capacity: {
+        desired: .nodegroup.scalingConfig.desiredSize,
+        min:     .nodegroup.scalingConfig.minSize,
+        max:     .nodegroup.scalingConfig.maxSize
+      },
+      labels: (.nodegroup.labels // {})
+    }' 2>/dev/null || echo 'null')
+
+# ---------------------------------------------------------------------------
+# Worker node groups (self-managed ASGs, look up launch template per ASG)
+# ---------------------------------------------------------------------------
+ASGS_JSON=$(aws autoscaling describe-auto-scaling-groups --region "$REGION" \
+  --query "AutoScalingGroups[?Tags[?Key=='kubernetes.io/cluster/${CLUSTER}' && Value=='owned']]" \
+  --output json)
+
+WORKERS_JSON='[]'
+for asg in $(echo "$ASGS_JSON" | jq -r '.[].AutoScalingGroupName'); do
+  ASG=$(echo "$ASGS_JSON" | jq --arg n "$asg" '.[] | select(.AutoScalingGroupName==$n)')
+  LT_ID=$(echo "$ASG" | jq -r '.LaunchTemplate.LaunchTemplateId // .MixedInstancesPolicy.LaunchTemplate.LaunchTemplateSpecification.LaunchTemplateId')
+  LT=$(aws ec2 describe-launch-template-versions --region "$REGION" \
+    --launch-template-id "$LT_ID" --versions '$Latest' --output json \
+    | jq '.LaunchTemplateVersions[0].LaunchTemplateData')
+
+  NAME="${asg#${PREFIX}-}"
+  WORKER=$(jq -n \
+    --arg name "$NAME" \
+    --argjson asg "$ASG" \
+    --argjson lt "$LT" '
+    {
+      name:         $name,
+      instanceType: ($lt.InstanceType // null),
+      capacity: {
+        desired: $asg.DesiredCapacity,
+        min:     $asg.MinSize,
+        max:     $asg.MaxSize
+      }
+    }
+    + (if ($lt.BlockDeviceMappings // []) | length > 0 then
+        {blockDevice: {
+          mount: $lt.BlockDeviceMappings[0].DeviceName,
+          size:  $lt.BlockDeviceMappings[0].Ebs.VolumeSize,
+          type:  $lt.BlockDeviceMappings[0].Ebs.VolumeType
+        }}
+       else {} end)
+    + (if $lt.CapacityReservationSpecification.CapacityReservationPreference then
+        {capacity: (.capacity + {reservation: {
+          preference: $lt.CapacityReservationSpecification.CapacityReservationPreference,
+          target:     ($lt.CapacityReservationSpecification.CapacityReservationTarget.CapacityReservationId
+                       // $lt.CapacityReservationSpecification.CapacityReservationTarget.CapacityReservationResourceGroupArn
+                       // null)
+        }})}
+       else {} end)
+    | walk(if type == "object" then with_entries(select(.value != null)) else . end)
+  ')
+  WORKERS_JSON=$(echo "$WORKERS_JSON" | jq --argjson w "$WORKER" '. + [$w]')
+done
+
+# ---------------------------------------------------------------------------
+# SSH public key (optional)
+# ---------------------------------------------------------------------------
+SSH_KEY=$(aws ec2 describe-key-pairs --region "$REGION" \
+  --key-names "${PREFIX}-key" --include-public-key \
+  --query "KeyPairs[0].PublicKey" --output text 2>/dev/null || echo "")
+
+# ---------------------------------------------------------------------------
+# KMS deletion window (optional)
+# ---------------------------------------------------------------------------
+KMS_WIN=$(aws kms describe-key --key-id "alias/${PREFIX}-eks-secrets" \
+  --region "$REGION" --query 'KeyMetadata.PendingWindowInDays' \
+  --output text 2>/dev/null || echo "")
+
+# ---------------------------------------------------------------------------
+# Log retention (optional)
+# ---------------------------------------------------------------------------
+LOG_RETENTION=$(aws logs describe-log-groups --region "$REGION" \
+  --log-group-name-prefix "/aws/eks/cluster/${PREFIX}-${CLUSTER}" \
+  --query 'logGroups[0].retentionInDays' --output text 2>/dev/null || echo "")
+VPC_LOG_RETENTION=$(aws logs describe-log-groups --region "$REGION" \
+  --log-group-name-prefix "/aws/vpc/${PREFIX}-flow-logs" \
+  --query 'logGroups[0].retentionInDays' --output text 2>/dev/null || echo "")
+
+# ---------------------------------------------------------------------------
+# Compose final YAML using yq merge: seed + discovered fields
+# ---------------------------------------------------------------------------
+DISCOVERED=$(jq -n \
+  --arg prefix        "$PREFIX" \
+  --arg cluster       "$CLUSTER" \
+  --arg ekv           "$EKS_VERSION" \
+  --arg svccidr       "$SERVICE_CIDR" \
+  --argjson pubcidrs  "$PUB_CIDRS_JSON" \
+  --argjson admins    "$ADMIN_ROLES_JSON" \
+  --argjson addons    "$ADDONS_JSON" \
+  --arg hostcidr      "$HOST_CIDR" \
+  --arg podcidr       "$POD_CIDR" \
+  --argjson subnets   "$SUBNETS_JSON" \
+  --argjson endpoints "$ENDPOINTS_JSON" \
+  --argjson sysng     "$SYSTEM_NG" \
+  --argjson workers   "$WORKERS_JSON" \
+  --arg sshkey        "$SSH_KEY" \
+  --arg kmswin        "$KMS_WIN" \
+  --arg logret        "$LOG_RETENTION" \
+  --arg vpclogret     "$VPC_LOG_RETENTION" '
+  {
+    cluster: {
+      eks: ({
+        version: $ekv,
+        name:    $cluster,
+      }
+      + (if $admins | length > 0 then {adminRoles: $admins} else {} end)
+      + {
+        controlPlane: ({}
+          + (if $svccidr != "" and $svccidr != null then {cidr: $svccidr} else {} end)
+          + (if $pubcidrs | length > 0 then {allowedCidrs: $pubcidrs} else {} end)
+        )
+      }
+      + (if $addons | length > 0 then {addOns: $addons} else {} end)
+      )
+    },
+    network: {
+      eks: {
+        cidrs: ({host: $hostcidr}
+          + (if $podcidr != "" then {pod: $podcidr} else {} end)),
+        subnets: $subnets
+      }
+      + (if $endpoints | length > 0 then {endpoints: $endpoints} else {} end)
+    },
+    compute: {
+      eks: ({nodeGroups: ({}
+        + (if $sysng != null then {system: $sysng} else {} end)
+        + (if $workers | length > 0 then {workers: $workers} else {} end))}
+        + (if $sshkey != "" and $sshkey != "None" then {sshPublicKey: $sshkey} else {} end)
+      )
+    }
+  }
+  + (if $kmswin != "" and $kmswin != "None" then
+      {security: {kms: {deletionWindowInDays: ($kmswin | tonumber)}}}
+     else {} end)
+  + (if ($logret != "" and $logret != "None") or ($vpclogret != "" and $vpclogret != "None") then
+      {observability: ({}
+        + (if $logret != "" and $logret != "None" then {logRetentionInDays: ($logret | tonumber)} else {} end)
+        + (if $vpclogret != "" and $vpclogret != "None" then {vpcFlowLogs: {retentionInDays: ($vpclogret | tonumber)}} else {} end)
+      )}
+     else {} end)
+  | walk(if type == "object" then with_entries(select(.value != null and .value != {})) else . end)
+')
+
+# Emit: seed YAML overlaid with discovered fields. Seed wins for keys it sets.
+# Use yq merge: load both, merge with `*` (deep merge, right wins on conflict).
+# We want the SEED to win for deployment.* and any explicit user fields, so
+# put discovered first and overlay seed on top.
+DISCOVERED_YAML=$(echo "$DISCOVERED" | yq -P -o=yaml '.')
+SEED_YAML=$(yq -P -o=yaml '.' "$CONFIG_FILE")
+
+cat <<EOF
+# Generated by provider/eks/tools/import on $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# Seeded from: $(realpath "$CONFIG_FILE")
+# Source cluster: ${CLUSTER} (account ${ACCOUNT}, region ${REGION})
+#
+# NOT recovered (defaults will apply or values must be re-added manually):
+#   - compute.eks.nodeGroups.workers[].labels  (encoded in launch template user_data)
+#   - compute.eks.nodeGroups.workers[].accelerator (auto-detected from instance type)
+#   - iam.{system,worker}NodePolicies (extras beyond the hardcoded base set)
+#   - network.eks.securityGroups.additionalRules (cannot separate from base rules)
+#   - addon versions (shown as "" = installed-with-default; check actual versions)
+EOF
+yq ea -P '. as $i ireduce ({}; . * $i)' \
+  <(echo "$DISCOVERED_YAML") <(echo "$SEED_YAML")

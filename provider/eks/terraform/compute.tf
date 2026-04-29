@@ -294,6 +294,20 @@ resource "aws_autoscaling_group" "node_groups" {
     value               = "true"
     propagate_at_launch = false
   }
+
+  # ASG `tag {}` blocks do not inherit provider default_tags — set explicitly
+  # so tools/delete-eks can discover ASGs via tag filters.
+  tag {
+    key                 = "Cluster"
+    value               = local.prefix
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "ManagedBy"
+    value               = "cluster-toolkit"
+    propagate_at_launch = true
+  }
 }
 
 # Launch template for system nodes — sets IMDS hop limit to 2 so containerized

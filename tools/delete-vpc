@@ -1,0 +1,498 @@
+#!/bin/bash
+set -euo pipefail
+
+# Delete an AWS VPC and all cascading resources within it.
+# Discovers everything via VPC ID. Idempotent: safe to re-run after partial
+# failures. Each step tolerates "not found" / "already deleted" errors.
+#
+# Usage: tools/delete-vpc -a <account> -v <vpc-id> [-r <region>] [--yes]
+
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "${DIR}/common"
+
+# ---------------------------------------------------------------------------
+# Parse arguments
+# ---------------------------------------------------------------------------
+
+ACCOUNT=""
+VPC_ID=""
+REGION=""
+ASSUME_YES=false
+
+usage() {
+  cat <<EOH
+Usage: $0 -a <account> -v <vpc-id> [-r <region>] [--yes]
+  -a  AWS account ID (required; verified against current caller identity)
+  -v  VPC ID to delete (required)
+  -r  AWS region (optional; auto-discovered across enabled regions)
+  --yes  Skip confirmation prompt
+EOH
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -a|--account) ACCOUNT="$2"; shift 2 ;;
+    -v|--vpc-id)  VPC_ID="$2";  shift 2 ;;
+    -r|--region)  REGION="$2";  shift 2 ;;
+    --yes)        ASSUME_YES=true; shift ;;
+    -h|--help)    usage ;;
+    *) err "Unknown option: $1" ;;
+  esac
+done
+
+[[ -z "$ACCOUNT" ]] && err "Missing required flag: -a <account>"
+[[ -z "$VPC_ID"  ]] && err "Missing required flag: -v <vpc-id>"
+[[ "$VPC_ID" == vpc-* ]] || err "Invalid VPC ID format: $VPC_ID"
+
+has_tools aws
+
+# ---------------------------------------------------------------------------
+# Verify caller identity matches requested account
+# ---------------------------------------------------------------------------
+CALLER=$(aws sts get-caller-identity --query Account --output text)
+if [[ "$CALLER" != "$ACCOUNT" ]]; then
+  err "Caller account ($CALLER) does not match requested account ($ACCOUNT)"
+fi
+
+# ---------------------------------------------------------------------------
+# Resolve region (scan enabled regions if not given)
+# ---------------------------------------------------------------------------
+vpc_in_region() {
+  local r="$1"
+  local out
+  out=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$r" \
+    --query "Vpcs[0].VpcId" --output text 2>/dev/null || echo "")
+  [[ "$out" == "$VPC_ID" ]]
+}
+
+if [[ -z "$REGION" ]]; then
+  msg "Region not provided; scanning enabled regions for $VPC_ID..."
+  REGIONS=$(aws ec2 describe-regions \
+    --query "Regions[].RegionName" --output text 2>/dev/null || echo "")
+  for r in $REGIONS; do
+    if vpc_in_region "$r"; then
+      REGION="$r"
+      msg "Found $VPC_ID in region $REGION"
+      break
+    fi
+  done
+  [[ -z "$REGION" ]] && err "VPC $VPC_ID not found in any enabled region"
+else
+  vpc_in_region "$REGION" || warn "VPC $VPC_ID not found in $REGION (continuing for stale-resource cleanup)"
+fi
+
+# ---------------------------------------------------------------------------
+# Confirmation
+# ---------------------------------------------------------------------------
+msg "About to delete VPC $VPC_ID and ALL resources in it (account=$ACCOUNT region=$REGION)"
+if [[ "$ASSUME_YES" != "true" ]]; then
+  read -r -p "Type the VPC ID to confirm: " CONFIRM
+  [[ "$CONFIRM" == "$VPC_ID" ]] || err "Confirmation did not match; aborting"
+fi
+
+VPC_FILTER="Name=vpc-id,Values=$VPC_ID"
+
+# ---------------------------------------------------------------------------
+# 1. Terminate EC2 instances in VPC
+# ---------------------------------------------------------------------------
+msg "Terminating EC2 instances..."
+INSTANCES=$(aws ec2 describe-instances --region "$REGION" \
+  --filters "$VPC_FILTER" "Name=instance-state-name,Values=pending,running,stopping,stopped" \
+  --query "Reservations[].Instances[].InstanceId" --output text 2>/dev/null || echo "")
+if [[ -n "$INSTANCES" ]]; then
+  for i in $INSTANCES; do
+    aws ec2 modify-instance-attribute --instance-id "$i" \
+      --no-disable-api-termination --region "$REGION" 2>/dev/null || true
+  done
+  aws ec2 terminate-instances --instance-ids $INSTANCES \
+    --region "$REGION" 2>/dev/null || true
+  aws ec2 wait instance-terminated --instance-ids $INSTANCES \
+    --region "$REGION" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
+# 2. Auto Scaling Groups in VPC (via subnet membership)
+# ---------------------------------------------------------------------------
+msg "Deleting Auto Scaling Groups in VPC..."
+SUBNET_IDS=$(aws ec2 describe-subnets --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "Subnets[].SubnetId" --output text 2>/dev/null || echo "")
+if [[ -n "$SUBNET_IDS" ]]; then
+  ALL_ASGS=$(aws autoscaling describe-auto-scaling-groups --region "$REGION" \
+    --query "AutoScalingGroups[].[AutoScalingGroupName,VPCZoneIdentifier]" \
+    --output text 2>/dev/null || echo "")
+  while IFS=$'\t' read -r asg_name asg_subs; do
+    [[ -z "$asg_name" || "$asg_name" == "None" ]] && continue
+    for sub in ${asg_subs//,/ }; do
+      if grep -qw "$sub" <<<"$SUBNET_IDS"; then
+        aws autoscaling delete-auto-scaling-group \
+          --auto-scaling-group-name "$asg_name" --force-delete \
+          --region "$REGION" 2>/dev/null || true
+        break
+      fi
+    done
+  done <<<"$ALL_ASGS"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Load Balancers (v2: ALB/NLB)
+# ---------------------------------------------------------------------------
+msg "Deleting load balancers (v2)..."
+LB_ARNS=$(aws elbv2 describe-load-balancers --region "$REGION" \
+  --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" \
+  --output text 2>/dev/null || echo "")
+for arn in $LB_ARNS; do
+  aws elbv2 delete-load-balancer --load-balancer-arn "$arn" \
+    --region "$REGION" 2>/dev/null || true
+done
+if [[ -n "$LB_ARNS" ]]; then
+  for _ in $(seq 1 30); do
+    REMAINING=$(aws elbv2 describe-load-balancers --region "$REGION" \
+      --query "LoadBalancers[?VpcId=='$VPC_ID'].LoadBalancerArn" \
+      --output text 2>/dev/null || echo "")
+    [[ -z "$REMAINING" ]] && break
+    sleep 10
+  done
+fi
+
+msg "Deleting target groups..."
+TG_ARNS=$(aws elbv2 describe-target-groups --region "$REGION" \
+  --query "TargetGroups[?VpcId=='$VPC_ID'].TargetGroupArn" \
+  --output text 2>/dev/null || echo "")
+for arn in $TG_ARNS; do
+  aws elbv2 delete-target-group --target-group-arn "$arn" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 4. Classic Load Balancers
+# ---------------------------------------------------------------------------
+msg "Deleting classic load balancers..."
+CLB_NAMES=$(aws elb describe-load-balancers --region "$REGION" \
+  --query "LoadBalancerDescriptions[?VPCId=='$VPC_ID'].LoadBalancerName" \
+  --output text 2>/dev/null || echo "")
+for name in $CLB_NAMES; do
+  aws elb delete-load-balancer --load-balancer-name "$name" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 5. RDS instances, clusters, subnet groups
+# ---------------------------------------------------------------------------
+msg "Deleting RDS instances..."
+DB_INSTANCES=$(aws rds describe-db-instances --region "$REGION" \
+  --query "DBInstances[?DBSubnetGroup.VpcId=='$VPC_ID'].DBInstanceIdentifier" \
+  --output text 2>/dev/null || echo "")
+for db in $DB_INSTANCES; do
+  aws rds modify-db-instance --db-instance-identifier "$db" \
+    --no-deletion-protection --apply-immediately \
+    --region "$REGION" 2>/dev/null || true
+  aws rds delete-db-instance --db-instance-identifier "$db" \
+    --skip-final-snapshot --delete-automated-backups \
+    --region "$REGION" 2>/dev/null || true
+done
+for db in $DB_INSTANCES; do
+  aws rds wait db-instance-deleted --db-instance-identifier "$db" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+msg "Deleting RDS clusters..."
+DB_CLUSTERS=$(aws rds describe-db-clusters --region "$REGION" \
+  --query "DBClusters[?DBSubnetGroup!=null].[DBClusterIdentifier,DBSubnetGroup]" \
+  --output text 2>/dev/null || echo "")
+while IFS=$'\t' read -r cid sg; do
+  [[ -z "$cid" || "$cid" == "None" ]] && continue
+  SG_VPC=$(aws rds describe-db-subnet-groups --db-subnet-group-name "$sg" \
+    --region "$REGION" --query "DBSubnetGroups[0].VpcId" --output text 2>/dev/null || echo "")
+  if [[ "$SG_VPC" == "$VPC_ID" ]]; then
+    aws rds modify-db-cluster --db-cluster-identifier "$cid" \
+      --no-deletion-protection --apply-immediately \
+      --region "$REGION" 2>/dev/null || true
+    aws rds delete-db-cluster --db-cluster-identifier "$cid" \
+      --skip-final-snapshot --region "$REGION" 2>/dev/null || true
+  fi
+done <<<"$DB_CLUSTERS"
+
+msg "Deleting RDS DB subnet groups..."
+DB_SUBNET_GROUPS=$(aws rds describe-db-subnet-groups --region "$REGION" \
+  --query "DBSubnetGroups[?VpcId=='$VPC_ID'].DBSubnetGroupName" \
+  --output text 2>/dev/null || echo "")
+for sg in $DB_SUBNET_GROUPS; do
+  aws rds delete-db-subnet-group --db-subnet-group-name "$sg" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 6. ElastiCache clusters + subnet groups
+# ---------------------------------------------------------------------------
+msg "Deleting ElastiCache clusters..."
+EC_CLUSTERS=$(aws elasticache describe-cache-clusters --region "$REGION" \
+  --query "CacheClusters[].[CacheClusterId,CacheSubnetGroupName]" \
+  --output text 2>/dev/null || echo "")
+while IFS=$'\t' read -r cid sg; do
+  [[ -z "$cid" || "$cid" == "None" ]] && continue
+  SG_VPC=$(aws elasticache describe-cache-subnet-groups \
+    --cache-subnet-group-name "$sg" --region "$REGION" \
+    --query "CacheSubnetGroups[0].VpcId" --output text 2>/dev/null || echo "")
+  if [[ "$SG_VPC" == "$VPC_ID" ]]; then
+    aws elasticache delete-cache-cluster --cache-cluster-id "$cid" \
+      --region "$REGION" 2>/dev/null || true
+  fi
+done <<<"$EC_CLUSTERS"
+
+EC_SUBNET_GROUPS=$(aws elasticache describe-cache-subnet-groups --region "$REGION" \
+  --query "CacheSubnetGroups[?VpcId=='$VPC_ID'].CacheSubnetGroupName" \
+  --output text 2>/dev/null || echo "")
+for sg in $EC_SUBNET_GROUPS; do
+  aws elasticache delete-cache-subnet-group --cache-subnet-group-name "$sg" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 7. VPC endpoints
+# ---------------------------------------------------------------------------
+msg "Deleting VPC endpoints..."
+VPCES=$(aws ec2 describe-vpc-endpoints --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "VpcEndpoints[].VpcEndpointId" --output text 2>/dev/null || echo "")
+if [[ -n "$VPCES" ]]; then
+  aws ec2 delete-vpc-endpoints --vpc-endpoint-ids $VPCES \
+    --region "$REGION" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
+# 8. NAT gateways (wait for deletion before releasing EIPs)
+# ---------------------------------------------------------------------------
+msg "Deleting NAT gateways..."
+NATS=$(aws ec2 describe-nat-gateways --region "$REGION" \
+  --filter "Name=vpc-id,Values=$VPC_ID" \
+  --query "NatGateways[?State!=\`deleted\` && State!=\`failed\`].NatGatewayId" \
+  --output text 2>/dev/null || echo "")
+for nat in $NATS; do
+  aws ec2 delete-nat-gateway --nat-gateway-id "$nat" \
+    --region "$REGION" 2>/dev/null || true
+done
+for nat in $NATS; do
+  for _ in $(seq 1 60); do
+    state=$(aws ec2 describe-nat-gateways --nat-gateway-ids "$nat" \
+      --region "$REGION" --query "NatGateways[0].State" \
+      --output text 2>/dev/null || echo "deleted")
+    [[ "$state" == "deleted" || "$state" == "None" || "$state" == "failed" ]] && break
+    sleep 10
+  done
+done
+
+# ---------------------------------------------------------------------------
+# 9. VPC peering connections (requester or accepter side)
+# ---------------------------------------------------------------------------
+msg "Deleting VPC peering connections..."
+PEERS=$(aws ec2 describe-vpc-peering-connections --region "$REGION" \
+  --filters "Name=requester-vpc-info.vpc-id,Values=$VPC_ID" \
+  --query "VpcPeeringConnections[?Status.Code!=\`deleted\`].VpcPeeringConnectionId" \
+  --output text 2>/dev/null || echo "")
+PEERS2=$(aws ec2 describe-vpc-peering-connections --region "$REGION" \
+  --filters "Name=accepter-vpc-info.vpc-id,Values=$VPC_ID" \
+  --query "VpcPeeringConnections[?Status.Code!=\`deleted\`].VpcPeeringConnectionId" \
+  --output text 2>/dev/null || echo "")
+for p in $PEERS $PEERS2; do
+  aws ec2 delete-vpc-peering-connection \
+    --vpc-peering-connection-id "$p" --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 10. Transit Gateway VPC attachments
+# ---------------------------------------------------------------------------
+msg "Deleting Transit Gateway attachments..."
+TGW_ATT=$(aws ec2 describe-transit-gateway-vpc-attachments --region "$REGION" \
+  --filters "Name=vpc-id,Values=$VPC_ID" \
+  --query "TransitGatewayVpcAttachments[?State!=\`deleted\` && State!=\`deleting\`].TransitGatewayAttachmentId" \
+  --output text 2>/dev/null || echo "")
+for a in $TGW_ATT; do
+  aws ec2 delete-transit-gateway-vpc-attachment \
+    --transit-gateway-attachment-id "$a" --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 11. Internet Gateway
+# ---------------------------------------------------------------------------
+msg "Detaching + deleting Internet Gateways..."
+IGWS=$(aws ec2 describe-internet-gateways --region "$REGION" \
+  --filters "Name=attachment.vpc-id,Values=$VPC_ID" \
+  --query "InternetGateways[].InternetGatewayId" --output text 2>/dev/null || echo "")
+for igw in $IGWS; do
+  aws ec2 detach-internet-gateway --internet-gateway-id "$igw" \
+    --vpc-id "$VPC_ID" --region "$REGION" 2>/dev/null || true
+  aws ec2 delete-internet-gateway --internet-gateway-id "$igw" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+msg "Deleting egress-only Internet Gateways..."
+EIGWS=$(aws ec2 describe-egress-only-internet-gateways --region "$REGION" \
+  --query "EgressOnlyInternetGateways[?Attachments[?VpcId=='$VPC_ID']].EgressOnlyInternetGatewayId" \
+  --output text 2>/dev/null || echo "")
+for eigw in $EIGWS; do
+  aws ec2 delete-egress-only-internet-gateway \
+    --egress-only-internet-gateway-id "$eigw" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 12. VPC flow logs
+# ---------------------------------------------------------------------------
+msg "Deleting VPC flow logs..."
+FLOWS=$(aws ec2 describe-flow-logs --region "$REGION" \
+  --filter "Name=resource-id,Values=$VPC_ID" \
+  --query "FlowLogs[].FlowLogId" --output text 2>/dev/null || echo "")
+if [[ -n "$FLOWS" ]]; then
+  aws ec2 delete-flow-logs --flow-log-ids $FLOWS \
+    --region "$REGION" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
+# 13. Network interfaces (force-detach if attached, then delete)
+# ---------------------------------------------------------------------------
+msg "Deleting network interfaces..."
+ENIS=$(aws ec2 describe-network-interfaces --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "NetworkInterfaces[].[NetworkInterfaceId,Attachment.AttachmentId,Status]" \
+  --output text 2>/dev/null || echo "")
+while IFS=$'\t' read -r eni_id att_id status; do
+  [[ -z "$eni_id" || "$eni_id" == "None" ]] && continue
+  if [[ -n "$att_id" && "$att_id" != "None" ]]; then
+    aws ec2 detach-network-interface --attachment-id "$att_id" \
+      --force --region "$REGION" 2>/dev/null || true
+    for _ in $(seq 1 30); do
+      cur=$(aws ec2 describe-network-interfaces --network-interface-ids "$eni_id" \
+        --region "$REGION" --query "NetworkInterfaces[0].Status" \
+        --output text 2>/dev/null || echo "available")
+      [[ "$cur" == "available" || "$cur" == "None" ]] && break
+      sleep 5
+    done
+  fi
+  aws ec2 delete-network-interface --network-interface-id "$eni_id" \
+    --region "$REGION" 2>/dev/null || true
+done <<<"$ENIS"
+
+# ---------------------------------------------------------------------------
+# 14. Release Elastic IPs that were associated with VPC ENIs
+# ---------------------------------------------------------------------------
+msg "Releasing unassociated Elastic IPs..."
+EIPS=$(aws ec2 describe-addresses --region "$REGION" \
+  --query "Addresses[?AssociationId==null].AllocationId" \
+  --output text 2>/dev/null || echo "")
+for eip in $EIPS; do
+  aws ec2 release-address --allocation-id "$eip" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 15. Route tables (skip the main one)
+# ---------------------------------------------------------------------------
+msg "Deleting route tables..."
+RTS=$(aws ec2 describe-route-tables --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "RouteTables[?length(Associations[?Main==\`true\`])==\`0\`].RouteTableId" \
+  --output text 2>/dev/null || echo "")
+for rt in $RTS; do
+  ASSOCS=$(aws ec2 describe-route-tables --route-table-ids "$rt" \
+    --region "$REGION" \
+    --query "RouteTables[0].Associations[?Main==\`false\`].RouteTableAssociationId" \
+    --output text 2>/dev/null || echo "")
+  for assoc in $ASSOCS; do
+    aws ec2 disassociate-route-table --association-id "$assoc" \
+      --region "$REGION" 2>/dev/null || true
+  done
+  aws ec2 delete-route-table --route-table-id "$rt" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 16. Network ACLs (skip default)
+# ---------------------------------------------------------------------------
+msg "Deleting network ACLs..."
+ACLS=$(aws ec2 describe-network-acls --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "NetworkAcls[?IsDefault==\`false\`].NetworkAclId" \
+  --output text 2>/dev/null || echo "")
+for acl in $ACLS; do
+  aws ec2 delete-network-acl --network-acl-id "$acl" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 17. Subnets
+# ---------------------------------------------------------------------------
+msg "Deleting subnets..."
+SUBS=$(aws ec2 describe-subnets --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "Subnets[].SubnetId" --output text 2>/dev/null || echo "")
+for sub in $SUBS; do
+  aws ec2 delete-subnet --subnet-id "$sub" --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 18. Security groups (revoke rules first, skip default)
+# ---------------------------------------------------------------------------
+msg "Revoking + deleting security groups..."
+SGS=$(aws ec2 describe-security-groups --region "$REGION" \
+  --filters "$VPC_FILTER" \
+  --query "SecurityGroups[?GroupName!=\`default\`].GroupId" \
+  --output text 2>/dev/null || echo "")
+for sg in $SGS; do
+  INGRESS=$(aws ec2 describe-security-groups --group-ids "$sg" \
+    --region "$REGION" --query "SecurityGroups[0].IpPermissions" \
+    --output json 2>/dev/null || echo "[]")
+  if [[ "$INGRESS" != "[]" && "$INGRESS" != "null" ]]; then
+    aws ec2 revoke-security-group-ingress --group-id "$sg" \
+      --ip-permissions "$INGRESS" --region "$REGION" 2>/dev/null || true
+  fi
+  EGRESS=$(aws ec2 describe-security-groups --group-ids "$sg" \
+    --region "$REGION" --query "SecurityGroups[0].IpPermissionsEgress" \
+    --output json 2>/dev/null || echo "[]")
+  if [[ "$EGRESS" != "[]" && "$EGRESS" != "null" ]]; then
+    aws ec2 revoke-security-group-egress --group-id "$sg" \
+      --ip-permissions "$EGRESS" --region "$REGION" 2>/dev/null || true
+  fi
+done
+for sg in $SGS; do
+  aws ec2 delete-security-group --group-id "$sg" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 19. Disassociate secondary CIDR blocks
+# ---------------------------------------------------------------------------
+msg "Disassociating secondary VPC CIDR blocks..."
+PRIMARY_CIDR=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$REGION" \
+  --query "Vpcs[0].CidrBlock" --output text 2>/dev/null || echo "")
+CIDR_ASSOCS=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$REGION" \
+  --query "Vpcs[0].CidrBlockAssociationSet[?CidrBlockState.State==\`associated\` && CidrBlock!='$PRIMARY_CIDR'].AssociationId" \
+  --output text 2>/dev/null || echo "")
+for a in $CIDR_ASSOCS; do
+  aws ec2 disassociate-vpc-cidr-block --association-id "$a" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+IPV6_ASSOCS=$(aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$REGION" \
+  --query "Vpcs[0].Ipv6CidrBlockAssociationSet[?Ipv6CidrBlockState.State==\`associated\`].AssociationId" \
+  --output text 2>/dev/null || echo "")
+for a in $IPV6_ASSOCS; do
+  aws ec2 disassociate-vpc-cidr-block --association-id "$a" \
+    --region "$REGION" 2>/dev/null || true
+done
+
+# ---------------------------------------------------------------------------
+# 20. Delete the VPC itself
+# ---------------------------------------------------------------------------
+msg "Deleting VPC $VPC_ID..."
+aws ec2 delete-vpc --vpc-id "$VPC_ID" --region "$REGION" 2>/dev/null || true
+
+# Verify
+if aws ec2 describe-vpcs --vpc-ids "$VPC_ID" --region "$REGION" \
+  --query "Vpcs[0].VpcId" --output text 2>/dev/null | grep -q "$VPC_ID"; then
+  warn "VPC $VPC_ID still exists; check for blocking dependencies and re-run"
+  exit 1
+fi
+
+msg "Done"
