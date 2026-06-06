@@ -41,8 +41,10 @@ ARG TERRAFORM_VERSION=1.15.5
 ARG KUBECTL_VERSION=1.36.1
 ARG GCLOUD_VERSION=569.0.0
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl unzip python3 \
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates curl unzip python3 \
     && rm -rf /var/lib/apt/lists/*
 
 # Terraform (with checksum verification)
@@ -99,8 +101,10 @@ RUN test -f /mirror/terraformrc || echo 'provider_installation { filesystem_mirr
 # =============================================================================
 FROM debian:bookworm-slim
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates jq git python3 \
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
+       ca-certificates jq git python3 \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -u 1000 -s /bin/bash builder \
     && mkdir -p /builder/terraform /opt/mirror/providers /opt/mirror/modules /state \

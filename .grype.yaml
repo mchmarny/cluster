@@ -1,8 +1,11 @@
-ignore:
-  - vulnerability: CVE-2025-68121  # crypto/tls session resumption, no fix in Go 1.26.0
-  - vulnerability: CVE-2025-22871  # net/http in go1.22.x (bundled gcloud/terraform binaries)
-  - vulnerability: CVE-2024-24790  # net/netip in go1.22.3 (bundled gcloud/terraform binaries)
-  - vulnerability: CVE-2025-4517   # python 3.11.9 zipfile (bundled gcloud SDK)
+# Image vulnerability scan policy.
+#
+# Per-CVE suppressions live in .openvex.json (OpenVEX v0.2.0) and are passed
+# into grype via the workflow's `--vex` flag (see .github/workflows/on-tag.yaml).
+# This file carries only scan-time configuration (paths to exclude).
+#
+# When scanning locally, run:
+#   grype <image> -c .grype.yaml --vex .openvex.json
 
 exclude:
   - '**/.terraform/**'

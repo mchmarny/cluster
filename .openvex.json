@@ -1,0 +1,513 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/mchmarny/cluster/.openvex.json",
+  "author": "mchmarny/cluster maintainers",
+  "role": "document creator",
+  "timestamp": "2026-06-06T00:00:00Z",
+  "version": 1,
+  "tooling": "manual; reachability verified against image contents and Dockerfiles in image/",
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "CVE-2026-7210",
+        "description": "cpython xml.parsers.expat / xml.etree.ElementTree insufficient entropy for Expat hash-flooding protection (CWE-331, Critical). Fix not yet backported to Python 3.14.x; appears in vendored Python inside the gcloud SDK and AWS CLI v2 bundles."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerability requires parsing attacker-controlled XML through xml.parsers.expat / xml.etree.ElementTree. The vendored CPython interpreter is only invoked transitively by two CLIs: (1) gcloud SDK (image/gke.dockerfile), used by tools/common to authenticate to GCP and pull cluster credentials — these calls speak HTTPS+JSON/protobuf to Google APIs, not XML; (2) AWS CLI v2 (image/eks.dockerfile), used by tools/common to talk to STS/EKS — also JSON-over-HTTPS. The cluster Go binary does not invoke these CLIs with attacker-supplied arguments. There is no code path in this image that feeds untrusted XML to the bundled Python's expat parser."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-15366",
+        "description": "cpython 3.14.x — fix landed only in 3.15.0a6; cannot be upgraded within the 3.14.x vendored runtime shipped with gcloud SDK and AWS CLI v2."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same Python-in-CLI surface as CVE-2026-7210. The vendored Python interpreter is only entered through gcloud / aws CLI invocations made by the cluster binary, with arguments derived from validated YAML configuration. No attacker-controlled input crosses the boundary into the Python runtime."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-15367",
+        "description": "cpython 3.14.x — fix only in 3.15.0a6. Vendored runtime shipped inside gcloud SDK / AWS CLI v2 binaries."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability argument as CVE-2026-7210 / CVE-2025-15366. CLI Python interpreter is only entered with operator-supplied gcloud / aws arguments derived from validated YAML; no untrusted input reaches the runtime."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-3276",
+        "description": "cpython 3.14.x — fix only in 3.15.0b2. Vendored runtime in gcloud SDK / AWS CLI v2."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability argument as CVE-2026-7210. The bundled Python in gcloud / aws CLI is only invoked transitively, with non-attacker-controlled arguments."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2025-12781",
+        "description": "cpython 3.14.x — fix only in 3.15.0a6. Vendored runtime in gcloud SDK / AWS CLI v2."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability argument as CVE-2026-7210. CLI-only Python; non-attacker-controlled invocations."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-7774",
+        "description": "cpython 3.14.x — fix only in 3.15.0b2. Vendored runtime in gcloud SDK / AWS CLI v2."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability argument as CVE-2026-7210. CLI-only Python; non-attacker-controlled invocations."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-8328",
+        "description": "cpython 3.14.x — fix only in 3.14.5 / 3.15.0b2. Vendored runtime in gcloud SDK; gcloud bundles 3.14.4 as of v569.0.0."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Bundled-Python CVE in gcloud SDK only. Same execution-path argument as CVE-2026-7210: gcloud is only invoked transitively from validated YAML inputs, never with attacker-controlled CLI arguments."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-jp4c-xjxw-mgf9",
+        "description": "pip < 26.1 vulnerability bundled inside the gcloud SDK's vendored Python site-packages. gcloud manages its own bundled pip and does not allow user upgrade via OS package manager."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The gcloud-bundled pip is only used internally by `gcloud components` to install gke-gcloud-auth-plugin at image build time (image/gke.dockerfile line ~74). It is never invoked at runtime with attacker-controlled package URLs or indices. The cluster runtime never calls `gcloud components` again; pip's vulnerable code paths are unreachable."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-58qw-9mgm-455v",
+        "description": "pip < 26.1 vulnerability bundled inside gcloud SDK's vendored Python site-packages."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as GHSA-jp4c-xjxw-mgf9: the bundled pip is only invoked at image build time by `gcloud components install` and is never re-entered at runtime."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5026",
+        "description": "golang.org/x/net vulnerability (Critical) statically linked into the upstream HashiCorp `terraform` binary. The official terraform binary is downloaded prebuilt from releases.hashicorp.com — its dependency versions are pinned by HashiCorp and cannot be upgraded without rebuilding terraform from source."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The vulnerable golang.org/x/net version is vendored into the terraform binary, not into the cluster Go binary (cluster's go.mod has no x/net dependency — verified with `go list -m all`). terraform is invoked with a fixed, operator-controlled CONFIG_PATH and TF_VAR_CONFIG_PATH (pkg/terraform/terraform.go) against AWS/GCP API endpoints over HTTPS — no attacker-controlled hosts or HTTP/2 frames cross terraform's network boundary in this image."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5025",
+        "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as GO-2026-5026. terraform's network calls are restricted to AWS/GCP control-plane endpoints; the cluster Go binary itself does not link this version of x/net."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5027",
+        "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as GO-2026-5026."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5028",
+        "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as GO-2026-5026."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5029",
+        "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as GO-2026-5026."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5030",
+        "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as GO-2026-5026."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39820",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Go stdlib version is fixed by upstream HashiCorp at terraform-build time; the cluster Go binary itself is rebuilt with Go 1.26.4 (current). terraform is only used against AWS/GCP control plane endpoints from validated config."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4986",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-42504",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5038",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-42507",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5039",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-42499",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4977",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39836",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4971",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-33814",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4918",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-33811",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4981",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-42501",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39826",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4980",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39825",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4976",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39823",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-4982",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-27145",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "GO-2026-5037",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39819",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    },
+    {
+      "vulnerability": {
+        "name": "CVE-2026-39817",
+        "description": "Go stdlib (vendored into terraform binary)."
+      },
+      "products": [
+        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "Same reachability as CVE-2026-39820."
+    }
+  ]
+}
