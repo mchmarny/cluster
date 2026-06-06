@@ -10,6 +10,11 @@ import (
 	"github.com/mchmarny/cluster/pkg/run"
 )
 
+const (
+	envTFAutomation = "TF_IN_AUTOMATION=1"
+	cmdInit         = "init"
+)
+
 // RunConfig holds all parameters for a Terraform run.
 type RunConfig struct {
 	TerraformDir string
@@ -180,7 +185,7 @@ func importIfMissing(ctx context.Context, cfg RunConfig, env []string) {
 func buildEnv(cfg RunConfig) []string {
 	env := []string{
 		fmt.Sprintf("TF_VAR_CONFIG_PATH=%s", cfg.ConfigPath),
-		"TF_IN_AUTOMATION=1",
+		envTFAutomation,
 	}
 
 	switch cfg.Provider {
@@ -204,7 +209,7 @@ func buildEnv(cfg RunConfig) []string {
 }
 
 func buildInitArgs(cfg RunConfig) []string {
-	args := []string{"init"}
+	args := []string{cmdInit}
 
 	if cfg.State != config.StateTenancy || cfg.Bucket == "" {
 		return args

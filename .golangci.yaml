@@ -106,6 +106,7 @@ linters:
           - dupl
           - errcheck
           - funlen
+          - goconst
           - gosec
           - noctx
         path: _test\.go

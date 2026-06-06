@@ -13,19 +13,19 @@ SHELL           := bash
 # Versions from .settings.yaml (single source of truth)
 TERRAFORM_VERSION ?= $(shell yq -r '.tools.terraform' .settings.yaml 2>/dev/null)
 ifeq ($(TERRAFORM_VERSION),)
-TERRAFORM_VERSION := 1.14.6
+TERRAFORM_VERSION := 1.15.5
 endif
 KUBECTL_VERSION ?= $(shell yq -r '.tools.kubectl' .settings.yaml 2>/dev/null)
 ifeq ($(KUBECTL_VERSION),)
-KUBECTL_VERSION := 1.35.1
+KUBECTL_VERSION := 1.36.1
 endif
 AWSCLI_VERSION ?= $(shell yq -r '.tools.awscli' .settings.yaml 2>/dev/null)
 ifeq ($(AWSCLI_VERSION),)
-AWSCLI_VERSION := 2.32.18
+AWSCLI_VERSION := 2.34.63
 endif
 GCLOUD_VERSION ?= $(shell yq -r '.tools.gcloud' .settings.yaml 2>/dev/null)
 ifeq ($(GCLOUD_VERSION),)
-GCLOUD_VERSION := 503.0.0
+GCLOUD_VERSION := 569.0.0
 endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)
@@ -37,7 +37,7 @@ LINT_TIMEOUT := 5m
 endif
 KIND_NODE_IMAGE ?= $(shell yq -r '.testing.kind_node_image' .settings.yaml 2>/dev/null)
 ifeq ($(KIND_NODE_IMAGE),)
-KIND_NODE_IMAGE := kindest/node:v1.32.2
+KIND_NODE_IMAGE := kindest/node:v1.36.1
 endif
 
 # Tools

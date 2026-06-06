@@ -3,21 +3,21 @@
 
 # Language Versions
 languages:
-  go: '1.26.0'
+  go: '1.26.4'
 
 # Infrastructure Tools
 tools:
-  terraform: '1.14.6'
-  kubectl: '1.35.1'
-  awscli: '2.32.18'
-  gcloud: '503.0.0'
-  tflint: '0.61.0'
-  trivy: '0.70.0'
-  grype: '0.92.0'
+  terraform: '1.15.5'
+  kubectl: '1.36.1'
+  awscli: '2.34.63'
+  gcloud: '569.0.0'
+  tflint: '0.63.1'
+  trivy: '0.71.0'
+  grype: '0.114.0'
 
 # Linting
 linting:
-  golangci_lint: 'v2.10.1'
+  golangci_lint: 'v2.12.2'
   lint_timeout: '5m'
   scan_severity: 'CRITICAL,HIGH'
 
@@ -28,4 +28,4 @@ build:
 
 # Testing Configuration
 testing:
-  kind_node_image: 'kindest/node:v1.32.2'
+  kind_node_image: 'kindest/node:v1.36.1'

@@ -37,9 +37,9 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build \
 FROM debian:bookworm-slim AS tools
 
 ARG TARGETARCH
-ARG TERRAFORM_VERSION=1.14.6
-ARG KUBECTL_VERSION=1.35.1
-ARG GCLOUD_VERSION=503.0.0
+ARG TERRAFORM_VERSION=1.15.5
+ARG KUBECTL_VERSION=1.36.1
+ARG GCLOUD_VERSION=569.0.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl unzip python3 \
@@ -127,9 +127,9 @@ COPY --chown=builder:builder provider/gke/terraform /builder/terraform
 ENV TF_CLI_CONFIG_FILE=/etc/terraformrc
 
 ARG VERSION=dev
-ARG TERRAFORM_VERSION=1.14.6
-ARG KUBECTL_VERSION=1.35.1
-ARG GCLOUD_VERSION=503.0.0
+ARG TERRAFORM_VERSION=1.15.5
+ARG KUBECTL_VERSION=1.36.1
+ARG GCLOUD_VERSION=569.0.0
 LABEL org.opencontainers.image.title="GKE v2 Actuator" \
       org.opencontainers.image.description="Self-contained Terraform deployment for Google GKE" \
       org.opencontainers.image.version="${VERSION}" \
