@@ -13,8 +13,8 @@
         "description": "cpython xml.parsers.expat / xml.etree.ElementTree insufficient entropy for Expat hash-flooding protection (CWE-331, Critical). Fix not yet backported to Python 3.14.x; appears in vendored Python inside the gcloud SDK and AWS CLI v2 bundles."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -26,8 +26,8 @@
         "description": "cpython 3.14.x — fix landed only in 3.15.0a6; cannot be upgraded within the 3.14.x vendored runtime shipped with gcloud SDK and AWS CLI v2."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -39,8 +39,8 @@
         "description": "cpython 3.14.x — fix only in 3.15.0a6. Vendored runtime shipped inside gcloud SDK / AWS CLI v2 binaries."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -52,8 +52,8 @@
         "description": "cpython 3.14.x — fix only in 3.15.0b2. Vendored runtime in gcloud SDK / AWS CLI v2."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -65,8 +65,8 @@
         "description": "cpython 3.14.x — fix only in 3.15.0a6. Vendored runtime in gcloud SDK / AWS CLI v2."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -78,8 +78,8 @@
         "description": "cpython 3.14.x — fix only in 3.15.0b2. Vendored runtime in gcloud SDK / AWS CLI v2."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -91,7 +91,7 @@
         "description": "cpython 3.14.x — fix only in 3.14.5 / 3.15.0b2. Vendored runtime in gcloud SDK; gcloud bundles 3.14.4 as of v569.0.0."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -103,7 +103,7 @@
         "description": "pip < 26.1 vulnerability bundled inside the gcloud SDK's vendored Python site-packages. gcloud manages its own bundled pip and does not allow user upgrade via OS package manager."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -115,7 +115,7 @@
         "description": "pip < 26.1 vulnerability bundled inside gcloud SDK's vendored Python site-packages."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -127,8 +127,8 @@
         "description": "golang.org/x/net vulnerability (Critical) statically linked into the upstream HashiCorp `terraform` binary. The official terraform binary is downloaded prebuilt from releases.hashicorp.com — its dependency versions are pinned by HashiCorp and cannot be upgraded without rebuilding terraform from source."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -140,8 +140,8 @@
         "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -153,8 +153,8 @@
         "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -166,8 +166,8 @@
         "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -179,8 +179,8 @@
         "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -192,8 +192,8 @@
         "description": "golang.org/x/net vulnerability statically linked into the terraform binary."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -205,8 +205,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -218,8 +218,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -231,8 +231,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -244,8 +244,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -257,8 +257,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -270,8 +270,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -283,8 +283,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -296,8 +296,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -309,8 +309,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -322,8 +322,8 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-eks", "identifiers": { "purl": "pkg:oci/cluster-eks" } },
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -335,7 +335,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -347,7 +347,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -359,7 +359,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -371,7 +371,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -383,7 +383,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -395,7 +395,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -407,7 +407,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -419,7 +419,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -431,7 +431,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -443,7 +443,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -455,7 +455,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -467,7 +467,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -479,7 +479,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -491,7 +491,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
@@ -503,7 +503,7 @@
         "description": "Go stdlib (vendored into terraform binary)."
       },
       "products": [
-        { "@id": "pkg:oci/cluster-gke", "identifiers": { "purl": "pkg:oci/cluster-gke" } }
+        { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
