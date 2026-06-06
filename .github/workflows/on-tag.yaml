@@ -260,8 +260,12 @@ jobs:
           IMAGE_REF: '${{ steps.parse.outputs.image }}:${{ steps.parse.outputs.version }}'
         run: |
           set -euo pipefail
+          # --vex applies OpenVEX statements with per-CVE reachability
+          # evidence for bundled-binary CVEs (Python in gcloud/AWS CLI,
+          # Go stdlib + x/net in terraform). See .openvex.json.
           grype "${IMAGE_REF}" \
             --config .grype.yaml \
+            --vex .openvex.json \
             --only-fixed \
             --fail-on critical \
             --output table \
