@@ -13,15 +13,34 @@ Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurat
 
 > **Note:** AKS and OKE are newly added and pending live validation against Azure/Oracle accounts. They are complete and statically validated (`terraform validate`, `go test`, schema checks) but have not yet been exercised end-to-end against live cloud APIs. EKS and GKE are validated.
 
+## How It Works
+
+Every provider follows the same shape: a single YAML config (`deployment.provider` selects the cloud) is loaded by the `cluster` Go CLI, which resolves provider-specific state backend and credentials, then drives per-provider Terraform. Provider-specific settings nest under a provider key (`cluster.eks`, `cluster.gke`, `cluster.aks`, `cluster.oke`), so the workflow, CLI, and container interface are identical across clouds.
+
+```
+config.yaml ──▶ cluster CLI ──▶ provider/<csp>/terraform ──▶ managed Kubernetes
+   (deployment.provider: eks | gke | aks | oke)
+```
+
 ## Usage
 
 1. **Generate config** (optional) -- run `init` to create a starter YAML, or copy from `config/`
-2. **Discover versions** (optional) -- find latest K8s versions and AMIs for your region
-3. **Setup tenancy** (one-time) -- bootstrap cloud account with state bucket and IAM credentials
-4. **Apply** -- deploy the cluster using the container image with your config and key
-5. **Destroy** -- set `deployment.destroy: true` in config and re-run apply
+2. **Discover** (optional) -- `provider/<csp>/tools/disco` lists supported K8s versions, machine types/shapes, and identity for your region
+3. **Setup tenancy** (one-time) -- `provider/<csp>/tools/setup` bootstraps the cloud account with a state store and (where applicable) IAM credentials
+4. **Apply** -- deploy the cluster using the container image with your config and credentials
+5. **Validate** (optional) -- `provider/<csp>/tools/validate` runs post-deploy health checks
+6. **Destroy** -- set `deployment.destroy: true` in config and re-run apply
 
 See provider-specific guides for detailed steps: [EKS](./provider/eks/) | [GKE](./provider/gke/) | [AKS](./provider/aks/) | [OKE](./provider/oke/)
+
+### Per-Provider Model
+
+| Provider | CLI | Auth | Remote state backend |
+|----------|-----|------|----------------------|
+| EKS | `aws` | IAM access key (`KEY_CONTENT`) or default chain | S3 (`cluster-state-<account>`) |
+| GKE | `gcloud` | ADC JSON (`KEY_CONTENT`) or default chain | GCS (`cluster-state-<project>`) |
+| AKS | `az` (+ `kubelogin`) | `az login` device-code / CLI chain | Azure Blob (`clst<subscription-hex>` / `tfstate`) |
+| OKE | `oci` | OCI API-key config file (`~/.oci/config`) | OCI Object Storage via S3-compat (`cluster-state`) |
 
 ## Container Images
 
@@ -34,12 +53,16 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 | AKS | `ghcr.io/mchmarny/cluster/aks:<version>` |
 | OKE | `ghcr.io/mchmarny/cluster/oke:<version>` |
 
-Check image version:
+Check image version (any provider):
 
 ```bash
-docker run --rm ghcr.io/mchmarny/cluster/gke:<version> --version
 docker run --rm ghcr.io/mchmarny/cluster/eks:<version> --version
+docker run --rm ghcr.io/mchmarny/cluster/gke:<version> --version
+docker run --rm ghcr.io/mchmarny/cluster/aks:<version> --version
+docker run --rm ghcr.io/mchmarny/cluster/oke:<version> --version
 ```
+
+Images are published by pushing a `v*-<csp>` tag (e.g. `v0.3.0-aks`), which triggers the multi-arch build in CI.
 
 ### CLI Commands
 
