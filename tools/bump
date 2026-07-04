@@ -5,7 +5,7 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${DIR}/common"
 
-CSPS="eks gke"
+CSPS="eks gke aks oke"
 
 # Check if required tools are installed
 has_tools git

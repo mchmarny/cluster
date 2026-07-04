@@ -188,6 +188,10 @@ detect_csp() {
     echo "eks"
   elif grep -q "google_container_cluster" "$tf_dir"/*.tf 2>/dev/null; then
     echo "gke"
+  elif grep -q "azurerm_kubernetes_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "aks"
+  elif grep -q "oci_containerengine_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "oke"
   else
     err "Unable to detect CSP from Terraform files"
   fi
@@ -220,6 +224,34 @@ init_terraform() {
       terraform -chdir="$tf_dir" init \
         -backend-config="bucket=$bucket_name" \
         -backend-config="prefix=deployments/${dep_region}/${dep_id}"
+      ;;
+    aks)
+      # azurerm backend; storage account name mirrors pkg/azure StorageAccountName.
+      local sa_hex storage_account
+      sa_hex="$(echo "$tenancy" | tr -d '-' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
+      storage_account="clst${sa_hex}"
+      storage_account="${storage_account:0:24}"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="resource_group_name=cluster-state-rg" \
+        -backend-config="storage_account_name=$storage_account" \
+        -backend-config="container_name=tfstate" \
+        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
+      ;;
+    oke)
+      # s3 backend against OCI Object Storage's S3-compatibility endpoint.
+      # OCI_S3_ENDPOINT should be exported (see provider/oke/tools/setup output).
+      local s3_endpoint="${OCI_S3_ENDPOINT:-}"
+      [[ -z "$s3_endpoint" ]] && err "OCI_S3_ENDPOINT not set (run provider/oke/tools/setup, then export it)"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="bucket=cluster-state" \
+        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate" \
+        -backend-config="region=$dep_region" \
+        -backend-config="endpoints={s3=\"$s3_endpoint\"}" \
+        -backend-config="skip_region_validation=true" \
+        -backend-config="skip_credentials_validation=true" \
+        -backend-config="skip_metadata_api_check=true" \
+        -backend-config="skip_requesting_account_id=true" \
+        -backend-config="use_path_style=true"
       ;;
     *)
       err "Unknown CSP: $csp"

@@ -15,12 +15,12 @@
         },
         "provider": {
           "type": "string",
-          "enum": ["eks", "gke"],
-          "description": "Cloud provider (eks, gke)"
+          "enum": ["eks", "gke", "aks", "oke"],
+          "description": "Cloud provider (eks, gke, aks, oke)"
         },
         "tenancy": {
           "type": "string",
-          "description": "Cloud account/subscription/project ID"
+          "description": "Cloud account/subscription/project/tenancy ID"
         },
         "location": {
           "type": "string",

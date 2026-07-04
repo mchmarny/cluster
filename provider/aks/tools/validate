@@ -1,0 +1,137 @@
+#!/bin/bash
+set -euo pipefail
+
+# Post-deployment validation of AKS cluster
+# Usage: ./validate -c config/aks-demo.yaml
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+CONFIG_FILE=""
+
+usage() {
+  echo "Usage: $0 -c <config.yaml>"
+  echo "  -c  Config file path (relative to repo root or absolute)"
+  exit 1
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -c|--config)  CONFIG_FILE="$2"; shift 2 ;;
+    -h|--help)    usage ;;
+    *) err "Unknown option: $1" ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && usage
+CONFIG_FILE="$(resolve_config "$CONFIG_FILE")"
+
+has_tools az kubectl yq jq
+
+validate_config "$CONFIG_FILE"
+
+DEP_ID="$(config_get "$CONFIG_FILE" deployment.id)"
+REGION="$(config_get "$CONFIG_FILE" deployment.location)"
+SUBSCRIPTION_ID="$(config_get "$CONFIG_FILE" deployment.tenancy)"
+CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.aks.name "$DEP_ID")"
+RESOURCE_GROUP="$(config_get "$CONFIG_FILE" cluster.aks.resourceGroup "${DEP_ID}-rg")"
+EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.aks.version "")"
+WORKER_COUNT="$(yq '.compute.aks.nodePools.workers | length' "$CONFIG_FILE" 2>/dev/null || echo "0")"
+
+msg "Validating cluster: ${CLUSTER_NAME} in ${REGION} (subscription: ${SUBSCRIPTION_ID})"
+
+FAILED=0
+PASSED=0
+
+check() {
+  local desc="$1"; shift
+  if eval "$@" &>/dev/null; then
+    msg "  PASS: $desc"
+    PASSED=$((PASSED + 1))
+  else
+    printf "${COLOR_RED}  FAIL: %s${COLOR_RESET}\n" "$desc" >&2
+    FAILED=$((FAILED + 1))
+  fi
+}
+
+# =============================================================================
+# Cluster Validation
+# =============================================================================
+msg "Checking AKS cluster..."
+
+CLUSTER_JSON=$(az aks show --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" -o json 2>/dev/null || echo "{}")
+
+if [[ "$CLUSTER_JSON" == "{}" ]]; then
+  err "Cluster '$CLUSTER_NAME' not found in resource group '$RESOURCE_GROUP'"
+fi
+
+PROVISIONING_STATE=$(echo "$CLUSTER_JSON" | jq -r '.provisioningState')
+POWER_STATE=$(echo "$CLUSTER_JSON" | jq -r '.powerState.code')
+CLUSTER_VERSION=$(echo "$CLUSTER_JSON" | jq -r '.currentKubernetesVersion')
+PRIVATE_CLUSTER=$(echo "$CLUSTER_JSON" | jq -r '.apiServerAccessProfile.enablePrivateCluster // "false"')
+OIDC_ENABLED=$(echo "$CLUSTER_JSON" | jq -r '.oidcIssuerProfile.enabled // "false"')
+WORKLOAD_IDENTITY=$(echo "$CLUSTER_JSON" | jq -r '.securityProfile.workloadIdentity.enabled // "false"')
+
+check "Cluster provisioning succeeded" "[[ '$PROVISIONING_STATE' == 'Succeeded' ]]"
+check "Cluster power state is Running" "[[ '$POWER_STATE' == 'Running' ]]"
+check "Private cluster enabled" "[[ '$PRIVATE_CLUSTER' == 'true' ]]"
+check "OIDC issuer enabled" "[[ '$OIDC_ENABLED' == 'true' ]]"
+check "Workload identity enabled" "[[ '$WORKLOAD_IDENTITY' == 'true' ]]"
+
+if [[ -n "$EXPECTED_VERSION" ]]; then
+  check "Cluster version starts with $EXPECTED_VERSION" "[[ '$CLUSTER_VERSION' == ${EXPECTED_VERSION}* ]]"
+fi
+
+# =============================================================================
+# Network Validation
+# =============================================================================
+msg "Checking network configuration..."
+
+VNET_COUNT=$(az network vnet list --resource-group "$RESOURCE_GROUP" --query "length(@)" -o tsv 2>/dev/null || echo "0")
+check "VNet exists in resource group" "[[ $VNET_COUNT -ge 1 ]]"
+
+NAT_COUNT=$(az network nat gateway list --resource-group "$RESOURCE_GROUP" --query "length(@)" -o tsv 2>/dev/null || echo "0")
+check "NAT gateway exists" "[[ $NAT_COUNT -ge 1 ]]"
+
+# =============================================================================
+# Node Pool Validation
+# =============================================================================
+msg "Checking node pools..."
+
+POOL_NAMES=$(echo "$CLUSTER_JSON" | jq -r '.agentPoolProfiles[].name' 2>/dev/null || echo "")
+POOL_COUNT=$(echo "$POOL_NAMES" | grep -c . || echo "0")
+EXPECTED_POOL_COUNT=$(( WORKER_COUNT + 1 ))
+
+check "System node pool exists" "echo '$POOL_NAMES' | grep -q '^system$'"
+check "Node pool count matches config (expected $EXPECTED_POOL_COUNT)" "[[ $POOL_COUNT -eq $EXPECTED_POOL_COUNT ]]"
+
+# =============================================================================
+# Node Validation
+# =============================================================================
+msg "Checking nodes..."
+
+az aks get-credentials --name "$CLUSTER_NAME" --resource-group "$RESOURCE_GROUP" --overwrite-existing &>/dev/null || \
+  warn "Could not fetch kubeconfig (kubelogin required for AAD clusters)"
+
+NODE_COUNT=$(kubectl get nodes --no-headers 2>/dev/null | wc -l | tr -d ' ' || echo "0")
+READY_NODES=$(kubectl get nodes --no-headers 2>/dev/null | grep -c " Ready " || echo "0")
+
+check "At least 1 node exists" "[[ $NODE_COUNT -ge 1 ]]"
+check "All nodes are Ready" "[[ $READY_NODES -eq $NODE_COUNT && $NODE_COUNT -gt 0 ]]"
+
+# =============================================================================
+# Summary
+# =============================================================================
+echo ""
+echo "=============================================="
+echo "Validation Summary"
+echo "=============================================="
+msg "Passed: $PASSED"
+if [[ $FAILED -gt 0 ]]; then
+  printf "${COLOR_RED}Failed: %s${COLOR_RESET}\n" "$FAILED" >&2
+  echo ""
+  err "Cluster validation failed with $FAILED errors"
+else
+  msg "All checks passed!"
+  echo ""
+fi

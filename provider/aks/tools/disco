@@ -1,0 +1,118 @@
+#!/bin/bash
+
+# AKS discovery tool: shows identity, supported K8s versions, and VM size
+# availability for a region.
+# Usage: ./disco [-r eastus]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+has_tools az jq curl
+
+REGION="${AZURE_DEFAULTS_LOCATION:-}"
+
+while getopts "r:h" opt; do
+  case $opt in
+    r) REGION="$OPTARG" ;;
+    h)
+      echo "Usage: $0 [-r region]"
+      echo "  -r region    Azure region (e.g. eastus)"
+      exit 0
+      ;;
+    *) err "Invalid option: -$OPTARG" ;;
+  esac
+done
+
+[[ -z "$REGION" ]] && err "Region required. Set via -r (e.g. -r eastus)"
+
+msg "Discovering AKS information in region: ${REGION}"
+echo ""
+
+# =============================================================================
+# Identity
+# =============================================================================
+echo "Identity:"
+echo "---------"
+
+ACCOUNT_JSON=$(az account show -o json 2>/dev/null || echo "{}")
+if [[ "$ACCOUNT_JSON" == "{}" ]]; then
+  err "Not logged in to Azure. Run: az login"
+fi
+
+SUBSCRIPTION_ID=$(echo "$ACCOUNT_JSON" | jq -r '.id')
+SUBSCRIPTION_NAME=$(echo "$ACCOUNT_JSON" | jq -r '.name')
+TENANT_ID=$(echo "$ACCOUNT_JSON" | jq -r '.tenantId')
+USER_NAME=$(echo "$ACCOUNT_JSON" | jq -r '.user.name')
+EGRESS_IP=$(curl -sf https://checkip.amazonaws.com 2>/dev/null || curl -sf https://ifconfig.me 2>/dev/null || echo "unavailable")
+
+echo "  User:         $USER_NAME"
+echo "  Subscription: $SUBSCRIPTION_NAME ($SUBSCRIPTION_ID)"
+echo "  Tenant:       $TENANT_ID"
+echo "  Egress IP:    $EGRESS_IP"
+echo ""
+echo "  Ready-to-paste authorizedNetworks snippet:"
+echo "    cluster:"
+echo "      aks:"
+echo "        controlPlane:"
+echo "          authorizedNetworks:"
+echo "            - cidr: \"${EGRESS_IP}/32\""
+echo "              name: hq"
+echo ""
+
+# =============================================================================
+# Kubernetes Versions
+# =============================================================================
+echo "Kubernetes Versions:"
+echo "--------------------"
+
+VERSIONS_JSON=$(az aks get-versions --location "$REGION" -o json 2>/dev/null || echo "{}")
+
+if [[ "$VERSIONS_JSON" == "{}" ]]; then
+  warn "Could not retrieve AKS versions for region: $REGION"
+else
+  echo "  Top available versions:"
+  echo "$VERSIONS_JSON" | jq -r '.values[]?.version // .orchestrators[]?.orchestratorVersion' 2>/dev/null \
+    | sort -Vr | uniq | head -5 | while read -r v; do
+    echo "    - $v"
+  done
+fi
+echo ""
+
+# =============================================================================
+# VM Sizes
+# =============================================================================
+echo "VM Sizes (availability in ${REGION}):"
+echo "--------------------------------------"
+
+CPU_SIZES=(
+  "Standard_D4s_v5"
+  "Standard_D8s_v5"
+  "Standard_D16s_v5"
+)
+
+GPU_SIZES=(
+  "Standard_NC24ads_A100_v4"
+  "Standard_ND96isr_H100_v5"
+)
+
+AVAILABLE=$(az vm list-sizes --location "$REGION" -o json 2>/dev/null | jq -r '.[].name' 2>/dev/null || echo "")
+
+check_vm_size() {
+  local size="$1"
+  if echo "$AVAILABLE" | grep -qx "$size"; then
+    printf "    %-30s available\n" "$size"
+  else
+    printf "    %-30s not available\n" "$size"
+  fi
+}
+
+echo ""
+echo "  CPU sizes:"
+for s in "${CPU_SIZES[@]}"; do check_vm_size "$s"; done
+
+echo ""
+echo "  GPU sizes (H100 assumed default: Standard_ND96isr_H100_v5):"
+for s in "${GPU_SIZES[@]}"; do check_vm_size "$s"; done
+
+echo ""
+msg "Done"

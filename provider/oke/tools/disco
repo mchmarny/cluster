@@ -1,0 +1,118 @@
+#!/bin/bash
+
+# OKE discovery tool: shows identity, supported K8s versions, and compute shape
+# availability.
+# Usage: ./disco [-r us-ashburn-1] [-p <compartment-ocid>]
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+has_tools oci jq curl
+
+REGION="${OCI_CLI_REGION:-}"
+COMPARTMENT_ID=""
+
+while getopts "r:p:h" opt; do
+  case $opt in
+    r) REGION="$OPTARG" ;;
+    p) COMPARTMENT_ID="$OPTARG" ;;
+    h)
+      echo "Usage: $0 [-r region] [-p compartment-ocid]"
+      echo "  -r region            OCI region (e.g. us-ashburn-1)"
+      echo "  -p compartment-ocid  Compartment (defaults to tenancy root)"
+      exit 0
+      ;;
+    *) err "Invalid option: -$OPTARG" ;;
+  esac
+done
+
+[[ -z "$REGION" ]] && err "Region required. Set via -r (e.g. -r us-ashburn-1)"
+
+msg "Discovering OKE information in region: ${REGION}"
+echo ""
+
+# =============================================================================
+# Identity
+# =============================================================================
+echo "Identity:"
+echo "---------"
+
+TENANCY_OCID=$(oci os ns get-metadata --query 'data."default-swift-container-name"' --raw-output 2>/dev/null || true)
+TENANCY_OCID=$(grep -E '^tenancy' ~/.oci/config 2>/dev/null | head -1 | cut -d= -f2 | tr -d ' ' || true)
+[[ -z "$COMPARTMENT_ID" ]] && COMPARTMENT_ID="$TENANCY_OCID"
+
+OS_NAMESPACE=$(oci os ns get --query 'data' --raw-output 2>/dev/null || echo "unavailable")
+EGRESS_IP=$(curl -sf https://checkip.amazonaws.com 2>/dev/null || curl -sf https://ifconfig.me 2>/dev/null || echo "unavailable")
+
+echo "  Tenancy:      ${TENANCY_OCID:-unavailable}"
+echo "  Compartment:  ${COMPARTMENT_ID:-unavailable}"
+echo "  Namespace:    $OS_NAMESPACE"
+echo "  Egress IP:    $EGRESS_IP"
+echo ""
+echo "  Ready-to-paste allowedCidrs snippet:"
+echo "    cluster:"
+echo "      oke:"
+echo "        controlPlane:"
+echo "          allowedCidrs:"
+echo "            - \"${EGRESS_IP}/32\""
+echo ""
+
+# =============================================================================
+# Kubernetes Versions
+# =============================================================================
+echo "Kubernetes Versions:"
+echo "--------------------"
+
+VERSIONS=$(oci ce cluster-options get --cluster-option-id all \
+  --query 'data."kubernetes-versions"' -o json 2>/dev/null || echo "[]")
+
+if [[ "$VERSIONS" == "[]" ]]; then
+  warn "Could not retrieve OKE versions"
+else
+  echo "$VERSIONS" | jq -r '.[]' 2>/dev/null | sort -Vr | head -5 | while read -r v; do
+    echo "    - $v"
+  done
+fi
+echo ""
+
+# =============================================================================
+# Availability Domains
+# =============================================================================
+echo "Availability Domains:"
+echo "---------------------"
+
+if [[ -n "$COMPARTMENT_ID" ]]; then
+  oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" \
+    --query 'data[].name' -o json 2>/dev/null | jq -r '.[]?' 2>/dev/null | while read -r ad; do
+    echo "  - $ad"
+  done
+else
+  warn "Compartment unknown; skipping AD listing"
+fi
+echo ""
+
+# =============================================================================
+# Compute Shapes
+# =============================================================================
+echo "Compute Shapes:"
+echo "---------------"
+
+echo "  CPU shapes (flex):"
+echo "    - VM.Standard.E4.Flex"
+echo "    - VM.Standard.E5.Flex"
+echo ""
+echo "  GPU shapes (H100 assumed default: BM.GPU.H100.8):"
+echo "    - BM.GPU.H100.8"
+echo "    - VM.GPU.A10.1"
+echo ""
+
+if [[ -n "$COMPARTMENT_ID" ]]; then
+  msg "Live shape availability (first 20):"
+  oci compute shape list --compartment-id "$COMPARTMENT_ID" \
+    --query 'data[].shape' -o json 2>/dev/null | jq -r '.[]?' 2>/dev/null | sort -u | head -20 | while read -r s; do
+    echo "    - $s"
+  done
+fi
+
+echo ""
+msg "Done"

@@ -1,0 +1,133 @@
+#!/bin/bash
+
+# Bootstrap Azure subscription for AKS cluster deployment.
+# Creates: resource group + storage account + blob container for Terraform
+# state, and writes backend.hcl. Authentication uses the Azure CLI login
+# (az login device-code flow); no service principal is required.
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+REQUIRED_TOOLS=(az yq jq)
+TF_DIR="${SCRIPT_DIR}/../terraform"
+
+# State backend naming (must match pkg/azure/config.go).
+STATE_RG="cluster-state-rg"
+STATE_CONTAINER="tfstate"
+
+usage() {
+  echo "Usage: $(basename "$0") -c <config-file>" >&2
+  exit 1
+}
+
+CONFIG_FILE=""
+while getopts "c:h" opt; do
+  case $opt in
+    c) CONFIG_FILE="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && usage
+
+has_tools "${REQUIRED_TOOLS[@]}"
+CONFIG_FILE=$(resolve_config "$CONFIG_FILE")
+validate_config "$CONFIG_FILE"
+
+SUBSCRIPTION_ID=$(config_get "$CONFIG_FILE" "deployment.tenancy")
+REGION=$(config_get "$CONFIG_FILE" "deployment.location")
+DEP_ID=$(config_get "$CONFIG_FILE" "deployment.id")
+
+# Storage account name: 3-24 lowercase alphanumeric, globally unique. Mirrors
+# pkg/azure StorageAccountName: "clst" + subscription hex (dashes stripped),
+# truncated to 24 chars.
+SA_HEX=$(echo "$SUBSCRIPTION_ID" | tr -d '-' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')
+STORAGE_ACCOUNT="clst${SA_HEX}"
+STORAGE_ACCOUNT="${STORAGE_ACCOUNT:0:24}"
+STATE_KEY="deployments/${REGION}/${DEP_ID}/terraform.tfstate"
+
+# Validate active subscription matches config.
+ACTIVE_SUB=$(az account show --query id -o tsv 2>/dev/null || true)
+if [[ -z "$ACTIVE_SUB" ]]; then
+  err "Not logged in to Azure. Run: az login"
+fi
+if [[ "$ACTIVE_SUB" != "$SUBSCRIPTION_ID" ]]; then
+  err "Active Azure subscription ($ACTIVE_SUB) does not match config ($SUBSCRIPTION_ID). Run: az account set --subscription $SUBSCRIPTION_ID"
+fi
+
+msg "AKS Setup"
+msg "  Subscription: $SUBSCRIPTION_ID"
+msg "  Region:       $REGION"
+msg "  Deployment:   $DEP_ID"
+msg "  State RG:     $STATE_RG"
+msg "  Storage:      $STORAGE_ACCOUNT"
+msg "  Container:    $STATE_CONTAINER"
+
+# Check for stale Terraform state.
+if [[ -d "$TF_DIR/.terraform" ]] || [[ -f "$TF_DIR/.terraform.lock.hcl" ]]; then
+  err "Stale Terraform state found in $TF_DIR. Remove .terraform/ and .terraform.lock.hcl before running setup."
+fi
+
+# ---------------------------------------------------------------------------
+# Resource group for state
+# ---------------------------------------------------------------------------
+msg "Configuring state resource group: $STATE_RG"
+if az group show --name "$STATE_RG" &>/dev/null; then
+  msg "  Resource group already exists"
+else
+  msg "  Creating resource group..."
+  az group create --name "$STATE_RG" --location "$REGION" --output none
+fi
+
+# ---------------------------------------------------------------------------
+# Storage account + container
+# ---------------------------------------------------------------------------
+msg "Configuring state storage account: $STORAGE_ACCOUNT"
+if az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$STATE_RG" &>/dev/null; then
+  msg "  Storage account already exists"
+else
+  msg "  Creating storage account..."
+  az storage account create \
+    --name "$STORAGE_ACCOUNT" \
+    --resource-group "$STATE_RG" \
+    --location "$REGION" \
+    --sku Standard_LRS \
+    --kind StorageV2 \
+    --min-tls-version TLS1_2 \
+    --allow-blob-public-access false \
+    --output none
+fi
+
+# Enable blob versioning for state history.
+az storage account blob-service-properties update \
+  --account-name "$STORAGE_ACCOUNT" \
+  --resource-group "$STATE_RG" \
+  --enable-versioning true \
+  --output none 2>/dev/null || warn "Could not enable blob versioning (non-fatal)"
+
+msg "Ensuring state container: $STATE_CONTAINER"
+az storage container create \
+  --name "$STATE_CONTAINER" \
+  --account-name "$STORAGE_ACCOUNT" \
+  --auth-mode login \
+  --output none 2>/dev/null || warn "Container may already exist (non-fatal)"
+
+# ---------------------------------------------------------------------------
+# Backend config
+# ---------------------------------------------------------------------------
+msg "Writing backend.hcl"
+cat > "$TF_DIR/backend.hcl" <<EOF
+resource_group_name  = "$STATE_RG"
+storage_account_name = "$STORAGE_ACCOUNT"
+container_name       = "$STATE_CONTAINER"
+key                  = "$STATE_KEY"
+EOF
+
+msg "Setup complete."
+msg ""
+msg "Next steps:"
+msg "  1. Ensure you are logged in:  az login"
+msg "  2. Deploy:  docker run --rm -e CONFIG_CONTENT ghcr.io/mchmarny/cluster/aks:latest apply"
+msg ""
+msg "  Note: cluster access uses AAD; kubelogin is required for kubectl."

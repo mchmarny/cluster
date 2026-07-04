@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=../schema/aks-config.schema.json
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-cpu
+  provider: aks
+  tenancy: "00000000-0000-0000-0000-000000000000" # placeholder Azure subscription ID
+  location: eastus
+  state: tenancy
+  destroy: false
+  tags:
+    env: demo
+    stack: mini
+
+cluster:
+  aks:
+    version: "1.33"
+
+compute:
+  aks:
+    nodePools:
+      system:
+        vmSize: Standard_D4s_v5
+        autoscaling:
+          enabled: true
+          minNodes: 2
+          maxNodes: 3
+      workers:
+        - name: cpuworker1
+          vmSize: Standard_D8s_v5
+          osDiskType: Managed
+          osDiskSizeGb: 200
+          autoscaling:
+            enabled: true
+            minNodes: 1
+            maxNodes: 1
+          labels:
+            nodeGroup: cpu-worker

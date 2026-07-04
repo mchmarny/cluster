@@ -1,0 +1,120 @@
+#!/bin/bash
+
+# Bootstrap OCI tenancy for OKE cluster deployment.
+# Creates: Object Storage bucket for Terraform state (used via the S3
+# compatibility endpoint) and writes backend.hcl. Authentication uses an OCI
+# API-key config file (~/.oci/config, DEFAULT profile); state access uses an
+# OCI Customer Secret Key (AWS-style access/secret pair).
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+REQUIRED_TOOLS=(oci yq jq)
+TF_DIR="${SCRIPT_DIR}/../terraform"
+
+# State bucket name (must match pkg/oci/config.go).
+STATE_BUCKET="cluster-state"
+
+usage() {
+  echo "Usage: $(basename "$0") -c <config-file>" >&2
+  exit 1
+}
+
+CONFIG_FILE=""
+while getopts "c:h" opt; do
+  case $opt in
+    c) CONFIG_FILE="$OPTARG" ;;
+    h) usage ;;
+    *) usage ;;
+  esac
+done
+
+[[ -z "$CONFIG_FILE" ]] && usage
+
+has_tools "${REQUIRED_TOOLS[@]}"
+CONFIG_FILE=$(resolve_config "$CONFIG_FILE")
+validate_config "$CONFIG_FILE"
+
+TENANCY_OCID=$(config_get "$CONFIG_FILE" "deployment.tenancy")
+REGION=$(config_get "$CONFIG_FILE" "deployment.location")
+DEP_ID=$(config_get "$CONFIG_FILE" "deployment.id")
+COMPARTMENT_ID=$(config_get "$CONFIG_FILE" "cluster.oke.compartmentId" "$TENANCY_OCID")
+STATE_KEY="deployments/${REGION}/${DEP_ID}/terraform.tfstate"
+
+# Validate the configured tenancy matches the active OCI config profile.
+ACTIVE_TENANCY=$(oci iam compartment list --compartment-id-in-subtree false \
+  --query 'data[0]."compartment-id"' --raw-output 2>/dev/null || true)
+if [[ -z "$ACTIVE_TENANCY" ]]; then
+  ACTIVE_TENANCY=$(yq -r '.tenancy // ""' ~/.oci/config 2>/dev/null || true)
+fi
+if [[ -n "$ACTIVE_TENANCY" && "$ACTIVE_TENANCY" != "$TENANCY_OCID" ]]; then
+  warn "Active OCI tenancy ($ACTIVE_TENANCY) does not match config ($TENANCY_OCID)"
+fi
+
+# Object Storage namespace for this tenancy (needed for the S3-compat endpoint).
+OS_NAMESPACE=$(oci os ns get --query 'data' --raw-output 2>/dev/null || true)
+[[ -z "$OS_NAMESPACE" ]] && err "Could not resolve Object Storage namespace. Is the OCI CLI configured (~/.oci/config)?"
+
+S3_ENDPOINT="https://${OS_NAMESPACE}.compat.objectstorage.${REGION}.oraclecloud.com"
+
+msg "OKE Setup"
+msg "  Tenancy:      $TENANCY_OCID"
+msg "  Compartment:  $COMPARTMENT_ID"
+msg "  Region:       $REGION"
+msg "  Deployment:   $DEP_ID"
+msg "  Namespace:    $OS_NAMESPACE"
+msg "  Bucket:       $STATE_BUCKET"
+msg "  S3 endpoint:  $S3_ENDPOINT"
+
+# Check for stale Terraform state.
+if [[ -d "$TF_DIR/.terraform" ]] || [[ -f "$TF_DIR/.terraform.lock.hcl" ]]; then
+  err "Stale Terraform state found in $TF_DIR. Remove .terraform/ and .terraform.lock.hcl before running setup."
+fi
+
+# ---------------------------------------------------------------------------
+# State bucket
+# ---------------------------------------------------------------------------
+msg "Configuring state bucket: $STATE_BUCKET"
+if oci os bucket get --bucket-name "$STATE_BUCKET" --namespace "$OS_NAMESPACE" &>/dev/null; then
+  msg "  Bucket already exists"
+else
+  msg "  Creating bucket..."
+  oci os bucket create \
+    --name "$STATE_BUCKET" \
+    --namespace "$OS_NAMESPACE" \
+    --compartment-id "$COMPARTMENT_ID" \
+    --versioning Enabled \
+    --output table >/dev/null
+fi
+
+# ---------------------------------------------------------------------------
+# Backend config
+# ---------------------------------------------------------------------------
+msg "Writing backend.hcl"
+cat > "$TF_DIR/backend.hcl" <<EOF
+bucket   = "$STATE_BUCKET"
+key      = "$STATE_KEY"
+region   = "$REGION"
+endpoints = {
+  s3 = "$S3_ENDPOINT"
+}
+
+# OCI Object Storage via S3 compatibility (not AWS). These flags let the s3
+# backend talk to OCI without AWS-specific validation.
+skip_region_validation      = true
+skip_credentials_validation = true
+skip_metadata_api_check     = true
+skip_requesting_account_id  = true
+use_path_style              = true
+EOF
+
+msg "Setup complete."
+msg ""
+msg "Next steps:"
+msg "  1. Create an OCI Customer Secret Key (Console > User Settings > Customer Secret Keys),"
+msg "     then export it for the Terraform s3 state backend:"
+msg "       export AWS_ACCESS_KEY_ID=<access-key>"
+msg "       export AWS_SECRET_ACCESS_KEY=<secret-key>"
+msg "       export OCI_S3_ENDPOINT=$S3_ENDPOINT"
+msg "  2. Ensure ~/.oci/config (DEFAULT profile) is configured for the oci provider."
+msg "  3. Deploy: docker run --rm -e CONFIG_CONTENT -e KEY_CONTENT -e OCI_S3_ENDPOINT ghcr.io/mchmarny/cluster/oke:latest apply"
