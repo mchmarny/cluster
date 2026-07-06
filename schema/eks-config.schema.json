@@ -122,7 +122,8 @@
                       "type": "object",
                       "additionalProperties": { "type": "string" },
                       "description": "Kubernetes node labels"
-                    }
+                    },
+                    "taints": { "$ref": "#/$defs/taints" }
                   }
                 },
                 "workers": {
@@ -162,7 +163,8 @@
                         "type": "object",
                         "additionalProperties": { "type": "string" },
                         "description": "Kubernetes node labels"
-                      }
+                      },
+                      "taints": { "$ref": "#/$defs/taints" }
                     }
                   }
                 }
@@ -281,6 +283,23 @@
     }
   },
   "$defs": {
+    "taints": {
+      "type": "array",
+      "description": "Additional node taints, appended to the default dedicated taints for the node group",
+      "items": {
+        "type": "object",
+        "required": ["key", "value", "effect"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" },
+          "effect": {
+            "type": "string",
+            "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+          }
+        }
+      }
+    },
     "capacity": {
       "type": "object",
       "required": ["desired"],

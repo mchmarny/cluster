@@ -118,14 +118,6 @@ locals {
   block_volume_type_default  = "gp3"       // Default volume type if not specified
   block_volume_size_default  = 50          // Default volume size in GB if not specified
 
-  // Taints
-  system_node_taints = "dedicated=system-workload:NoSchedule,dedicated=system-workload:NoExecute"
-  worker_node_taints = "dedicated=worker-workload:NoSchedule,dedicated=worker-workload:NoExecute"
-  node_group_taints = {
-    system : local.system_node_taints
-    worker : local.worker_node_taints
-  }
-
   // Use first 2 AZs for default subnets
   available_azs = slice(data.aws_availability_zones.available.names, 0,
   min(2, length(data.aws_availability_zones.available.names)))
