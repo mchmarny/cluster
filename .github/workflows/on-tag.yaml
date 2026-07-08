@@ -6,6 +6,7 @@ on:
     tags:
       - 'v*-eks'
       - 'v*-gke'
+      - 'v*-aks'
 
 concurrency:
   group: build-${{ github.ref_name }}
@@ -142,6 +143,9 @@ jobs:
             TERRAFORM_VERSION=${{ steps.versions.outputs.terraform }}
             KUBECTL_VERSION=${{ steps.versions.outputs.kubectl }}
             AWSCLI_VERSION=${{ steps.versions.outputs.awscli }}
+            GCLOUD_VERSION=${{ steps.versions.outputs.gcloud }}
+            AZURECLI_VERSION=${{ steps.versions.outputs.azurecli }}
+            OCI_VERSION=${{ steps.versions.outputs.oci }}
           labels: |
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.revision=${{ github.sha }}

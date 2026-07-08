@@ -20,7 +20,7 @@ err() { printf "${COLOR_RED}[ERROR]${COLOR_RESET} %s\n" "$1" >&2; exit 1; }
 # Validate arguments
 CSP="${1:-}"
 if [[ -z "$CSP" ]]; then
-  err "Usage: $0 <csp> (e.g., eks, gke, aks, oke)"
+  err "Usage: $0 <csp> (e.g., eks, gke, aks)"
 fi
 
 # Paths

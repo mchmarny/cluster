@@ -107,3 +107,4 @@ provider/eks/keys
 
 # config
 config/aicr*
+config/*status.json

@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mchmarny/cluster/schema/aks-config.schema.json",
+  "title": "AKS Cluster Config",
+  "description": "Schema for AKS (Azure) cluster deployment configuration",
+  "type": "object",
+  "required": ["apiVersion", "kind", "deployment", "cluster"],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "github.com/mchmarny/cluster/v1alpha1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "Cluster"
+    },
+    "deployment": {
+      "$ref": "cluster-config.schema.json#/$defs/deployment"
+    },
+    "cluster": {
+      "type": "object",
+      "required": ["aks"],
+      "additionalProperties": false,
+      "properties": {
+        "aks": {
+          "type": "object",
+          "required": ["version"],
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "Kubernetes version (e.g. 1.33)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Cluster name (defaults to deployment.id)"
+            },
+            "resourceGroup": {
+              "type": "string",
+              "description": "Resource group name (defaults to <deployment.id>-rg)"
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "authorizedNetworks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["cidr", "name"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "cidr": {
+                        "type": "string",
+                        "description": "CIDR block allowed to reach the API server"
+                      },
+                      "name": {
+                        "type": "string",
+                        "description": "Display name for the authorized network"
+                      }
+                    }
+                  },
+                  "description": "Networks allowed to access the API server (terraform executor IP is auto-added)"
+                }
+              }
+            },
+            "adminGroups": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Entra ID (AAD) group object IDs granted cluster admin"
+            },
+            "zones": {
+              "type": "array",
+              "items": { "type": "string", "enum": ["1", "2", "3"] },
+              "description": "Availability zones for node pools and NAT public IP; use [] for regions without AZ support (default: [\"1\",\"2\",\"3\"])"
+            }
+          }
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nodePools": {
+              "type": "object",
+              "required": ["system"],
+              "additionalProperties": false,
+              "properties": {
+                "system": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "description": "System node pool for control-plane add-ons (tainted CriticalAddonsOnly=true:NoSchedule)",
+                  "properties": {
+                    "vmSize": {
+                      "type": "string",
+                      "description": "Azure VM size (default: Standard_D4s_v5)"
+                    },
+                    "osDiskType": {
+                      "type": "string",
+                      "enum": ["Managed", "Ephemeral"],
+                      "description": "OS disk type (default: Managed)"
+                    },
+                    "osDiskSizeGb": {
+                      "type": "integer",
+                      "minimum": 30,
+                      "description": "OS disk size in GB (default: 128)"
+                    },
+                    "autoscaling": { "$ref": "#/$defs/autoscaling" }
+                  }
+                },
+                "workers": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["name", "vmSize"],
+                    "additionalProperties": false,
+                    "properties": {
+                      "name": {
+                        "type": "string",
+                        "description": "Node pool name (lowercase alphanumeric, <= 12 chars)"
+                      },
+                      "vmSize": {
+                        "type": "string",
+                        "description": "Azure VM size"
+                      },
+                      "osDiskType": {
+                        "type": "string",
+                        "enum": ["Managed", "Ephemeral"],
+                        "description": "OS disk type (default: Managed)"
+                      },
+                      "osDiskSizeGb": {
+                        "type": "integer",
+                        "minimum": 30,
+                        "description": "OS disk size in GB"
+                      },
+                      "gpuType": {
+                        "type": "string",
+                        "description": "GPU accelerator type (e.g. h100); selects a GPU-capable VM size and adds the nvidia taint"
+                      },
+                      "autoscaling": { "$ref": "#/$defs/autoscaling" },
+                      "labels": {
+                        "type": "object",
+                        "additionalProperties": { "type": "string" },
+                        "description": "Kubernetes node labels"
+                      },
+                      "taints": { "$ref": "#/$defs/taints" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "aks": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cidr": {
+              "type": "string",
+              "description": "VNet CIDR block (default: 10.0.0.0/16)"
+            },
+            "serviceCidr": {
+              "type": "string",
+              "description": "Kubernetes service CIDR (default: 172.20.0.0/16)"
+            },
+            "dnsServiceIp": {
+              "type": "string",
+              "description": "Cluster DNS service IP within serviceCidr (default: 172.20.0.10)"
+            },
+            "subnets": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Subnet definitions. Auto-computed from VNet CIDR if omitted.",
+              "properties": {
+                "system": { "$ref": "#/$defs/subnet" },
+                "worker": { "$ref": "#/$defs/subnet" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "secretsEncryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable Key Vault KMS encryption for Kubernetes secrets (etcd)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "autoscaling": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable cluster autoscaler for this node pool"
+        },
+        "minNodes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Minimum node count"
+        },
+        "maxNodes": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum node count"
+        }
+      }
+    },
+    "subnet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "type": "string",
+          "description": "Subnet CIDR block"
+        }
+      }
+    },
+    "taints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["key", "value", "effect"],
+        "additionalProperties": false,
+        "properties": {
+          "key": { "type": "string" },
+          "value": { "type": "string" },
+          "effect": {
+            "type": "string",
+            "enum": ["NoSchedule", "PreferNoSchedule", "NoExecute"]
+          }
+        }
+      }
+    }
+  }
+}

@@ -19,7 +19,7 @@ const (
 type RunConfig struct {
 	TerraformDir string
 	ConfigPath   string
-	Provider     string // config.ProviderEKS or config.ProviderGKE
+	Provider     string // config.ProviderEKS, ProviderGKE, or ProviderAKS
 	State        string // config.StateTenancy or config.StateLocal
 	Bucket       string
 	Region       string
@@ -32,6 +32,11 @@ type RunConfig struct {
 
 	// GCP credentials file path (written from KEY_CONTENT).
 	CredentialsFile string
+
+	// Azure state backend coordinates (azurerm backend).
+	ResourceGroup  string
+	StorageAccount string
+	Container      string
 
 	// ImportTargets lists resources to import if missing from state.
 	// Each entry maps a Terraform resource address to its provider ID.
@@ -203,6 +208,10 @@ func buildEnv(cfg RunConfig) []string {
 		if cfg.CredentialsFile != "" {
 			env = append(env, fmt.Sprintf("GOOGLE_APPLICATION_CREDENTIALS=%s", cfg.CredentialsFile))
 		}
+	case config.ProviderAKS:
+		// azurerm authenticates via ARM_* env vars (service principal) or the
+		// Azure CLI default chain; both are inherited from the process env and
+		// not owned by this tool, so no per-run env vars are injected here.
 	}
 
 	return env
@@ -227,6 +236,13 @@ func buildInitArgs(cfg RunConfig) []string {
 		args = append(args,
 			fmt.Sprintf("-backend-config=bucket=%s", cfg.Bucket),
 			fmt.Sprintf("-backend-config=prefix=%s", cfg.StateKey),
+		)
+	case config.ProviderAKS:
+		args = append(args,
+			fmt.Sprintf("-backend-config=resource_group_name=%s", cfg.ResourceGroup),
+			fmt.Sprintf("-backend-config=storage_account_name=%s", cfg.StorageAccount),
+			fmt.Sprintf("-backend-config=container_name=%s", cfg.Container),
+			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
 		)
 	}
 

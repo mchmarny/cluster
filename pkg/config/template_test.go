@@ -90,6 +90,55 @@ func TestGenerateTemplateGKE(t *testing.T) {
 	}
 }
 
+func TestGenerateTemplateAKS(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "aks-test.yaml")
+
+	if err := GenerateTemplate(path); err != nil {
+		t.Fatalf("GenerateTemplate() error: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("reading generated file: %v", err)
+	}
+
+	content := string(data)
+
+	for _, want := range []string{
+		"apiVersion:",
+		"deployment:",
+		"provider: aks",
+		"cluster:",
+		"compute:",
+		"tenancy:",
+		"location:",
+		"state: tenancy",
+		"vmSize",
+		"nodePools",
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("missing %q in AKS template", want)
+		}
+	}
+
+	// Verify AKS template nests correctly under cluster.aks / compute.aks
+	if !strings.Contains(content, "  aks:") {
+		t.Error("AKS template must nest config under 'cluster.aks:' and 'compute.aks:'")
+	}
+
+	// Verify the generated template produces a loadable config when required fields are filled
+	patched := strings.Replace(content,
+		"# tenancy: \"00000000-0000-0000-0000-000000000000\"",
+		"tenancy: \"00000000-0000-0000-0000-000000000000\"", 1)
+	patchedPath := filepath.Join(t.TempDir(), "aks-patched.yaml")
+	if err := os.WriteFile(patchedPath, []byte(patched), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(patchedPath); err != nil {
+		t.Errorf("AKS template failed to load after filling required fields: %v", err)
+	}
+}
+
 func TestGenerateTemplateNoOverwrite(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte("existing"), 0644); err != nil {

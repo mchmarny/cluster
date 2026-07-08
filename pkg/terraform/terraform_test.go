@@ -102,6 +102,54 @@ func TestBuildInitArgsGCS(t *testing.T) {
 	}
 }
 
+func TestBuildInitArgsAzureRM(t *testing.T) {
+	args := buildInitArgs(RunConfig{
+		Provider:       config.ProviderAKS,
+		State:          config.StateTenancy,
+		Bucket:         "clststorage",
+		ResourceGroup:  "cluster-state-rg",
+		StorageAccount: "clststorage",
+		Container:      "tfstate",
+		StateKey:       "deployments/eastus/demo/terraform.tfstate",
+	})
+	expected := []string{
+		"init",
+		"-backend-config=resource_group_name=cluster-state-rg",
+		"-backend-config=storage_account_name=clststorage",
+		"-backend-config=container_name=tfstate",
+		"-backend-config=key=deployments/eastus/demo/terraform.tfstate",
+	}
+
+	if len(args) != len(expected) {
+		t.Fatalf("len = %d, want %d\nargs: %v", len(args), len(expected), args)
+	}
+	for i, arg := range args {
+		if arg != expected[i] {
+			t.Errorf("args[%d] = %q, want %q", i, arg, expected[i])
+		}
+	}
+}
+
+func TestBuildEnvAKS(t *testing.T) {
+	env := buildEnv(RunConfig{
+		Provider:   config.ProviderAKS,
+		ConfigPath: "/tmp/config.yaml",
+	})
+
+	if len(env) != 2 {
+		t.Fatalf("got %d env vars, want 2: %v", len(env), env)
+	}
+	want := map[string]bool{
+		"TF_VAR_CONFIG_PATH=/tmp/config.yaml": true,
+		"TF_IN_AUTOMATION=1":                  true,
+	}
+	for _, e := range env {
+		if !want[e] {
+			t.Errorf("unexpected env var: %q", e)
+		}
+	}
+}
+
 func TestBuildEnv(t *testing.T) {
 	cfg := RunConfig{
 		Provider:        config.ProviderEKS,

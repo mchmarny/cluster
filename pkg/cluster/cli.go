@@ -10,6 +10,7 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/mchmarny/cluster/pkg/aws"
+	"github.com/mchmarny/cluster/pkg/azure"
 	"github.com/mchmarny/cluster/pkg/config"
 	"github.com/mchmarny/cluster/pkg/gcp"
 	"github.com/mchmarny/cluster/pkg/state"
@@ -254,6 +255,16 @@ func buildRunConfig(cmd *cli.Command) (*runConfigResult, func(), error) {
 		rc.CredentialsFile = credFile
 		rc.importTargets = gkeImportTargets(cfg)
 		cleanup = func() { credCleanup(); cfgCleanup() }
+	case config.ProviderAKS:
+		rc.Bucket = azure.BucketName(cfg)
+		rc.StorageAccount = azure.StorageAccountName(cfg)
+		rc.ResourceGroup = azure.ResourceGroupName(cfg)
+		rc.Container = azure.ContainerName(cfg)
+		rc.StateKey = azure.StateKey(cfg)
+		rc.outputFile = azure.OutputFileName(cfg)
+		// azurerm authenticates via ARM_* env / az CLI default chain, inherited
+		// from the process environment.
+		logAzureCredentials()
 	default:
 		cfgCleanup()
 		return nil, noop, fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
@@ -316,6 +327,18 @@ func resolveGCPCredentials(keyContent string) (string, func(), error) {
 
 	slog.Info("using GCP credentials from KEY_CONTENT", "path", tmpPath)
 	return tmpPath, func() { os.Remove(tmpPath) }, nil //nolint:gosec // tmpPath is from os.CreateTemp
+}
+
+// logAzureCredentials reports which Azure authentication source terraform will
+// use. The azurerm provider reads ARM_* env vars (service principal) or falls
+// back to the Azure CLI default chain; this tool does not own those secrets, it
+// only surfaces which path is active for operator visibility.
+func logAzureCredentials() {
+	if os.Getenv("ARM_CLIENT_ID") != "" && os.Getenv("ARM_CLIENT_SECRET") != "" {
+		slog.Info("using Azure credentials from ARM_* service principal environment")
+		return
+	}
+	slog.Info("no ARM_* service principal set, terraform will use the Azure CLI default chain")
 }
 
 // resolveCredentials returns AWS credentials using the following priority:

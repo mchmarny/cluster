@@ -2,7 +2,7 @@
 
 # Unified actuate script for container-based Terraform deployments
 # Works with pre-mirrored Terraform dependencies
-# Supports: EKS (S3), GKE (GCS), AKS (Azure Blob), OKE (OCI Object Storage)
+# Supports: EKS (S3), GKE (GCS), AKS (Azure Blob)
 
 set -euo pipefail
 
@@ -188,6 +188,8 @@ detect_csp() {
     echo "eks"
   elif grep -q "google_container_cluster" "$tf_dir"/*.tf 2>/dev/null; then
     echo "gke"
+  elif grep -q "azurerm_kubernetes_cluster" "$tf_dir"/*.tf 2>/dev/null; then
+    echo "aks"
   else
     err "Unable to detect CSP from Terraform files"
   fi
@@ -221,6 +223,18 @@ init_terraform() {
         -backend-config="bucket=$bucket_name" \
         -backend-config="prefix=deployments/${dep_region}/${dep_id}"
       ;;
+    aks)
+      # azurerm backend; storage account name mirrors pkg/azure StorageAccountName.
+      local sa_hex storage_account
+      sa_hex="$(echo "$tenancy" | tr -d '-' | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')"
+      storage_account="clst${sa_hex}"
+      storage_account="${storage_account:0:24}"
+      terraform -chdir="$tf_dir" init \
+        -backend-config="resource_group_name=cluster-state-rg" \
+        -backend-config="storage_account_name=$storage_account" \
+        -backend-config="container_name=tfstate" \
+        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
+      ;;
     *)
       err "Unknown CSP: $csp"
       ;;
@@ -247,18 +261,18 @@ run_terraform() {
     apply)
       if [[ -f "$tf_dir/plan.cache" ]]; then
         msg "Applying saved plan..."
-        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "${approve_args[@]}" "plan.cache"
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply ${approve_args[@]+"${approve_args[@]}"} "plan.cache"
         rm -f "$tf_dir/plan.cache"
       else
         msg "Applying deployment..."
-        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "${approve_args[@]}"
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply ${approve_args[@]+"${approve_args[@]}"}
       fi
       ;;
     destroy)
       msg "Refreshing state before destroy..."
       TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" refresh
       msg "Destroying deployment..."
-      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy "${approve_args[@]}"
+      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy ${approve_args[@]+"${approve_args[@]}"}
       ;;
     output)
       msg "Deployment outputs:"

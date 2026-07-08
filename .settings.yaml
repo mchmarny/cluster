@@ -11,6 +11,7 @@ tools:
   kubectl: '1.36.1'
   awscli: '2.34.63'
   gcloud: '569.0.0'
+  azurecli: '2.87.0'
   tflint: '0.63.1'
   trivy: '0.71.0'
   grype: '0.114.0'

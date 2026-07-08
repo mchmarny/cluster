@@ -1,0 +1,53 @@
+# yaml-language-server: $schema=../schema/aks-config.schema.json
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-gpu
+  provider: aks
+  tenancy: "00000000-0000-0000-0000-000000000000" # placeholder Azure subscription ID
+  location: westus
+  state: tenancy
+  destroy: false
+  tags:
+    env: demo
+    stack: gpu
+
+cluster:
+  aks:
+    version: "1.35"
+    adminGroups:
+      - "00000000-0000-0000-0000-000000000000" # placeholder Entra group object ID (required for cluster access)
+    zones: [] # westus has no availability zones; drop for zonal regions
+
+compute:
+  aks:
+    nodePools:
+      # vCPU quota is granted per VM family; pools split across families so a
+      # single family's cap does not block the deployment.
+      system:
+        vmSize: Standard_D2s_v5 # DSv5 family: 3x2=6 vCPUs
+        autoscaling:
+          enabled: true
+          minNodes: 3
+          maxNodes: 3
+      workers:
+        - name: cpuworker1
+          vmSize: Standard_D8s_v4 # DSv4 family: 8 vCPUs
+          osDiskType: Managed
+          osDiskSizeGb: 200
+          autoscaling:
+            enabled: true
+            minNodes: 1
+            maxNodes: 1
+          labels:
+            nodeGroup: cpu-worker
+        - name: gpuworker1
+          gpuType: h100 # Standard_ND96isr_H100_v5: 96 vCPUs / 8x H100 per node (standardNDSH100v5Family quota)
+          osDiskSizeGb: 512
+          autoscaling:
+            enabled: true
+            minNodes: 2
+            maxNodes: 2
+          labels:
+            nodeGroup: gpu-worker

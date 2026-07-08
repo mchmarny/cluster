@@ -14,6 +14,12 @@ outputs:
   awscli:
     description: 'AWS CLI version'
     value: ${{ steps.versions.outputs.awscli }}
+  gcloud:
+    description: 'Google Cloud CLI version'
+    value: ${{ steps.versions.outputs.gcloud }}
+  azurecli:
+    description: 'Azure CLI version'
+    value: ${{ steps.versions.outputs.azurecli }}
   tflint:
     description: 'tflint version'
     value: ${{ steps.versions.outputs.tflint }}
@@ -58,6 +64,8 @@ runs:
         echo "terraform=$(yq eval '.tools.terraform' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "kubectl=$(yq eval '.tools.kubectl' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "awscli=$(yq eval '.tools.awscli' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "gcloud=$(yq eval '.tools.gcloud' .settings.yaml)" >> $GITHUB_OUTPUT
+        echo "azurecli=$(yq eval '.tools.azurecli' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "tflint=$(yq eval '.tools.tflint' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "trivy=$(yq eval '.tools.trivy' .settings.yaml)" >> $GITHUB_OUTPUT
         echo "grype=$(yq eval '.tools.grype' .settings.yaml)" >> $GITHUB_OUTPUT

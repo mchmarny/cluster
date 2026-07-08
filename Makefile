@@ -27,6 +27,10 @@ GCLOUD_VERSION ?= $(shell yq -r '.tools.gcloud' .settings.yaml 2>/dev/null)
 ifeq ($(GCLOUD_VERSION),)
 GCLOUD_VERSION := 569.0.0
 endif
+AZURECLI_VERSION ?= $(shell yq -r '.tools.azurecli' .settings.yaml 2>/dev/null)
+ifeq ($(AZURECLI_VERSION),)
+AZURECLI_VERSION := 2.87.0
+endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)
 SCAN_SEVERITY := CRITICAL,HIGH
@@ -66,6 +70,8 @@ info: ## Prints the current project info
 	@echo "  terraform:         $(TERRAFORM_VERSION)"
 	@echo "  kubectl:           $(KUBECTL_VERSION)"
 	@echo "  awscli:            $(AWSCLI_VERSION)"
+	@echo "  gcloud:            $(GCLOUD_VERSION)"
+	@echo "  azurecli:          $(AZURECLI_VERSION)"
 	@echo "  kind_node_image:   $(KIND_NODE_IMAGE)"
 
 .PHONY: tools-check
@@ -192,9 +198,20 @@ build-gke: ## Build GKE Docker image (mirrors providers, then builds)
 		--build-arg GCLOUD_VERSION=$(GCLOUD_VERSION) \
 		-t cluster-gke:$(VERSION) -t cluster-gke:latest .
 
+.PHONY: build-aks
+build-aks: ## Build AKS Docker image (mirrors providers, then builds)
+	@./tools/mirror aks
+	@docker build -f image/aks.dockerfile \
+		--build-arg VERSION=$(VERSION) \
+		--build-arg COMMIT=$(COMMIT) \
+		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
+		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
+		--build-arg AZURECLI_VERSION=$(AZURECLI_VERSION) \
+		-t cluster-aks:$(VERSION) -t cluster-aks:latest .
+
 # Version Bump Targets
 
-CSPS := eks gke
+CSPS := eks gke aks
 BUMP_TYPES := major minor patch
 
 define bump_target
