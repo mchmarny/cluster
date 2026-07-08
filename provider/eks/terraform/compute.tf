@@ -15,6 +15,24 @@ locals {
     )
   }
 
+  # Default worker taints plus optional per-group taints from config
+  default_worker_taints = "dedicated=worker-workload:NoSchedule,dedicated=worker-workload:NoExecute"
+  node_group_taints = {
+    for ng in local.worker_node_groups :
+    ng.name => join(",", concat(
+      [local.default_worker_taints],
+      [for t in try(ng.taints, []) : "${t.key}=${t.value}:${t.effect}"]
+    ))
+  }
+
+  # Config taints use Kubernetes-native effect names; the EKS managed node
+  # group API requires its own enum
+  taint_effect_api = {
+    NoSchedule       = "NO_SCHEDULE"
+    PreferNoSchedule = "PREFER_NO_SCHEDULE"
+    NoExecute        = "NO_EXECUTE"
+  }
+
   # Map instance type prefix to GPU family for EFA interface layout
   # p5 = H100 (all network cards are EFA-capable)
   # p6e/p6i = GB200 (AWS-recommended card indices: 0, 1, 5, 9, 13)
@@ -185,7 +203,7 @@ resource "aws_launch_template" "node_groups" {
         --apiserver-endpoint ${aws_eks_cluster.main.endpoint} \
         --kubelet-extra-args "\
           --node-labels=${local.node_group_labels[each.value.name]} \
-          --register-with-taints=${local.node_group_taints[each.value.type]} \
+          --register-with-taints=${local.node_group_taints[each.value.name]} \
         " \
         --ip-family ipv4
   EOF
@@ -372,6 +390,16 @@ resource "aws_eks_node_group" "system" {
     key    = "dedicated"
     value  = "system-workload"
     effect = "NO_EXECUTE"
+  }
+
+  # Additional taints from config, appended to the default dedicated taints
+  dynamic "taint" {
+    for_each = try(local.config.compute.eks.nodeGroups.system.taints, [])
+    content {
+      key    = taint.value.key
+      value  = taint.value.value
+      effect = local.taint_effect_api[taint.value.effect]
+    }
   }
 
   labels = try(local.config.compute.eks.nodeGroups.system.labels, {})
