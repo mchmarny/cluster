@@ -53,6 +53,10 @@ locals {
   workload_identity_enabled = try(local.config.cluster.aks.features.workloadIdentity, true)
   oidc_issuer_enabled       = try(local.config.cluster.aks.features.oidcIssuer, true)
 
+  // Role assignments for the cluster identities (see iam.tf). Requires
+  // roleAssignments/write on the deployer; disable for Contributor-only runs.
+  iam_role_assignments = try(local.config.cluster.aks.iam.roleAssignments, true)
+
   // etcd KMS encryption via Key Vault key.
   //
   // NOTE (live-validate): Defaulted to false. KMS etcd encryption requires a

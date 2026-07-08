@@ -76,6 +76,17 @@
                 }
               }
             },
+            "iam": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "roleAssignments": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Create the Network Contributor and AcrPull role assignments for the cluster identities. Requires roleAssignments/write on the deployer; set false for Contributor-only deployers (LoadBalancer services and ACR pulls then need out-of-band grants)"
+                }
+              }
+            },
             "features": {
               "type": "object",
               "additionalProperties": false,

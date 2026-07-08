@@ -28,11 +28,26 @@ Deploys a production-ready AKS cluster from a single YAML config:
 **Required Azure permissions:** most resources need only **Contributor** on the
 subscription. The two role assignments in `iam.tf` (Network Contributor on the
 VNet for the cluster identity, AcrPull for the kubelet) additionally require
-`Microsoft.Authorization/roleAssignments/write` (**Owner** or **User Access
-Administrator**). With Contributor only, those two resources fail with 403 and
-stay tainted in state; the cluster is otherwise functional, but load balancer
-provisioning in the BYO VNet and ACR image pulls will not work until an admin
-grants the roles (or applies with sufficient rights).
+`Microsoft.Authorization/roleAssignments/write`. The least-privilege way to get
+it is a one-time admin grant of **Role Based Access Control Administrator**
+with an ABAC condition limiting the deployer to assigning (and deleting —
+destroy needs it) exactly those two roles:
+
+```shell
+az role assignment create \
+  --assignee <deployer-object-id> \
+  --role "Role Based Access Control Administrator" \
+  --scope "/subscriptions/<subscription-id>" \
+  --condition-version "2.0" \
+  --condition "((!(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})) OR (@Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {4d97b98b-1d4f-4787-a291-c67834d212e7, 7f951dda-4ed3-4680-a7ca-43fe172d538d})) AND ((!(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})) OR (@Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId] ForAnyOfAnyValues:GuidEquals {4d97b98b-1d4f-4787-a291-c67834d212e7, 7f951dda-4ed3-4680-a7ca-43fe172d538d}))"
+```
+
+(`4d97b98b…` = Network Contributor, `7f951dda…` = AcrPull.)
+
+Deployers with plain Contributor can instead set `cluster.aks.iam.roleAssignments: false`
+to skip both assignments for a clean apply; the cluster is fully functional
+except load balancer provisioning in the BYO VNet and ACR image pulls, which
+need the grants created out-of-band.
 
 **Cluster access is Entra-only:** local accounts are disabled
 (`local_account_disabled = true`), so `az aks get-credentials --admin` does not
