@@ -31,6 +31,10 @@ AZURECLI_VERSION ?= $(shell yq -r '.tools.azurecli' .settings.yaml 2>/dev/null)
 ifeq ($(AZURECLI_VERSION),)
 AZURECLI_VERSION := 2.87.0
 endif
+KUBELOGIN_VERSION ?= $(shell yq -r '.tools.kubelogin' .settings.yaml 2>/dev/null)
+ifeq ($(KUBELOGIN_VERSION),)
+KUBELOGIN_VERSION := 0.2.19
+endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)
 SCAN_SEVERITY := CRITICAL,HIGH
@@ -207,6 +211,7 @@ build-aks: ## Build AKS Docker image (mirrors providers, then builds)
 		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
 		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
 		--build-arg AZURECLI_VERSION=$(AZURECLI_VERSION) \
+		--build-arg KUBELOGIN_VERSION=$(KUBELOGIN_VERSION) \
 		-t cluster-aks:$(VERSION) -t cluster-aks:latest .
 
 # Version Bump Targets

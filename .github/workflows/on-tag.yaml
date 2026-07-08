@@ -145,7 +145,7 @@ jobs:
             AWSCLI_VERSION=${{ steps.versions.outputs.awscli }}
             GCLOUD_VERSION=${{ steps.versions.outputs.gcloud }}
             AZURECLI_VERSION=${{ steps.versions.outputs.azurecli }}
-            OCI_VERSION=${{ steps.versions.outputs.oci }}
+            KUBELOGIN_VERSION=${{ steps.versions.outputs.kubelogin }}
           labels: |
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.revision=${{ github.sha }}

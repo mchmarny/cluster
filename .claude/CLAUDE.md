@@ -34,10 +34,13 @@ make build-gke    # Mirror providers + build GKE Docker image
 ```
 
 ### Go CLI Commands (inside container)
-The `cluster` binary exposes three commands:
-- `cluster init <path>` — generate starter config
-- `cluster setup -c <config>` — bootstrap cloud account (S3 bucket, IAM user, key)
+The `cluster` binary exposes four commands:
+- `cluster init <path>` — generate starter config (provider-aware by filename prefix)
+- `cluster plan -c <config>` — validate config and show Terraform plan
 - `cluster apply -c <config>` — deploy or destroy via Terraform (destroy when `deployment.destroy: true`)
+- `cluster output -c <config>` — retrieve Terraform outputs to the state directory
+
+Tenancy bootstrap (`setup`) is a per-provider shell tool (`provider/<csp>/tools/setup`), not a CLI command.
 
 ### Local Provider Tools
 EKS-specific shell scripts in `provider/eks/tools/`:

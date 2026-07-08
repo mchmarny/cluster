@@ -9,6 +9,7 @@ languages:
 tools:
   terraform: '1.15.5'
   kubectl: '1.36.1'
+  kubelogin: '0.2.19'
   awscli: '2.34.63'
   gcloud: '569.0.0'
   azurecli: '2.87.0'

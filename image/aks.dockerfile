@@ -41,7 +41,7 @@ ARG TERRAFORM_VERSION=1.15.5
 ARG KUBECTL_VERSION=1.36.1
 ARG AZURECLI_VERSION=2.87.0
 # kubelogin provides AAD (Entra) auth for kubectl against AKS clusters.
-ARG KUBELOGIN_VERSION=0.2.10
+ARG KUBELOGIN_VERSION=0.2.19
 
 RUN apt-get update \
     && apt-get upgrade -y \

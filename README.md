@@ -38,7 +38,7 @@ See provider-specific guides for detailed steps: [EKS](./provider/eks/) | [GKE](
 |----------|-----|------|----------------------|
 | EKS | `aws` | IAM access key (`KEY_CONTENT`) or default chain | S3 (`cluster-state-<account>`) |
 | GKE | `gcloud` | ADC JSON (`KEY_CONTENT`) or default chain | GCS (`cluster-state-<project>`) |
-| AKS | `az` (+ `kubelogin`) | `az login` device-code / CLI chain | Azure Blob (`clst<subscription-hex>` / `tfstate`) |
+| AKS | `az` (+ `kubelogin`) | `az login` CLI chain (mount `~/.azure` into the container) | Azure Blob (`clst<subscription-hex>` / `tfstate`) |
 
 ## Container Images
 
@@ -77,7 +77,7 @@ Destroy is triggered by setting `deployment.destroy: true` in the config and run
 |--------|---------------|-------------|
 | File path | `-c` / `CONFIG_PATH` | Path to YAML config file |
 | Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML config |
-| Base64 key | `KEY_CONTENT` | Base64-encoded credentials (AWS key JSON, GCP ADC JSON, or OCI S3-compat key `access:secret`) |
+| Base64 key | `KEY_CONTENT` | Base64-encoded credentials (AWS key JSON or GCP ADC JSON; AKS uses the az CLI chain — mount `~/.azure` instead) |
 
 ## Architecture
 

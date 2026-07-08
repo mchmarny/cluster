@@ -21,7 +21,8 @@ Deploys a production-ready AKS cluster from a single YAML config:
 ### Prerequisites
 
 - **az CLI** authenticated (`az login` — device-code flow supported)
-- **kubelogin** for AAD-integrated `kubectl` access (bundled in the container image)
+- **kubelogin** on the host for AAD-integrated `kubectl` access when running
+  `validate` or `kubectl` locally (the container image bundles its own copy)
 - **yq** >= 4.0 for YAML parsing
 
 **Required Azure permissions:** most resources need only **Contributor** on the
@@ -64,13 +65,20 @@ This creates:
 
 ### 3. Apply
 
-Authentication uses the Azure CLI login chain (`az login`); no service principal is required:
+Authentication uses the Azure CLI login chain (`az login`); no service principal
+is required. The image bundles the az CLI but has no credentials of its own —
+mount your host's `az login` token cache into the container (it runs as user
+`builder`, so the target is `/home/builder/.azure`):
 
 ```shell
 docker run --rm \
+  -v ~/.azure:/home/builder/.azure \
   -e CONFIG_CONTENT="$(base64 < config/aks-example.yaml)" \
   ghcr.io/mchmarny/cluster/aks:latest apply
 ```
+
+Without the mount, the run fails at `terraform init` with
+`Please run 'az login' to setup account`.
 
 ### 4. GPU pools: deploy the NVIDIA device plugin
 
@@ -110,8 +118,9 @@ Set `deployment.destroy: true` in the config and re-run `apply`.
 
 ## Running Terraform locally (without the container)
 
-`tools/actuate` is the container entrypoint and defaults
-`TERRAFORM_DIR=/builder/terraform` (the path inside the image). For local runs,
+The container image's entrypoint is the `cluster` Go binary; `tools/actuate` is
+a shell-based equivalent for driving the same Terraform from a local checkout.
+It defaults `TERRAFORM_DIR=/builder/terraform` (the path inside the image), so
 override it and pass an **absolute** config path (`terraform -chdir` breaks
 relative `file()` resolution):
 
