@@ -285,3 +285,36 @@ func TestGenerateTemplateEKSLoads(t *testing.T) {
 		t.Errorf("provider = %q, want eks", cfg.Deployment.Provider)
 	}
 }
+
+func TestExtractStatus(t *testing.T) {
+	tests := []struct {
+		name string
+		data string
+		want string
+	}{
+		{
+			name: "status output present",
+			data: `{"status":{"sensitive":true,"value":{"deployment":{"prefix":"aks-test"}}}}`,
+			want: `"prefix": "aks-test"`,
+		},
+		{
+			name: "no status output",
+			data: `{"other":{"value":"x"}}`,
+			want: `{"other":{"value":"x"}}`,
+		},
+		{
+			name: "invalid json returned as-is",
+			data: `not-json`,
+			want: `not-json`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := string(extractStatus([]byte(tt.data)))
+			if !strings.Contains(got, tt.want) {
+				t.Errorf("extractStatus() = %q, want it to contain %q", got, tt.want)
+			}
+		})
+	}
+}

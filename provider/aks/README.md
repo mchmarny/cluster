@@ -80,6 +80,11 @@ docker run --rm \
 Without the mount, the run fails at `terraform init` with
 `Please run 'az login' to setup account`.
 
+On success, `apply` prints the deployment status JSON to stdout. This matters
+for `CONFIG_CONTENT` runs: the `<config>-status.json` file is written next to
+the decoded config *inside* the container and discarded on exit, so stdout is
+the durable copy (pipe it to a file if you want to keep it).
+
 ### 4. GPU pools: driver and device plugin
 
 By default the module provisions GPU pools with the Azure-managed NVIDIA

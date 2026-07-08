@@ -1,8 +1,10 @@
 package cluster
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -111,9 +113,46 @@ func applyCmd() *cli.Command {
 			rc.Destroy = rc.destroy
 			rc.ImportTargets = rc.importTargets
 
-			return terraform.Run(ctx, rc.RunConfig)
+			if err := terraform.Run(ctx, rc.RunConfig); err != nil {
+				return err
+			}
+
+			if rc.destroy {
+				return nil
+			}
+
+			// Print deployment status to stdout so containerized runs
+			// (CONFIG_CONTENT) don't lose it with the container filesystem.
+			// Best-effort: the apply already succeeded.
+			data, err := terraform.Output(ctx, rc.RunConfig)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "warning: retrieving status output: %v\n", err)
+				return nil
+			}
+			fmt.Println(string(extractStatus(data)))
+			return nil
 		},
 	}
+}
+
+// extractStatus returns the pretty-printed "status" output value from
+// terraform output -json, falling back to the raw data when absent.
+func extractStatus(data []byte) []byte {
+	var outputs map[string]struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(data, &outputs); err != nil {
+		return data
+	}
+	status, ok := outputs["status"]
+	if !ok {
+		return data
+	}
+	var pretty bytes.Buffer
+	if err := json.Indent(&pretty, status.Value, "", "  "); err != nil {
+		return status.Value
+	}
+	return pretty.Bytes()
 }
 
 func planCmd() *cli.Command {

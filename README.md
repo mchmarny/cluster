@@ -66,7 +66,7 @@ Images are published by pushing a `v*-<csp>` tag (e.g. `v0.3.0-aks`), which trig
 |---------|-------------|
 | `init <path>` | Generate a starter configuration file (provider-aware by filename prefix: `gke-*`, `aks-*`, else EKS) |
 | `plan -c <config>` | Show Terraform plan output without applying |
-| `apply -c <config>` | Deploy or destroy infrastructure via Terraform |
+| `apply -c <config>` | Deploy or destroy infrastructure via Terraform; on successful deploy, prints the deployment status JSON to stdout |
 | `output -c <config>` | Retrieve Terraform outputs and save to state directory |
 
 Destroy is triggered by setting `deployment.destroy: true` in the config and running `apply`.
