@@ -40,6 +40,17 @@
               "type": "string",
               "description": "Resource group name (defaults to <deployment.id>-rg)"
             },
+            "private": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable private cluster (no public API endpoint). Mutually exclusive with controlPlane.authorizedNetworks: AKS cannot IP-gate a private endpoint, so authorized networks apply only when this is false"
+                }
+              }
+            },
             "controlPlane": {
               "type": "object",
               "additionalProperties": false,
@@ -48,7 +59,7 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["cidr", "name"],
+                    "required": ["cidr"],
                     "additionalProperties": false,
                     "properties": {
                       "cidr": {
@@ -57,11 +68,27 @@
                       },
                       "name": {
                         "type": "string",
-                        "description": "Display name for the authorized network"
+                        "description": "Optional label for documentation only (AKS authorized IP ranges have no display name)"
                       }
                     }
                   },
-                  "description": "Networks allowed to access the API server (terraform executor IP is auto-added)"
+                  "description": "Networks allowed to access the API server (terraform executor IP is auto-added). Applied only when private.enabled is false"
+                }
+              }
+            },
+            "features": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "workloadIdentity": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable Workload Identity federation"
+                },
+                "oidcIssuer": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Enable the OIDC issuer endpoint (required for Workload Identity)"
                 }
               }
             },
@@ -118,7 +145,7 @@
                   "type": "array",
                   "items": {
                     "type": "object",
-                    "required": ["name", "vmSize"],
+                    "required": ["name"],
                     "additionalProperties": false,
                     "properties": {
                       "name": {
@@ -127,7 +154,7 @@
                       },
                       "vmSize": {
                         "type": "string",
-                        "description": "Azure VM size"
+                        "description": "Azure VM size (default: Standard_D8s_v5, or Standard_ND96isr_H100_v5 when gpuType is set)"
                       },
                       "osDiskType": {
                         "type": "string",
