@@ -172,6 +172,17 @@ resource "azurerm_kubernetes_cluster" "main" {
       // Cluster autoscaler manages the running node count.
       default_node_pool[0].node_count,
     ]
+
+    // A public cluster gates its API server with authorized_ip_ranges, which
+    // must include the cluster's own egress IP so nodes can reach the API
+    // server's public endpoint. That IP is only knowable in advance with a
+    // NAT gateway; the loadBalancer outbound IP is AKS-managed and allocated
+    // after creation, so the combination cannot work (nodes fail with
+    // VMExtensionError_K8SAPIServerConnFail).
+    precondition {
+      condition     = local.private_cluster_enabled || local.nat_enabled
+      error_message = "A public cluster (cluster.aks.private.enabled: false) requires the NAT gateway (network.aks.nat.enabled: true) so the node egress IP can be added to the API server authorized ranges."
+    }
   }
 
   depends_on = [

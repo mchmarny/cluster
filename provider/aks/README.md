@@ -191,6 +191,13 @@ provider/aks/tools/disco -r eastus     # identity, K8s versions, VM sizes
   private API server has no public endpoint, so `controlPlane.authorizedNetworks`
   is applied only when the cluster is public. This differs from GKE (which allows
   private nodes and authorized networks together).
+- **On a public cluster, nodes reach the API server via its public endpoint**,
+  egressing through the NAT gateway. The module automatically adds the NAT
+  public IP to the authorized ranges — without it, cluster creation fails with
+  `VMExtensionError_K8SAPIServerConnFail`. This is also why a public cluster
+  requires the NAT gateway (enforced via precondition): the default
+  loadBalancer outbound IP is allocated only after creation and cannot be
+  allowlisted in advance.
 - **KMS etcd encryption defaults OFF** — it requires Key Vault purge protection,
   whose soft-delete retention window complicates clean teardown of demo clusters.
 - **GPU pools** default to H100 (`Standard_ND96isr_H100_v5`, 96 vCPU / 8×H100 per

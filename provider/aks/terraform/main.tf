@@ -132,11 +132,16 @@ locals {
     }
   }
 
-  // API server authorized IP ranges: config-provided networks + caller egress IP.
+  // API server authorized IP ranges: config-provided networks + caller egress
+  // IP + the cluster's own egress IP (NAT gateway public IP). The last one is
+  // required on public clusters: nodes reach the API server via its PUBLIC
+  // endpoint, egressing through the NAT gateway — omitting it fails cluster
+  // creation with VMExtensionError_K8SAPIServerConnFail (live-validated).
   // Only applied when the cluster is public (see private_cluster_enabled note).
   authorized_ip_ranges = concat(
     [for net in try(local.config.cluster.aks.controlPlane.authorizedNetworks, []) : net.cidr],
-    [local.egress_cidr]
+    [local.egress_cidr],
+    local.nat_enabled ? ["${azurerm_public_ip.nat[0].ip_address}/32"] : []
   )
 }
 
