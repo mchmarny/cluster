@@ -170,6 +170,11 @@
                         "type": "string",
                         "description": "GPU accelerator type (e.g. h100); selects a GPU-capable VM size and adds the nvidia taint"
                       },
+                      "gpuDriverInstall": {
+                        "type": "boolean",
+                        "default": false,
+                        "description": "Let Azure install the NVIDIA driver on GPU pool nodes. Default false: assumes the driver is managed in-cluster (e.g. NVIDIA GPU Operator). Changing this replaces the pool"
+                      },
                       "autoscaling": { "$ref": "#/$defs/autoscaling" },
                       "labels": {
                         "type": "object",

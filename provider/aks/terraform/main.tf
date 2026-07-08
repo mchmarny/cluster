@@ -116,6 +116,9 @@ locals {
       os_disk_type  = try(worker.osDiskType, "Managed")
       os_disk_size  = try(worker.osDiskSizeGb, 128)
       is_gpu        = try(worker.gpuType, null) != null
+      // Azure-managed NVIDIA driver install is opt-in; default assumes the
+      // driver is provided in-cluster (e.g. NVIDIA GPU Operator).
+      gpu_driver_install = try(worker.gpuDriverInstall, false)
       auto_scaling  = try(worker.autoscaling.enabled, true)
       min_nodes     = try(worker.autoscaling.minNodes, 1)
       max_nodes     = try(worker.autoscaling.maxNodes, 3)

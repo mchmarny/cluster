@@ -23,11 +23,17 @@ resource "azurerm_kubernetes_cluster_node_pool" "workers" {
   max_count            = each.value.auto_scaling ? each.value.max_nodes : null
   node_count           = each.value.auto_scaling ? null : each.value.node_count
 
+  // Must be set explicitly for GPU pools: Azure defaults to "Install" and
+  // records it in state, and an unset value re-plans as null — a ForceNew
+  // diff that replaces the pool on every apply. Driver install is opt-in
+  // via gpuDriverInstall; "None" assumes an in-cluster driver (GPU Operator).
+  gpu_driver = each.value.is_gpu ? (each.value.gpu_driver_install ? "Install" : "None") : null
+
   node_labels = each.value.labels
 
   // Taints from config, plus the NVIDIA taint for GPU pools so only GPU
-  // workloads schedule there. GPU driver installation is handled by the AKS
-  // NVIDIA device plugin / node image (assumes H100 SKU for gpuType pools).
+  // workloads schedule there. Driver installation is controlled by
+  // gpu_driver below (assumes H100 SKU for gpuType pools).
   node_taints = concat(
     [for t in each.value.config_taints : "${t.key}=${t.value}:${t.effect}"],
     each.value.is_gpu ? ["nvidia.com/gpu=present:NoSchedule"] : []

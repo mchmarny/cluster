@@ -80,9 +80,29 @@ docker run --rm \
 Without the mount, the run fails at `terraform init` with
 `Please run 'az login' to setup account`.
 
-### 4. GPU pools: deploy the NVIDIA device plugin
+### 4. GPU pools: driver and device plugin
 
-AKS installs the NVIDIA **driver** on GPU node pools automatically, but not the
+By default the module provisions GPU pools with the Azure-managed NVIDIA
+driver install **disabled** (`gpu_driver = "None"`), on the assumption that
+GPU software is managed in-cluster — typically the
+[NVIDIA GPU Operator](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/),
+which installs the driver, device plugin, and toolchain together. To have
+Azure install the driver on the node image instead, opt in per pool:
+
+```yaml
+compute:
+  aks:
+    nodePools:
+      workers:
+        - name: gpuworker1
+          gpuType: h100
+          gpuDriverInstall: true   # Azure-managed driver (default: false)
+```
+
+> Changing `gpuDriverInstall` on an existing pool **replaces the pool** —
+> Azure cannot toggle the driver install mode in place.
+
+With `gpuDriverInstall: true`, AKS installs the **driver** but not the
 **device plugin** — without it GPU nodes advertise zero `nvidia.com/gpu`
 resources and no GPU workload can schedule. After the first apply that includes
 a `gpuType` pool, deploy the plugin once (the upstream manifest tolerates the
