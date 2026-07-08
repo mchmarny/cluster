@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"strings"
 
 	"github.com/urfave/cli/v3"
 
@@ -14,7 +13,6 @@ import (
 	"github.com/mchmarny/cluster/pkg/azure"
 	"github.com/mchmarny/cluster/pkg/config"
 	"github.com/mchmarny/cluster/pkg/gcp"
-	"github.com/mchmarny/cluster/pkg/oci"
 	"github.com/mchmarny/cluster/pkg/state"
 	"github.com/mchmarny/cluster/pkg/terraform"
 )
@@ -267,14 +265,6 @@ func buildRunConfig(cmd *cli.Command) (*runConfigResult, func(), error) {
 		// azurerm authenticates via ARM_* env / az CLI default chain, inherited
 		// from the process environment.
 		logAzureCredentials()
-	case config.ProviderOKE:
-		keyID, secret := resolveOCICredentials(kc)
-		rc.Bucket = oci.BucketName(cfg)
-		rc.StateKey = oci.StateKey(cfg)
-		rc.S3Endpoint = os.Getenv("OCI_S3_ENDPOINT")
-		rc.AccessKeyID = keyID
-		rc.SecretAccessKey = secret
-		rc.outputFile = oci.OutputFileName(cfg)
 	default:
 		cfgCleanup()
 		return nil, noop, fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
@@ -349,34 +339,6 @@ func logAzureCredentials() {
 		return
 	}
 	slog.Info("no ARM_* service principal set, terraform will use the Azure CLI default chain")
-}
-
-// resolveOCICredentials returns the S3-compatible Customer Secret Key used by
-// the Terraform s3 backend against OCI Object Storage. Priority:
-//  1. KEY_CONTENT (base64-encoded "<accessKey>:<secretKey>")
-//  2. AWS_ACCESS_KEY_ID + AWS_SECRET_ACCESS_KEY env vars
-//  3. Empty (the oci provider still authenticates via OCI_* / config file, but
-//     the s3 backend has no credentials — init will fail with a clear error)
-func resolveOCICredentials(keyContent string) (keyID, secret string) {
-	if keyContent != "" {
-		data, err := base64.StdEncoding.DecodeString(keyContent)
-		if err != nil {
-			slog.Warn("failed to decode KEY_CONTENT for OCI", "error", err)
-		} else if id, s, ok := strings.Cut(strings.TrimSpace(string(data)), ":"); ok {
-			slog.Info("using OCI S3-compat credentials from KEY_CONTENT")
-			return id, s
-		} else {
-			slog.Warn("KEY_CONTENT for OCI must be base64 of '<accessKey>:<secretKey>'")
-		}
-	}
-
-	if id, s := os.Getenv("AWS_ACCESS_KEY_ID"), os.Getenv("AWS_SECRET_ACCESS_KEY"); id != "" && s != "" {
-		slog.Info("using OCI S3-compat credentials from environment")
-		return id, s
-	}
-
-	slog.Warn("no OCI S3-compat credentials found; state backend init may fail")
-	return "", ""
 }
 
 // resolveCredentials returns AWS credentials using the following priority:

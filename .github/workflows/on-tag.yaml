@@ -7,7 +7,6 @@ on:
       - 'v*-eks'
       - 'v*-gke'
       - 'v*-aks'
-      - 'v*-oke'
 
 concurrency:
   group: build-${{ github.ref_name }}

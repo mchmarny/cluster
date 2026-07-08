@@ -19,15 +19,14 @@ const (
 type RunConfig struct {
 	TerraformDir string
 	ConfigPath   string
-	Provider     string // config.ProviderEKS, ProviderGKE, ProviderAKS, or ProviderOKE
+	Provider     string // config.ProviderEKS, ProviderGKE, or ProviderAKS
 	State        string // config.StateTenancy or config.StateLocal
 	Bucket       string
 	Region       string
 	StateKey     string
 	Destroy      bool
 
-	// AWS credentials passed explicitly (not via os.Setenv). OKE reuses these
-	// for the s3 backend against OCI's S3-compatibility endpoint.
+	// AWS credentials passed explicitly (not via os.Setenv).
 	AccessKeyID     string
 	SecretAccessKey string
 
@@ -38,9 +37,6 @@ type RunConfig struct {
 	ResourceGroup  string
 	StorageAccount string
 	Container      string
-
-	// OCI s3-compatible backend endpoint (Object Storage S3 compatibility).
-	S3Endpoint string
 
 	// ImportTargets lists resources to import if missing from state.
 	// Each entry maps a Terraform resource address to its provider ID.
@@ -216,16 +212,6 @@ func buildEnv(cfg RunConfig) []string {
 		// azurerm authenticates via ARM_* env vars (service principal) or the
 		// Azure CLI default chain; both are inherited from the process env and
 		// not owned by this tool, so no per-run env vars are injected here.
-	case config.ProviderOKE:
-		// OKE uses the s3 backend against OCI Object Storage. The Terraform oci
-		// provider authenticates via OCI_* env / config file (inherited); the
-		// s3 backend uses AWS-style keys mapped to OCI Customer Secret Keys.
-		if cfg.AccessKeyID != "" {
-			env = append(env, fmt.Sprintf("AWS_ACCESS_KEY_ID=%s", cfg.AccessKeyID))
-		}
-		if cfg.SecretAccessKey != "" {
-			env = append(env, fmt.Sprintf("AWS_SECRET_ACCESS_KEY=%s", cfg.SecretAccessKey))
-		}
 	}
 
 	return env
@@ -258,18 +244,6 @@ func buildInitArgs(cfg RunConfig) []string {
 			fmt.Sprintf("-backend-config=container_name=%s", cfg.Container),
 			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
 		)
-	case config.ProviderOKE:
-		// s3 backend against OCI Object Storage's S3-compatibility endpoint.
-		args = append(args,
-			fmt.Sprintf("-backend-config=bucket=%s", cfg.Bucket),
-			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
-			fmt.Sprintf("-backend-config=region=%s", cfg.Region),
-		)
-		if cfg.S3Endpoint != "" {
-			args = append(args,
-				fmt.Sprintf("-backend-config=endpoints={s3=%q}", cfg.S3Endpoint),
-			)
-		}
 	}
 
 	return args

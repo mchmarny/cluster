@@ -10,10 +10,9 @@ pkg/                  Go packages (aws, azure, gcp, oci, cluster, config, run, s
 provider/eks/         EKS Terraform + tools (actuate, setup, validate, disco)
 provider/gke/         GKE Terraform + tools (setup, disco, validate)
 provider/aks/         AKS Terraform + tools (setup, disco, validate)
-provider/oke/         OKE Terraform + tools (setup, disco, validate)
-config/               Global config files (provider-prefixed: eks-*.yaml, gke-*.yaml, aks-*.yaml, oke-*.yaml)
+config/               Global config files (provider-prefixed: eks-*.yaml, gke-*.yaml, aks-*.yaml)
 schema/               JSON Schema for config validation
-image/                Dockerfiles (eks.dockerfile, gke.dockerfile, aks.dockerfile, oke.dockerfile)
+image/                Dockerfiles (eks.dockerfile, gke.dockerfile, aks.dockerfile)
 tools/                Shared scripts (common, mirror, e2e, check-tools)
 .settings.yaml        Single source of truth for versions
 ```
@@ -34,12 +33,12 @@ A [JSON Schema](../schema/cluster-config.schema.json) is provided for editor aut
 
 ### Configuration Schema
 
-Shared top-level structure; provider-specific fields nest under the provider key, e.g. `cluster.gke`/`cluster.eks`/`cluster.aks`/`cluster.oke` and the matching `compute.<provider>`.
+Shared top-level structure; provider-specific fields nest under the provider key, e.g. `cluster.gke`/`cluster.eks`/`cluster.aks` and the matching `compute.<provider>`.
 
 ```yaml
 deployment:
   id: <string>           # Deployment identifier (required)
-  provider: <string>     # eks | gke | aks | oke (required)
+  provider: <string>     # eks | gke | aks (required)
   tenancy: <string>      # Account/Project ID (required)
   location: <string>     # Region (required)
   state: tenancy         # tenancy (cloud) | local (tfstate)
@@ -69,7 +68,7 @@ compute:
 network:                 # Optional -- auto-computed from VPC CIDR for both providers
 ```
 
-The `init` command generates the appropriate template based on the output filename prefix (`gke-*`, `aks-*`, `oke-*` produce their respective templates; anything else produces EKS).
+The `init` command generates the appropriate template based on the output filename prefix (`gke-*`, `aks-*` produce their respective templates; anything else produces EKS).
 
 ### CLI Commands
 
@@ -95,14 +94,12 @@ State storage is controlled by `deployment.state`:
 
 | Value | Backend | Location |
 |-------|---------|----------|
-| `tenancy` (default) | Cloud object store | S3 (EKS), GCS (GKE), Azure Blob (AKS), or OCI Object Storage via S3-compat (OKE), keyed by `deployments/{region}/{id}/terraform.tfstate` |
+| `tenancy` (default) | Cloud object store | S3 (EKS), GCS (GKE), or Azure Blob (AKS), keyed by `deployments/{region}/{id}/terraform.tfstate` |
 | `local` | Local filesystem | `terraform.tfstate` in the working directory |
 
 The `tenancy` mode provisions a per-tenancy state container with versioning and
-restricted access: `cluster-state-{account-or-project-id}` for EKS/GKE, a
-`clst{subscription-hex}` Storage Account (`tfstate` container) for AKS, and a
-`cluster-state` Object Storage bucket for OKE. OKE uses Terraform's `s3` backend
-pointed at OCI's S3-compatibility endpoint — no AWS services are involved.
+restricted access: `cluster-state-{account-or-project-id}` for EKS/GKE and a
+`clst{subscription-hex}` Storage Account (`tfstate` container) for AKS.
 
 ## Container Images
 
@@ -119,7 +116,6 @@ Images are multi-arch (amd64 + arm64), built on native runners (no QEMU).
 | EKS | `ghcr.io/mchmarny/cluster/eks:<version>` |
 | GKE | `ghcr.io/mchmarny/cluster/gke:<version>` |
 | AKS | `ghcr.io/mchmarny/cluster/aks:<version>` |
-| OKE | `ghcr.io/mchmarny/cluster/oke:<version>` |
 
 ### Building Images
 
@@ -127,10 +123,9 @@ Images are multi-arch (amd64 + arm64), built on native runners (no QEMU).
 make build-eks   # Mirror providers + build EKS image
 make build-gke   # Mirror providers + build GKE image
 make build-aks   # Mirror providers + build AKS image
-make build-oke   # Mirror providers + build OKE image
 ```
 
-Tags matching `v*-eks`, `v*-gke`, `v*-aks`, or `v*-oke` pushed to `main` trigger CI builds.
+Tags matching `v*-eks`, `v*-gke`, or `v*-aks` pushed to `main` trigger CI builds.
 
 ## GKE: GPU Multi-NIC Networking
 
@@ -151,7 +146,7 @@ EFA (Elastic Fabric Adapter) support for GPU instances uses dynamic network card
 
 - **Private API endpoints** -- cluster control plane is not publicly accessible by default
 - **Authorized networks** -- only explicitly allowed CIDRs can reach the API server
-- **Workload identity** -- pods authenticate via IRSA (EKS), Workload Identity (GKE), Entra Workload Identity (AKS), or OCI instance/workload principals (OKE), no static secrets
+- **Workload identity** -- pods authenticate via IRSA (EKS), Workload Identity (GKE), or Entra Workload Identity (AKS), no static secrets
 
 ### Account Validation
 

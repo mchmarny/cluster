@@ -45,7 +45,6 @@ const (
 	ProviderEKS = "eks"
 	ProviderGKE = "gke"
 	ProviderAKS = "aks"
-	ProviderOKE = "oke"
 )
 
 // Load reads a YAML config file, applies defaults, and validates.
@@ -81,7 +80,6 @@ var validProviders = map[string]bool{
 	ProviderEKS: true,
 	ProviderGKE: true,
 	ProviderAKS: true,
-	ProviderOKE: true,
 }
 
 func (c *Config) validate() error {
@@ -92,7 +90,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("deployment.provider is required")
 	}
 	if !validProviders[c.Deployment.Provider] {
-		return fmt.Errorf("deployment.provider must be one of eks, gke, aks, oke; got %q", c.Deployment.Provider)
+		return fmt.Errorf("deployment.provider must be one of eks, gke, aks; got %q", c.Deployment.Provider)
 	}
 	if c.Deployment.Tenancy == "" {
 		return fmt.Errorf("deployment.tenancy is required")

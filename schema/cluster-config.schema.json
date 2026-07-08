@@ -15,8 +15,8 @@
         },
         "provider": {
           "type": "string",
-          "enum": ["eks", "gke", "aks", "oke"],
-          "description": "Cloud provider (eks, gke, aks, oke)"
+          "enum": ["eks", "gke", "aks"],
+          "description": "Cloud provider (eks, gke, aks)"
         },
         "tenancy": {
           "type": "string",

@@ -37,7 +37,6 @@ get_tool_metadata() {
     awscli)      echo "aws:::aws --version 2>/dev/null | grep -oE 'aws-cli/[0-9]+\.[0-9]+' | sed 's|aws-cli/||':::major_minor" ;;
     gcloud)      echo "gcloud:::gcloud version 2>/dev/null | grep -oE 'Google Cloud SDK [0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+':::major" ;;
     azurecli)    echo "az:::az version --output json 2>/dev/null | grep -oE '\"azure-cli\": \"[0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+':::major_minor" ;;
-    oci)         echo "oci:::oci --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+':::major_minor" ;;
     tflint)      echo "tflint:::tflint --version 2>/dev/null | awk 'NR==1{print \$3}':::major_minor" ;;
     trivy)       echo "trivy:::trivy version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+':::major_minor" ;;
     golangci_lint) echo "golangci-lint:::golangci-lint version --short 2>/dev/null:::major" ;;

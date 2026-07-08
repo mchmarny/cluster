@@ -31,10 +31,6 @@ AZURECLI_VERSION ?= $(shell yq -r '.tools.azurecli' .settings.yaml 2>/dev/null)
 ifeq ($(AZURECLI_VERSION),)
 AZURECLI_VERSION := 2.87.0
 endif
-OCI_VERSION ?= $(shell yq -r '.tools.oci' .settings.yaml 2>/dev/null)
-ifeq ($(OCI_VERSION),)
-OCI_VERSION := 3.89.0
-endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)
 SCAN_SEVERITY := CRITICAL,HIGH
@@ -76,7 +72,6 @@ info: ## Prints the current project info
 	@echo "  awscli:            $(AWSCLI_VERSION)"
 	@echo "  gcloud:            $(GCLOUD_VERSION)"
 	@echo "  azurecli:          $(AZURECLI_VERSION)"
-	@echo "  oci:               $(OCI_VERSION)"
 	@echo "  kind_node_image:   $(KIND_NODE_IMAGE)"
 
 .PHONY: tools-check
@@ -214,20 +209,9 @@ build-aks: ## Build AKS Docker image (mirrors providers, then builds)
 		--build-arg AZURECLI_VERSION=$(AZURECLI_VERSION) \
 		-t cluster-aks:$(VERSION) -t cluster-aks:latest .
 
-.PHONY: build-oke
-build-oke: ## Build OKE Docker image (mirrors providers, then builds)
-	@./tools/mirror oke
-	@docker build -f image/oke.dockerfile \
-		--build-arg VERSION=$(VERSION) \
-		--build-arg COMMIT=$(COMMIT) \
-		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
-		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
-		--build-arg OCI_VERSION=$(OCI_VERSION) \
-		-t cluster-oke:$(VERSION) -t cluster-oke:latest .
-
 # Version Bump Targets
 
-CSPS := eks gke aks oke
+CSPS := eks gke aks
 BUMP_TYPES := major minor patch
 
 define bump_target

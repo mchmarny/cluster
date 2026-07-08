@@ -130,57 +130,6 @@ func TestBuildInitArgsAzureRM(t *testing.T) {
 	}
 }
 
-func TestBuildInitArgsOCI(t *testing.T) {
-	args := buildInitArgs(RunConfig{
-		Provider:   config.ProviderOKE,
-		State:      config.StateTenancy,
-		Bucket:     "cluster-state",
-		Region:     "us-ashburn-1",
-		StateKey:   "deployments/us-ashburn-1/demo/terraform.tfstate",
-		S3Endpoint: "https://ns.compat.objectstorage.us-ashburn-1.oraclecloud.com",
-	})
-	expected := []string{
-		"init",
-		"-backend-config=bucket=cluster-state",
-		"-backend-config=key=deployments/us-ashburn-1/demo/terraform.tfstate",
-		"-backend-config=region=us-ashburn-1",
-		`-backend-config=endpoints={s3="https://ns.compat.objectstorage.us-ashburn-1.oraclecloud.com"}`,
-	}
-
-	if len(args) != len(expected) {
-		t.Fatalf("len = %d, want %d\nargs: %v", len(args), len(expected), args)
-	}
-	for i, arg := range args {
-		if arg != expected[i] {
-			t.Errorf("args[%d] = %q, want %q", i, arg, expected[i])
-		}
-	}
-}
-
-func TestBuildEnvOKE(t *testing.T) {
-	env := buildEnv(RunConfig{
-		Provider:        config.ProviderOKE,
-		ConfigPath:      "/tmp/config.yaml",
-		AccessKeyID:     "OCIKEY",
-		SecretAccessKey: "ocisecret",
-	})
-
-	want := map[string]bool{
-		"TF_VAR_CONFIG_PATH=/tmp/config.yaml": true,
-		"TF_IN_AUTOMATION=1":                  true,
-		"AWS_ACCESS_KEY_ID=OCIKEY":            true,
-		"AWS_SECRET_ACCESS_KEY=ocisecret":     true,
-	}
-	if len(env) != len(want) {
-		t.Fatalf("got %d env vars, want %d: %v", len(env), len(want), env)
-	}
-	for _, e := range env {
-		if !want[e] {
-			t.Errorf("unexpected env var: %q", e)
-		}
-	}
-}
-
 func TestBuildEnvAKS(t *testing.T) {
 	env := buildEnv(RunConfig{
 		Provider:   config.ProviderAKS,
