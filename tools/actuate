@@ -279,18 +279,18 @@ run_terraform() {
     apply)
       if [[ -f "$tf_dir/plan.cache" ]]; then
         msg "Applying saved plan..."
-        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "${approve_args[@]}" "plan.cache"
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply ${approve_args[@]+"${approve_args[@]}"} "plan.cache"
         rm -f "$tf_dir/plan.cache"
       else
         msg "Applying deployment..."
-        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply "${approve_args[@]}"
+        TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" apply ${approve_args[@]+"${approve_args[@]}"}
       fi
       ;;
     destroy)
       msg "Refreshing state before destroy..."
       TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" refresh
       msg "Destroying deployment..."
-      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy "${approve_args[@]}"
+      TF_VAR_CONFIG_PATH="$config_file" terraform -chdir="$tf_dir" destroy ${approve_args[@]+"${approve_args[@]}"}
       ;;
     output)
       msg "Deployment outputs:"
