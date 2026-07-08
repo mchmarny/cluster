@@ -15,7 +15,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workers" {
   os_disk_type          = each.value.os_disk_type
   os_disk_size_gb       = each.value.os_disk_size
   vnet_subnet_id        = azurerm_subnet.worker.id
-  zones                 = ["1", "2", "3"]
+  zones                 = local.zones
   tags                  = local.tags
 
   auto_scaling_enabled = each.value.auto_scaling

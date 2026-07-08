@@ -83,6 +83,10 @@ locals {
   // NAT gateway for private-node egress (enabled by default).
   nat_enabled = try(local.config.network.aks.nat.enabled, true)
 
+  // Availability zones for node pools and the NAT public IP. Regions without
+  // AZ support (e.g. westus) require an empty list: `cluster.aks.zones: []`.
+  zones = try(local.config.cluster.aks.zones, ["1", "2", "3"])
+
   // H100 GPU SKU used as the documented default when a worker sets gpuType.
   // (live-validate) confirm SKU availability/quota in the target region.
   gpu_default_vm_size = "Standard_ND96isr_H100_v5"

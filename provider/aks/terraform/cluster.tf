@@ -134,7 +134,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     os_disk_size_gb              = try(local.system_pool.osDiskSizeGb, 128)
     vnet_subnet_id               = azurerm_subnet.system.id
     only_critical_addons_enabled = true
-    zones                        = ["1", "2", "3"]
+    zones                        = local.zones
 
     auto_scaling_enabled = try(local.system_pool.autoscaling.enabled, true)
     min_count            = try(local.system_pool.autoscaling.enabled, true) ? try(local.system_pool.autoscaling.minNodes, 1) : null
