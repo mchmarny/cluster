@@ -111,20 +111,20 @@ locals {
   worker_pools = {
     for worker in try(local.config.compute.aks.nodePools.workers, []) :
     worker.name => {
-      name          = substr(lower(replace(worker.name, "/[^a-z0-9]/", "")), 0, 12)
-      vm_size       = try(worker.vmSize, try(worker.gpuType, null) != null ? local.gpu_default_vm_size : "Standard_D8s_v5")
-      os_disk_type  = try(worker.osDiskType, "Managed")
-      os_disk_size  = try(worker.osDiskSizeGb, 128)
-      is_gpu        = try(worker.gpuType, null) != null
+      name         = substr(lower(replace(worker.name, "/[^a-z0-9]/", "")), 0, 12)
+      vm_size      = try(worker.vmSize, try(worker.gpuType, null) != null ? local.gpu_default_vm_size : "Standard_D8s_v5")
+      os_disk_type = try(worker.osDiskType, "Managed")
+      os_disk_size = try(worker.osDiskSizeGb, 128)
+      is_gpu       = try(worker.gpuType, null) != null
       // Azure-managed NVIDIA driver install is opt-in; default assumes the
       // driver is provided in-cluster (e.g. NVIDIA GPU Operator).
       gpu_driver_install = try(worker.gpuDriverInstall, false)
-      auto_scaling  = try(worker.autoscaling.enabled, true)
-      min_nodes     = try(worker.autoscaling.minNodes, 1)
-      max_nodes     = try(worker.autoscaling.maxNodes, 3)
-      node_count    = try(worker.size, try(worker.autoscaling.minNodes, 1))
-      labels        = try(worker.labels, {})
-      config_taints = try(worker.taints, [])
+      auto_scaling       = try(worker.autoscaling.enabled, true)
+      min_nodes          = try(worker.autoscaling.minNodes, 1)
+      max_nodes          = try(worker.autoscaling.maxNodes, 3)
+      node_count         = try(worker.size, try(worker.autoscaling.minNodes, 1))
+      labels             = try(worker.labels, {})
+      config_taints      = try(worker.taints, [])
     }
   }
 
