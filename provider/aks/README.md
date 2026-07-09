@@ -210,6 +210,11 @@ provider/aks/tools/disco -r eastus     # identity, K8s versions, VM sizes
 - **In-place Kubernetes upgrades cannot skip minor versions** (e.g. 1.33 → 1.35
   is rejected; upgrade via 1.34). Fresh clusters can target any supported
   version directly.
+- **Pods per node defaults to 100** (`nodePools.<pool>.maxPods`; AKS's own
+  default of 30 is tight for real workloads). Changing it on a live pool
+  updates in place by rolling the pool's nodes (live-validated: plans as `~`,
+  not replacement). Under node-subnet Azure CNI each pod reserves a VNet IP,
+  so size the worker subnet accordingly (the default /17 has ample room).
 - **vCPU quota is per VM family.** When a single family's cap is too small,
   split pools across families (e.g. DSv5 system pool + DSv4 CPU workers).
 - **ARM read-after-write lag** can make `azurerm` fail with "Root object was

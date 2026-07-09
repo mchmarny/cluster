@@ -14,6 +14,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "workers" {
   mode                  = "User"
   os_disk_type          = each.value.os_disk_type
   os_disk_size_gb       = each.value.os_disk_size
+  max_pods              = each.value.max_pods
   vnet_subnet_id        = azurerm_subnet.worker.id
   zones                 = local.zones
   tags                  = local.tags

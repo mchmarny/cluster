@@ -132,6 +132,7 @@ resource "azurerm_kubernetes_cluster" "main" {
     orchestrator_version         = local.kubernetes_version
     os_disk_type                 = try(local.system_pool.osDiskType, "Managed")
     os_disk_size_gb              = try(local.system_pool.osDiskSizeGb, 128)
+    max_pods                     = try(local.system_pool.maxPods, local.default_max_pods)
     vnet_subnet_id               = azurerm_subnet.system.id
     only_critical_addons_enabled = true
     zones                        = local.zones

@@ -149,6 +149,13 @@
                       "minimum": 30,
                       "description": "OS disk size in GB (default: 128)"
                     },
+                    "maxPods": {
+                      "type": "integer",
+                      "minimum": 10,
+                      "maximum": 250,
+                      "default": 100,
+                      "description": "Maximum pods per node (default: 100). Changing it on a live pool updates in place by rolling the pool's nodes. Each pod reserves a VNet IP under Azure CNI"
+                    },
                     "autoscaling": { "$ref": "#/$defs/autoscaling" }
                   }
                 },
@@ -176,6 +183,13 @@
                         "type": "integer",
                         "minimum": 30,
                         "description": "OS disk size in GB"
+                      },
+                      "maxPods": {
+                        "type": "integer",
+                        "minimum": 10,
+                        "maximum": 250,
+                        "default": 100,
+                        "description": "Maximum pods per node (default: 100). Changing it on a live pool updates in place by rolling the pool's nodes. Each pod reserves a VNet IP under Azure CNI"
                       },
                       "gpuType": {
                         "type": "string",

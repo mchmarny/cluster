@@ -95,6 +95,12 @@ locals {
   // (live-validate) confirm SKU availability/quota in the target region.
   gpu_default_vm_size = "Standard_ND96isr_H100_v5"
 
+  // Default pods-per-node. AKS's own default (30) is tight for real
+  // workloads; updating it on a live pool rolls the pool's nodes.
+  // With node-subnet Azure CNI each pod reserves a VNet IP — size the
+  // worker subnet accordingly (default /17 leaves ample headroom).
+  default_max_pods = 100
+
   // Default system node pool (becomes the AKS default_node_pool).
   default_system_pool = {
     vmSize       = "Standard_D4s_v5"
@@ -119,6 +125,7 @@ locals {
       vm_size      = try(worker.vmSize, try(worker.gpuType, null) != null ? local.gpu_default_vm_size : "Standard_D8s_v5")
       os_disk_type = try(worker.osDiskType, "Managed")
       os_disk_size = try(worker.osDiskSizeGb, 128)
+      max_pods     = try(worker.maxPods, local.default_max_pods)
       is_gpu       = try(worker.gpuType, null) != null
       // Azure-managed NVIDIA driver install is opt-in; default assumes the
       // driver is provided in-cluster (e.g. NVIDIA GPU Operator).
