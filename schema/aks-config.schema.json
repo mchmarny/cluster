@@ -156,6 +156,11 @@
                       "default": 100,
                       "description": "Maximum pods per node (default: 100). Changing it on a live pool updates in place by rolling the pool's nodes. Each pod reserves a VNet IP under Azure CNI"
                     },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "Fixed node count when autoscaling is disabled (default: 1). Ignored when autoscaling.enabled is true"
+                    },
                     "autoscaling": { "$ref": "#/$defs/autoscaling" }
                   }
                 },
@@ -199,6 +204,11 @@
                         "type": "boolean",
                         "default": false,
                         "description": "Let Azure install the NVIDIA driver on GPU pool nodes. Default false: assumes the driver is managed in-cluster (e.g. NVIDIA GPU Operator). Changing this replaces the pool"
+                      },
+                      "size": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Fixed node count when autoscaling is disabled (default: minNodes, else 1). Ignored when autoscaling.enabled is true"
                       },
                       "autoscaling": { "$ref": "#/$defs/autoscaling" },
                       "labels": {
