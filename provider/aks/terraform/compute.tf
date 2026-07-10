@@ -52,8 +52,15 @@ resource "azurerm_kubernetes_cluster_node_pool" "workers" {
   }
 
   timeouts {
-    create = "30m"
-    update = "30m"
+    // GPU pools (ND-series, e.g. 2x Standard_ND96isr_H100_v5) routinely
+    // need more than 30m to allocate in shared-capacity regions; a 30m
+    // create cap kills terraform with "polling after CreateOrUpdate:
+    // context deadline exceeded" while Azure finishes the pool
+    // out-of-band (observed: NVIDIA/aicr UAT run 29116054044, westus).
+    // Update matches create (node-image upgrades walk the same pool);
+    // delete stays tighter — pool deletion is not capacity-bound.
+    create = "60m"
+    update = "60m"
     delete = "30m"
   }
 }
