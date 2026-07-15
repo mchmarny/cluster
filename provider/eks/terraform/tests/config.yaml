@@ -1,0 +1,61 @@
+# Test fixture for terraform test (tests/*.tftest.hcl) — not a deployable config.
+# Account/role values must stay in sync with the override_data blocks in the tests.
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: eks
+  tenancy: "123456789012"
+  location: us-west-2
+  state: tenancy
+  destroy: false
+
+cluster:
+  eks:
+    version: "1.35"
+    adminRoles:
+      # Same role the (mocked) caller deployed as — must be skipped (bootstrap
+      # already grants the creator cluster-admin; explicit entry would 409)
+      - arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_CS-Admin_abc123
+      # Unrelated role — must still get an explicit access entry
+      - arn:aws:iam::123456789012:role/other-admin
+
+network:
+  eks:
+    subnets:
+      public:
+        - cidr: 10.0.1.0/27
+          zone: us-west-2a
+      system:
+        - cidr: 10.0.4.0/22
+          zone: us-west-2a
+      worker:
+        - cidr: 10.0.128.0/17
+          zone: us-west-2a
+
+compute:
+  eks:
+    nodeGroups:
+      system:
+        instanceType: m7i.xlarge
+        capacity:
+          desired: 1
+      workers:
+        # GB200: gpu family must be derived from the instance type prefix
+        - name: gb200
+          instanceType: p6e-gb200.36xlarge
+          architecture: arm64
+          capacity:
+            desired: 2
+        # Explicit accelerator must win over prefix derivation
+        - name: accel
+          instanceType: x9z-unknown.48xlarge
+          accelerator: gb200
+          capacity:
+            desired: 1
+        # Non-GPU worker: no EFA interfaces
+        - name: cpu
+          instanceType: m4.16xlarge
+          capacity:
+            desired: 1

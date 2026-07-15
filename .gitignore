@@ -38,6 +38,7 @@ terraform.rc
 *lock.hcl
 *.cache
 *.hcl
+!*.tftest.hcl
 *.out
 
 # certs

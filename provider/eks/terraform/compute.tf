@@ -33,17 +33,17 @@ locals {
     NoExecute        = "NO_EXECUTE"
   }
 
-  # Map instance type prefix to GPU family for EFA interface layout
-  # p5 = H100 (all network cards are EFA-capable)
-  # p6e/p6i = GB200 (AWS-recommended card indices: 0, 1, 5, 9, 13)
+  # Map instance family (the full prefix before ".") to GPU family for EFA
+  # interface layout. GB200 needs its dedicated layout below; families not
+  # listed here fall through to the generic all-cards branch, which is
+  # correct for other GPU types (p5/H100, p5e/p5en/H200, p6-b200/B200).
   gpu_family = {
     for ng in local.worker_node_groups :
     ng.name => coalesce(
       try(ng.accelerator, null),
       try({
-        "p5"  = "h100"
-        "p6e" = "gb200"
-        "p6i" = "gb200"
+        "p5"        = "h100"
+        "p6e-gb200" = "gb200"
       }[split(".", ng.instanceType)[0]], null),
       "na"
     )

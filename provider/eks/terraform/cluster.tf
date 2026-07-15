@@ -190,12 +190,31 @@ data "aws_iam_role" "admin_roles" {
 }
 
 locals {
-  admin_role_arns = merge(
+  configured_admin_role_arns = merge(
     # Roles looked up via data source (by name)
     { for k, v in data.aws_iam_role.admin_roles : k => v.arn },
     # Roles provided as full ARNs (used as-is)
     { for role in try(local.config.cluster.eks.adminRoles, []) : role => role if startswith(role, "arn:") }
   )
+
+  # EKS auto-creates an access entry for the deploying principal
+  # (bootstrap_cluster_creator_admin_permissions = true), so an explicit entry
+  # for the same role fails with ResourceInUseException. The caller ARN is an
+  # STS assumed-role ARN that drops the IAM role path, so the creator is
+  # matched by account ID + role name rather than full ARN.
+  creator_role_name = (
+    strcontains(data.aws_caller_identity.current.arn, ":assumed-role/")
+    ? split("/", data.aws_caller_identity.current.arn)[1]
+    : null
+  )
+
+  admin_role_arns = {
+    for k, v in local.configured_admin_role_arns : k => v
+    if local.creator_role_name == null || !(
+      split(":", v)[4] == data.aws_caller_identity.current.account_id &&
+      element(split("/", v), length(split("/", v)) - 1) == local.creator_role_name
+    )
+  }
 }
 
 resource "aws_eks_access_entry" "admin_roles" {

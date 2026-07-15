@@ -119,6 +119,15 @@ tf-validate: tf-init ## Validate Terraform configuration in all directories
 	fi; \
 	echo "All Terraform configurations are valid!"
 
+.PHONY: tf-test
+tf-test: tf-init ## Run terraform test in directories that have tests
+	@for dir in $(TF_DIRS); do \
+		if [ -d "$$dir/tests" ]; then \
+			echo "Running terraform test in $$dir"; \
+			$(TF) -chdir=$$dir test -no-color || exit 1; \
+		fi; \
+	done
+
 .PHONY: tf-fmt
 tf-fmt: dep-check ## Check Terraform file formatting (per directory)
 	@for dir in $(TF_DIRS); do \
@@ -139,7 +148,7 @@ scan: dep-check ## Run trivy security scan
 	@$(TRIVY) config . --severity $(SCAN_SEVERITY) --format table --ignorefile .trivyignore --quiet
 
 .PHONY: tf-qualify
-tf-qualify: tf-validate tf-lint tf-fmt scan  ## Run all Terraform quality checks
+tf-qualify: tf-validate tf-test tf-lint tf-fmt scan  ## Run all Terraform quality checks
 
 .PHONY: qualify
 qualify: go-qualify tf-qualify ## Run all quality checks (Go + Terraform)
