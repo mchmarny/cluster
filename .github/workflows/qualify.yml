@@ -92,6 +92,14 @@ jobs:
         with:
           tflint_version: v${{ steps.versions.outputs.tflint }}
 
+      # Rulesets ship only as GitHub Releases; caching avoids the download
+      # (and its API call) entirely on repeat runs
+      - name: Cache tflint plugins
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ~/.tflint.d/plugins
+          key: tflint-plugins-${{ runner.os }}-${{ hashFiles('.tflint.hcl') }}
+
       - name: Install Trivy
         run: |
           TRIVY_VERSION="${{ steps.versions.outputs.trivy }}"
@@ -100,5 +108,9 @@ jobs:
           rm /tmp/trivy.tar.gz
 
       - name: Qualify
+        env:
+          # tflint --init resolves ruleset releases via the GitHub API;
+          # unauthenticated calls share a 60/hr per-IP quota across all
+          # tenants on hosted runners and get rate-limited (403)
+          GITHUB_TOKEN: ${{ github.token }}
         run: make tf-qualify
-
