@@ -205,8 +205,15 @@ resource "google_container_node_pool" "pools" {
   }
 
   timeouts {
-    create = "30m"
-    update = "30m"
+    # GPU pools (and large CPU pools in constrained zones) routinely need
+    # more than 30m to allocate; a 30m create cap fails the apply while GKE
+    # keeps provisioning out-of-band and reports the pool RUNNING shortly
+    # after, leaking the cluster and its VPCs (observed: NVIDIA/aicr UAT run
+    # 30965268896, cpu-worker took ~35m). Update matches create (node-image
+    # upgrades walk the same pool); delete stays tighter — pool deletion is
+    # not capacity-bound.
+    create = "60m"
+    update = "60m"
     delete = "30m"
   }
 
