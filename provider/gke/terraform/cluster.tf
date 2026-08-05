@@ -227,8 +227,12 @@ resource "google_container_cluster" "main" {
   ]
 
   timeouts {
-    create = "45m"
-    update = "45m"
+    # Matches the node-pool create/update cap in compute.tf: cluster creation
+    # includes the default pool and control-plane rollout, so it is subject to
+    # the same slow-provisioning tail. Delete stays at 45m — teardown walks
+    # every pool but is not capacity-bound.
+    create = "60m"
+    update = "60m"
     delete = "45m"
   }
 }

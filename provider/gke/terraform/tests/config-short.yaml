@@ -1,0 +1,35 @@
+# Test fixture for terraform test (tests/*.tftest.hcl) — not a deployable config.
+# Short deployment.id (6 chars): derived names must keep using the raw id so
+# already-deployed clusters do not see their resources replaced.
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: gke
+  tenancy: tftest-project
+  location: us-central1
+  state: tenancy
+  destroy: false
+
+cluster:
+  gke:
+    version: "1.35"
+
+compute:
+  gke:
+    nodePools:
+      system:
+        machineType: e2-standard-4
+        autoscaling:
+          enabled: true
+          minNodes: 1
+          maxNodes: 3
+
+      workers:
+        - name: cpu-worker
+          machineType: n2-standard-8
+          autoscaling:
+            enabled: true
+            minNodes: 1
+            maxNodes: 1

@@ -9,7 +9,7 @@ locals {
 resource "google_container_node_pool" "pools" {
   for_each = { for np in local.all_node_pools : np.name => np }
 
-  name     = "${local.prefix}-${each.key}"
+  name     = "${local.name_prefix}-${each.key}"
   location = local.region
   cluster  = google_container_cluster.main.id
   project  = local.project

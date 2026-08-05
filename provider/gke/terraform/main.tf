@@ -26,6 +26,29 @@ locals {
   region      = local.config.deployment.location
   egress_cidr = "${trimspace(data.http.egress_ip.response_body)}/32"
 
+  // Bounded prefix for length-capped derived names.
+  //
+  // GCP caps a service-account account_id at 30 chars (iam.tf) and GKE caps a
+  // node pool name at 40 (compute.tf). Both are derived from deployment.id, so
+  // a long id fails plan/apply before anything is provisioned. When either cap
+  // would be exceeded, fall back to a truncated id plus a hash of the full id:
+  // deterministic (same id always yields the same name), collision-resistant,
+  // and still traceable back to the deployment. Ids that already fit keep their
+  // raw names so deployed clusters do not see those resources replaced.
+  //
+  // Resources with a 63-char cap (VPC, subnets, router, NAT, firewall, KMS)
+  // stay on the raw prefix — they are not the binding constraint.
+  sa_name_suffix   = 13 // "-system-nodes" / "-worker-nodes"
+  pool_name_suffix = max([for np in local.all_node_pools : length(np.name) + 1]...)
+
+  prefix_fits = (
+    length(local.prefix) + local.sa_name_suffix <= 30 &&
+    length(local.prefix) + local.pool_name_suffix <= 40
+  )
+
+  // 8 id chars + 8 hash chars = 16, leaving room under both caps
+  name_prefix = local.prefix_fits ? local.prefix : "${substr(local.prefix, 0, 8)}${substr(sha256(local.prefix), 0, 8)}"
+
   // Cluster name (defaults to deployment.id)
   cluster_name = try(local.config.cluster.gke.name, local.prefix)
 

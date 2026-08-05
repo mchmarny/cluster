@@ -42,8 +42,10 @@ locals {
       location = google_container_cluster.main.location
       version  = google_container_cluster.main.master_version
       kubernetes = {
-        endpoint             = google_container_cluster.main.endpoint
-        clusterCaCertificate = google_container_cluster.main.master_auth[0].cluster_ca_certificate
+        endpoint = google_container_cluster.main.endpoint
+        // master_auth is a computed block; an absent one must not fail the
+        // whole apply over an informational status field
+        clusterCaCertificate = try(google_container_cluster.main.master_auth[0].cluster_ca_certificate, null)
         serviceCidr          = google_container_cluster.main.services_ipv4_cidr
         clusterCidr          = google_container_cluster.main.cluster_ipv4_cidr
       }

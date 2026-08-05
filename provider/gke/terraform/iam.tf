@@ -3,7 +3,7 @@
 // =====================================================================================
 
 resource "google_service_account" "system_nodes" {
-  account_id   = "${local.prefix}-system-nodes"
+  account_id   = "${local.name_prefix}-system-nodes"
   display_name = "GKE System Nodes Service Account"
   description  = "Service account used by GKE system node pools"
   project      = local.project
@@ -44,7 +44,7 @@ resource "google_project_iam_member" "system_nodes_default_sa" {
 // =====================================================================================
 
 resource "google_service_account" "worker_nodes" {
-  account_id   = "${local.prefix}-worker-nodes"
+  account_id   = "${local.name_prefix}-worker-nodes"
   display_name = "GKE Worker Nodes Service Account"
   description  = "Service account used by GKE worker node pools"
   project      = local.project

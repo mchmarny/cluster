@@ -1,0 +1,38 @@
+# Test fixture for terraform test (tests/*.tftest.hcl) — not a deployable config.
+# deployment.id is deliberately long (33 chars), matching the run-scoped ids
+# consumers derive from a CI run number. Tenancy must stay in sync with the
+# override_data blocks in the tests.
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: aicr-uat-day-gcp-h100-31021150393
+  provider: gke
+  tenancy: tftest-project
+  location: us-central1
+  state: tenancy
+  destroy: false
+  tags:
+    env: tftest
+
+cluster:
+  gke:
+    version: "1.35"
+
+compute:
+  gke:
+    nodePools:
+      system:
+        machineType: e2-standard-4
+        autoscaling:
+          enabled: true
+          minNodes: 1
+          maxNodes: 3
+
+      workers:
+        - name: cpu-worker
+          machineType: n2-standard-8
+          autoscaling:
+            enabled: true
+            minNodes: 1
+            maxNodes: 1
