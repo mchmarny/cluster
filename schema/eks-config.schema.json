@@ -152,7 +152,7 @@
                       },
                       "accelerator": {
                         "type": "string",
-                        "description": "EFA accelerator type (auto-derived from instanceType: p5->h100, p6->gb200). Set only to override."
+                        "description": "EFA accelerator type (auto-derived from instanceType: p5->h100, p6e-gb200->gb200, p6e-gb300/p6e-gb300r->gb300). Set only to override."
                       },
                       "imageId": {
                         "type": "string",
