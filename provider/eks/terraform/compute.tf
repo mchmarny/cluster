@@ -15,12 +15,17 @@ locals {
     )
   }
 
-  # Default worker taints plus optional per-group taints from config
+  # Default worker taints plus optional per-group taints from config.
+  # The default dedicated=worker-workload taint is applied only to GPU pools
+  # (gpu_family != "na"): an accelerator is set or the instance type resolves to
+  # a known GPU family. Non-GPU (CPU) worker pools come out untainted, matching
+  # the GKE and AKS providers, which taint only their GPU pools. An empty result
+  # renders as `--register-with-taints=` in user-data, i.e. no taints.
   default_worker_taints = "dedicated=worker-workload:NoSchedule,dedicated=worker-workload:NoExecute"
   node_group_taints = {
     for ng in local.worker_node_groups :
     ng.name => join(",", concat(
-      [local.default_worker_taints],
+      local.gpu_family[ng.name] != "na" ? [local.default_worker_taints] : [],
       [for t in try(ng.taints, []) : "${t.key}=${t.value}:${t.effect}"]
     ))
   }
@@ -42,20 +47,53 @@ locals {
     ng.name => coalesce(
       try(ng.accelerator, null),
       try({
-        "p5"        = "h100"
-        "p6e-gb200" = "gb200"
+        "p5"         = "h100"
+        "p6e-gb200"  = "gb200"
+        "p6e-gb300"  = "gb300"
+        "p6e-gb300r" = "gb300"
       }[split(".", ng.instanceType)[0]], null),
       "na"
     )
   }
 
   # Per-node-group EFA network interfaces
+  # GB300: p6e-gb300r.36xlarge (GB300 NVL72 slice) exposes only network card 0;
+  #   the EC2 API reports cards 1-8 with MaximumNetworkInterfaces=0, so a real
+  #   ASG launch rejects any interface on those cards ("ENI limits exceeded on
+  #   Network Card 1"). run-instances --dry-run does NOT enforce the per-card
+  #   limit and gives false positives, so it must not be trusted here. The only
+  #   valid layout is a single EFA on card 0: primary interface at device_index
+  #   0 plus one efa-only at device_index 1.
   # GB200: AWS-recommended card indices (0, 1, 5, 9, 13)
   # GPU (h100 etc.): all network cards, count from instance type data source
   # Non-GPU: no EFA interfaces
   efa_network_interfaces = {
     for ng in local.worker_node_groups :
     ng.name => (
+      local.gpu_family[ng.name] == "gb300" ? [
+        {
+          associate_public_ip_address = false
+          delete_on_termination       = true
+          device_index                = 0
+          interface_type              = "interface"
+          network_card_index          = 0
+          security_groups = [
+            aws_security_group.main["${local.prefix}-efa"].id,
+            aws_security_group.main["${local.prefix}-worker"].id
+          ]
+        },
+        {
+          associate_public_ip_address = false
+          delete_on_termination       = true
+          device_index                = 1
+          interface_type              = "efa-only"
+          network_card_index          = 0
+          security_groups = [
+            aws_security_group.main["${local.prefix}-efa"].id,
+            aws_security_group.main["${local.prefix}-worker"].id
+          ]
+        }
+      ] :
       local.gpu_family[ng.name] == "gb200" ? [
         for i in [0, 1, 5, 9, 13] : {
           associate_public_ip_address = false

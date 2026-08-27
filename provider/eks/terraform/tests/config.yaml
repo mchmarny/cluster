@@ -48,6 +48,12 @@ compute:
           architecture: arm64
           capacity:
             desired: 2
+        # GB300: gpu family must be derived from the instance type prefix
+        - name: gb300
+          instanceType: p6e-gb300r.36xlarge
+          architecture: arm64
+          capacity:
+            desired: 2
         # Explicit accelerator must win over prefix derivation
         - name: accel
           instanceType: x9z-unknown.48xlarge
