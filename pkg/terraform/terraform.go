@@ -22,9 +22,14 @@ type RunConfig struct {
 	Provider     string // config.ProviderEKS, ProviderGKE, or ProviderAKS
 	State        string // config.StateTenancy or config.StateLocal
 	Bucket       string
-	Region       string
-	StateKey     string
-	Destroy      bool
+	// Region is where the cluster is provisioned: the provider's region.
+	Region string
+	// StateRegion is where the state backend lives. Empty means Region, which
+	// is the single-region case. It is separate because Region is also the
+	// provider region, and only one of the two may move.
+	StateRegion string
+	StateKey    string
+	Destroy     bool
 
 	// AWS credentials passed explicitly (not via os.Setenv).
 	AccessKeyID     string
@@ -217,6 +222,15 @@ func buildEnv(cfg RunConfig) []string {
 	return env
 }
 
+// stateRegion returns the region of the state backend, defaulting to the
+// provider region.
+func (c RunConfig) stateRegion() string {
+	if c.StateRegion != "" {
+		return c.StateRegion
+	}
+	return c.Region
+}
+
 func buildInitArgs(cfg RunConfig) []string {
 	args := []string{cmdInit}
 
@@ -228,7 +242,7 @@ func buildInitArgs(cfg RunConfig) []string {
 	case config.ProviderEKS:
 		args = append(args,
 			fmt.Sprintf("-backend-config=bucket=%s", cfg.Bucket),
-			fmt.Sprintf("-backend-config=region=%s", cfg.Region),
+			fmt.Sprintf("-backend-config=region=%s", cfg.stateRegion()),
 			"-backend-config=encrypt=true",
 			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
 		)

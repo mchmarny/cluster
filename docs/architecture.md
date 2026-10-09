@@ -101,6 +101,20 @@ The `tenancy` mode provisions a per-tenancy state container with versioning and
 restricted access: `cluster-state-{account-or-project-id}` for EKS/GKE and a
 `clst{subscription-hex}` Storage Account (`tfstate` container) for AKS.
 
+Because that container is named per tenancy, it exists in exactly one region —
+whichever one the tenancy deployed to first. A tenancy that later deploys into a
+second region must point back at it with `deployment.stateLocation`, which
+defaults to `deployment.location` and so is only needed in that case:
+
+```yaml
+deployment:
+  location: us-east-2      # where the cluster is created
+  stateLocation: us-east-1 # where the state bucket already lives
+```
+
+The state key still tracks the deployment region, so the two regions' states stay
+separate within the one container.
+
 ## Container Images
 
 Each platform has a self-contained Docker image (`image/<csp>.dockerfile`) that includes:

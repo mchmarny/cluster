@@ -15,13 +15,18 @@ type Config struct {
 }
 
 type Deployment struct {
-	ID       string            `yaml:"id"`
-	Provider string            `yaml:"provider"`
-	Tenancy  string            `yaml:"tenancy"`
-	Location string            `yaml:"location"`
-	State    string            `yaml:"state"`
-	Destroy  bool              `yaml:"destroy"`
-	Tags     map[string]string `yaml:"tags,omitempty"`
+	ID       string `yaml:"id"`
+	Provider string `yaml:"provider"`
+	Tenancy  string `yaml:"tenancy"`
+	Location string `yaml:"location"`
+	State    string `yaml:"state"`
+	// StateLocation is the region holding the state backend; empty means
+	// Location. The two differ only when one tenancy deploys into more than
+	// one region, since the state bucket is named per-tenancy and so lives in
+	// exactly one of them.
+	StateLocation string            `yaml:"stateLocation,omitempty"`
+	Destroy       bool              `yaml:"destroy"`
+	Tags          map[string]string `yaml:"tags,omitempty"`
 }
 
 type ProviderConfig struct {

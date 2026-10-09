@@ -266,6 +266,7 @@ func buildRunConfig(cmd *cli.Command) (*runConfigResult, func(), error) {
 			Provider:     cfg.Deployment.Provider,
 			State:        cfg.Deployment.State,
 			Region:       cfg.Deployment.Location,
+			StateRegion:  cfg.Deployment.StateLocation,
 			Destroy:      cfg.Deployment.Destroy,
 		},
 		stateDir: sd,
