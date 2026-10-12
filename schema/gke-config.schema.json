@@ -474,6 +474,11 @@
           "type": "array",
           "items": { "type": "string" }
         },
+        "hostMaintenanceInterval": {
+          "type": "string",
+          "enum": ["PERIODIC", "AS_NEEDED"],
+          "description": "Host maintenance interval for the pool's nodes. Must match the capacity reservation's maintenance interval (e.g. PERIODIC for A3 Mega/High reservations). Applied at pool creation only"
+        },
         "shieldedInstanceConfig": {
           "type": "object",
           "additionalProperties": false,

@@ -1,5 +1,6 @@
 # Test fixture for terraform test (tests/*.tftest.hcl) — not a deployable config.
-# a3-megagpu-8g pool with 8 GPU NICs and no extra gVNIC network.
+# a3-megagpu-8g pool with 8 GPU NICs and no extra gVNIC network, bound to a
+# PERIODIC-maintenance reservation.
 apiVersion: github.com/mchmarny/cluster/v1alpha1
 kind: Cluster
 
@@ -41,5 +42,6 @@ compute:
             count: 8
           nodeConfig:
             gvnic: true
+            hostMaintenanceInterval: PERIODIC
             capacityReservations:
               - projects/tftest-project/reservations/tftest-reservation

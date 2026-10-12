@@ -40,6 +40,21 @@ run "a3_mega_without_gvnic_net_plans" {
   }
 }
 
+run "host_maintenance_interval_applied_when_set" {
+  command = plan
+
+  # PERIODIC reservations reject nodes created with an unspecified interval
+  assert {
+    condition     = google_container_node_pool.pools["gpu-worker"].node_config[0].host_maintenance_policy[0].maintenance_interval == "PERIODIC"
+    error_message = "nodeConfig.hostMaintenanceInterval must set node_config.host_maintenance_policy.maintenance_interval"
+  }
+
+  assert {
+    condition     = length(google_container_node_pool.pools["cpu-worker"].node_config[0].host_maintenance_policy) == 0
+    error_message = "host_maintenance_policy must be omitted when nodeConfig.hostMaintenanceInterval is unset"
+  }
+}
+
 run "a3_mega_with_gvnic_net_rejected" {
   command = plan
 

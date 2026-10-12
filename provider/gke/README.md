@@ -229,6 +229,7 @@ compute:
             gvnic: true
             capacityReservations:
               - projects/my-project/reservations/my-reservation
+            # hostMaintenanceInterval: PERIODIC  # Only if the reservation is PERIODIC
             taints:
               - key: dedicated
                 value: gpu-workload
@@ -240,7 +241,7 @@ compute:
 Notes:
 - GPU machine types (e.g., `a3-megagpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
 - A3 High uses `nvidia-h100-mega-80gb` (not `nvidia-h100-80gb`)
-- `hostMaintenancePolicy` is managed automatically by GKE for GPU nodes with capacity reservations (do not set in config — causes perpetual node pool replacements)
+- Reservations with a `PERIODIC` maintenance interval (common for A3 Mega/High) require `nodeConfig.hostMaintenanceInterval: PERIODIC` on the consuming pool; without it nodes come up `MAINTENANCE_INTERVAL_UNSPECIFIED` and fail to consume the reservation. Set it only to match the reservation: `gcloud compute reservations describe <name> --zone <zone> --format='value(specificReservation.instanceProperties.maintenanceInterval)'`. It is applied at pool creation only; to change it on an existing pool, recreate the pool
 - Pin GPU pools to specific `zones` where the accelerator type is available
 - `gpuDriverInstallation.gpuDriverVersion` controls driver version (`DEFAULT`, `LATEST`, or specific version)
 - Capacity reservations go under `nodeConfig.capacityReservations`
@@ -466,6 +467,7 @@ compute:
             labels: {}
             taints: []
             capacityReservations: []  # Specific reservation paths for GPU pools
+            hostMaintenanceInterval: null  # PERIODIC | AS_NEEDED, must match the reservation (set at pool creation)
 ```
 
 ### Defaults
