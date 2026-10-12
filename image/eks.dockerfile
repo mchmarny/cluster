@@ -14,7 +14,8 @@
 # =============================================================================
 # Stage 1: Build Go binary
 # =============================================================================
-FROM golang:1.26-bookworm AS gobuild
+ARG GO_VERSION=1.26.9
+FROM golang:${GO_VERSION}-bookworm AS gobuild
 
 ARG VERSION=dev
 ARG COMMIT=unknown

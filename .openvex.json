@@ -511,9 +511,10 @@
       "impact_statement": "Same reachability as CVE-2026-39820."
     },
     {
+      "timestamp": "2026-10-12T00:00:00Z",
       "vulnerability": {
         "name": "GO-2026-6612",
-        "description": "Go HTTP/2 server refunds connection-level flow control twice for the same data (stdlib net/http bundled h2 and golang.org/x/net/http2; Critical). Statically linked into upstream prebuilt binaries: terraform, kubectl, gke-gcloud-auth-plugin (gke) and kubelogin (aks). As of 2026-10-12 no upstream release of these is built with Go >= 1.26.9 and x/net >= 0.60.0 (terraform 1.16.5 and kubectl 1.36.5: go1.26.8; kubelogin 0.2.21: go1.26.6)."
+        "description": "Go HTTP/2 server refunds connection-level flow control twice for the same data (stdlib net/http bundled h2 and golang.org/x/net/http2; Critical). Statically linked into upstream prebuilt binaries: terraform, kubectl, gke-gcloud-auth-plugin (gke) and kubelogin (aks). As of 2026-10-12 the latest terraform (1.16.5) and kubectl (1.36.5) releases are built with go1.26.8 and kubelogin 0.2.21 with go1.26.6, all with x/net < 0.60.0."
       },
       "products": [
         { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
@@ -522,12 +523,13 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The flaw is in the HTTP/2 server's flow-control accounting when a client resets streams. In this image these binaries act only as HTTP clients: terraform calls cloud APIs over HTTPS and talks to provider processes it spawns itself over go-plugin gRPC on a local socket with AutoMTLS (grpc-go uses its own HTTP/2 transport, not the net/http or x/net/http2 Server); kubectl, gke-gcloud-auth-plugin and kubelogin call the Kubernetes API and identity endpoints. No script in tools/ or provider/*/tools/ runs `kubectl proxy` or `kubectl port-forward`, and a kubelogin interactive-login redirect listener, if ever used, is plain HTTP on loopback, which Go's net/http serves as HTTP/1.1 (HTTP/2 is only negotiated over TLS via ALPN). No HTTP/2 server reachable by a remote client exists in this image."
+      "impact_statement": "The flaw is in the HTTP/2 server's flow-control accounting when a client resets streams. In the image, the cluster binary execs only terraform (pkg/run, pkg/terraform); the only other tool invocations are terraform local-exec provisioners in provider/eks/terraform/network.tf (aws eks update-kubeconfig, kubectl apply) and provider/gke/terraform/network.tf (gcloud auth activate-service-account / application-default print-access-token, gcloud container clusters get-credentials, kubectl apply). tools/ and provider/*/tools/ are excluded from the image by .dockerignore. All of these are HTTP clients: terraform calls cloud APIs over HTTPS and talks to provider processes it spawns itself over go-plugin gRPC on a local socket with AutoMTLS (grpc-go uses its own HTTP/2 transport, not the net/http or x/net/http2 Server); kubectl and gke-gcloud-auth-plugin call the Kubernetes API and Google identity endpoints. Nothing runs `kubectl proxy` or `kubectl port-forward`. kubelogin (aks) is installed only as a kubectl exec credential plugin and is not invoked by repo code. No HTTP/2 server reachable by a remote client exists in this image."
     },
     {
+      "timestamp": "2026-10-12T00:00:00Z",
       "vulnerability": {
         "name": "GO-2026-6604",
-        "description": "Go stdlib os.Root Mkdir/MkdirAll can create a directory outside the root when the target is a Windows junction (Critical). Vendored into upstream prebuilt Go binaries (terraform)."
+        "description": "Go stdlib os.Root Mkdir/MkdirAll can create a directory outside the root when the target is a Windows junction (Critical). Vendored into upstream prebuilt Go binaries built with Go < 1.26.9: terraform, kubectl, gke-gcloud-auth-plugin (gke) and kubelogin (aks)."
       },
       "products": [
         { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
@@ -539,6 +541,7 @@
       "impact_statement": "The issue only manifests on Windows: junctions are an NTFS construct handled by the Windows implementation of os.Root. Every binary in this image is a linux/amd64 or linux/arm64 build, so the Windows junction code path is never executed."
     },
     {
+      "timestamp": "2026-10-12T00:00:00Z",
       "vulnerability": {
         "name": "CVE-2026-19445",
         "description": "CPython ssl: a remote TLS client can crash a TLS server or trigger a use-after-free when its sni_callback assigns a different SSLContext to SSLSocket.context (Critical). Present in the Python bundled with AWS CLI v2 (eks) and the gcloud SDK (gke)."
@@ -549,7 +552,7 @@
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "Only reachable in a TLS server that installs an sni_callback. AWS CLI v2 and gcloud use their bundled interpreter as TLS clients to AWS and Google API endpoints; tools/common invokes them only for authentication, credential and API calls, and neither runs a TLS server in this image. Their local OAuth redirect listeners, when used, are plain HTTP on loopback with no SSLContext."
+      "impact_statement": "Only reachable in a TLS server that installs an sni_callback. In the image, the cluster binary execs only terraform (pkg/run, pkg/terraform); the only other tool invocations are terraform local-exec provisioners in provider/eks/terraform/network.tf (aws eks update-kubeconfig, kubectl apply) and provider/gke/terraform/network.tf (gcloud auth activate-service-account / application-default print-access-token, gcloud container clusters get-credentials, kubectl apply). tools/ and provider/*/tools/ are excluded from the image by .dockerignore. AWS CLI v2 and gcloud use their bundled interpreter only as TLS clients to AWS and Google API endpoints in those calls; neither runs a TLS server in this image."
     }
   ]
 }
