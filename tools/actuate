@@ -201,10 +201,15 @@ init_terraform() {
   local csp="$2"
   local config_file="$3"
 
-  local dep_id dep_region tenancy bucket_name
+  local dep_id dep_region tenancy bucket_name state_region
   dep_id="$(yq -er '.deployment.id' "$config_file")"
   dep_region="$(yq -er '.deployment.location' "$config_file")"
   tenancy="$(yq -er '.deployment.tenancy' "$config_file")"
+  # Mirrors terraform.RunConfig.stateRegion(). Optional, so read it without
+  # -e and default to the deployment region. EKS only: the GCS and azurerm
+  # backends below take no region.
+  state_region="$(yq -r '.deployment.stateLocation // ""' "$config_file")"
+  [[ -n "$state_region" ]] || state_region="$dep_region"
 
   msg "Initializing Terraform for $csp..."
 
@@ -213,7 +218,7 @@ init_terraform() {
       bucket_name="cluster-state-${tenancy}"
       terraform -chdir="$tf_dir" init \
         -backend-config="bucket=$bucket_name" \
-        -backend-config="region=$dep_region" \
+        -backend-config="region=$state_region" \
         -backend-config="encrypt=true" \
         -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
       ;;

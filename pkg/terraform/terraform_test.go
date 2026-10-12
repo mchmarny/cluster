@@ -3,6 +3,7 @@ package terraform
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -66,6 +67,49 @@ func TestBuildInitArgsS3(t *testing.T) {
 		if arg != expected[i] {
 			t.Errorf("args[%d] = %q, want %q", i, arg, expected[i])
 		}
+	}
+}
+
+// A tenancy deploying into a second region keeps its state in the region where
+// the per-tenancy bucket was created, so the backend region has to diverge from
+// the provider region while the state key still tracks the deployment.
+func TestBuildInitArgsS3StateRegion(t *testing.T) {
+	args := buildInitArgs(RunConfig{
+		Provider:    config.ProviderEKS,
+		State:       config.StateTenancy,
+		Bucket:      "my-bucket",
+		Region:      "us-east-2",
+		StateRegion: "us-east-1",
+		StateKey:    "deployments/us-east-2/demo/terraform.tfstate",
+	})
+	expected := []string{
+		"init",
+		"-backend-config=bucket=my-bucket",
+		"-backend-config=region=us-east-1",
+		"-backend-config=encrypt=true",
+		"-backend-config=key=deployments/us-east-2/demo/terraform.tfstate",
+	}
+
+	if len(args) != len(expected) {
+		t.Fatalf("len = %d, want %d\nargs: %v", len(args), len(expected), args)
+	}
+	for i, arg := range args {
+		if arg != expected[i] {
+			t.Errorf("args[%d] = %q, want %q", i, arg, expected[i])
+		}
+	}
+}
+
+// StateRegion must not reach the provider, which stays in the deployment region.
+func TestBuildEnvStateRegionNotProviderRegion(t *testing.T) {
+	env := buildEnv(RunConfig{
+		Provider:    config.ProviderEKS,
+		Region:      "us-east-2",
+		StateRegion: "us-east-1",
+	})
+	want := "AWS_DEFAULT_REGION=us-east-2"
+	if !slices.Contains(env, want) {
+		t.Errorf("env = %v, want to contain %q", env, want)
 	}
 }
 

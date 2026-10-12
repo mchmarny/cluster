@@ -32,6 +32,10 @@
           "default": "tenancy",
           "description": "Terraform state backend: 'tenancy' for cloud storage, 'local' for local tfstate"
         },
+        "stateLocation": {
+          "type": "string",
+          "description": "EKS only: region of the S3 state backend, when it differs from location (one tenancy deploying into several regions). Defaults to location. Ignored by GKE and AKS, whose backends take no region"
+        },
         "destroy": {
           "type": "boolean",
           "default": false,
