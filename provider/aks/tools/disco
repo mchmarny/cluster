@@ -4,8 +4,8 @@
 # availability for a region.
 # Usage: ./disco [-r eastus]
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(CDPATH= cd -- "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
 has_tools az jq curl
 

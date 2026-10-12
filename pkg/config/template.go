@@ -168,6 +168,7 @@ compute:
         #     gvnic: true
         #     # capacityReservations:
         #     #   - projects/my-project/reservations/my-reservation
+        #     # hostMaintenanceInterval: PERIODIC  # only if the reservation is PERIODIC
         #     taints:
         #       - key: dedicated
         #         value: gpu-workload

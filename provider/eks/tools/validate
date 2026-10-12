@@ -5,8 +5,8 @@
 
 set -euo pipefail
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$(cd "$DIR" && git rev-parse --show-toplevel)/tools/common"
+DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(CDPATH= cd -- "$DIR" && git rev-parse --show-toplevel)/tools/common"
 
 # ---------------------------------------------------------------------------
 # Parse arguments

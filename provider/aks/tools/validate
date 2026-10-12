@@ -4,8 +4,8 @@ set -euo pipefail
 # Post-deployment validation of AKS cluster
 # Usage: ./validate -c config/aks-demo.yaml
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-. "$(cd "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(CDPATH= cd -- "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
 CONFIG_FILE=""
 

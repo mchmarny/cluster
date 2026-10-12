@@ -4,7 +4,7 @@ set -euo pipefail
 # Delete GKE cluster resources that Terraform may leave behind.
 # Usage: tools/delete-gke -p <project> -x <prefix> -r <region> [-g <gpu-nic-count>]
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${DIR}/common"
 
 # ---------------------------------------------------------------------------

@@ -7,6 +7,9 @@ locals {
 
 // All node pools
 resource "google_container_node_pool" "pools" {
+  # host_maintenance_policy is only implemented by google-beta; the GA
+  # provider silently drops it
+  provider = google-beta
   for_each = { for np in local.all_node_pools : np.name => np }
 
   name     = "${local.name_prefix}-${each.key}"
@@ -132,10 +135,14 @@ resource "google_container_node_pool" "pools" {
       enable_integrity_monitoring = try(each.value.nodeConfig.shieldedInstanceConfig.enableIntegrityMonitoring, local.integrity_monitoring_enabled)
     }
 
-    # Host maintenance policy — GKE manages this for GPU nodes with reservations.
-    # Setting it in Terraform causes perpetual ForceNew replacements because
-    # the API does not return it, so Terraform always sees it as "new".
-    # Configure via gcloud or console if needed.
+    # Host maintenance interval — must match the capacity reservation's
+    # (e.g. PERIODIC), otherwise nodes fail to consume it
+    dynamic "host_maintenance_policy" {
+      for_each = try(each.value.nodeConfig.hostMaintenanceInterval, null) != null ? [1] : []
+      content {
+        maintenance_interval = each.value.nodeConfig.hostMaintenanceInterval
+      }
+    }
 
     # Workload metadata configuration
     dynamic "workload_metadata_config" {
@@ -223,7 +230,20 @@ resource "google_container_node_pool" "pools" {
       node_config[0].labels,
       node_config[0].taint,
       node_config[0].ephemeral_storage_local_ssd_config,
+      # google-beta-only, ForceNew: applied at pool creation only, so GKE-reported
+      # values on existing pools never trigger a GPU pool replacement
+      node_config[0].ephemeral_storage_config,
+      node_config[0].host_maintenance_policy,
     ]
+
+    precondition {
+      condition = !(
+        local.gvnic_net_enabled &&
+        try(each.value.guestAccelerator, null) != null &&
+        contains(local.gvnic_net_unsupported_machine_types, each.value.machineType)
+      )
+      error_message = "Node pool ${each.key}: remove network.gke.gpuNets.gvnicCidr. ${each.value.machineType} has no free PCI slot for the extra gVNIC network; it displaces a GPU NIC and NCCL fails."
+    }
   }
 
   depends_on = [
