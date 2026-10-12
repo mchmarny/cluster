@@ -55,6 +55,25 @@ run "host_maintenance_interval_applied_when_set" {
   }
 }
 
+run "gvnic_net_allowed_on_other_gpu_machine_types" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-gpu-gvnic-high.yaml"
+  }
+
+  assert {
+    condition     = length(google_compute_network.gvnic) == 1
+    error_message = "gVNIC network must be created when gpuNets.gvnicCidr is set"
+  }
+
+  # 4 GPU NIC networks + the gVNIC network
+  assert {
+    condition     = length(google_container_node_pool.pools["gpu-worker"].network_config[0].additional_node_network_configs) == 5
+    error_message = "non-a3-megagpu-8g GPU pool must attach the gVNIC network alongside its GPU NIC networks"
+  }
+}
+
 run "a3_mega_with_gvnic_net_rejected" {
   command = plan
 

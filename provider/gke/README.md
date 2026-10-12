@@ -241,7 +241,8 @@ compute:
 Notes:
 - GPU machine types (e.g., `a3-megagpu-8g`) require `diskType: pd-ssd` — `pd-standard` is not compatible
 - A3 High uses `nvidia-h100-mega-80gb` (not `nvidia-h100-80gb`)
-- Reservations with a `PERIODIC` maintenance interval (common for A3 Mega/High) require `nodeConfig.hostMaintenanceInterval: PERIODIC` on the consuming pool; without it nodes come up `MAINTENANCE_INTERVAL_UNSPECIFIED` and fail to consume the reservation. Set it only to match the reservation: `gcloud compute reservations describe <name> --zone <zone> --format='value(specificReservation.instanceProperties.maintenanceInterval)'`. It is applied at pool creation only; to change it on an existing pool, recreate the pool
+- Reservations with a `PERIODIC` maintenance interval (common for A3 Mega/High) require `nodeConfig.hostMaintenanceInterval: PERIODIC` on the consuming pool; without it nodes come up `MAINTENANCE_INTERVAL_UNSPECIFIED` and fail to consume the reservation. Set it only to match the reservation, using the project from its `projects/<project>/reservations/<name>` path: `gcloud compute reservations describe <name> --project <project> --zone <zone> --format='value(specificReservation.instanceProperties.maintenanceInterval)'`
+- `hostMaintenanceInterval` is applied at pool creation only; adding or changing it on an existing pool produces no plan change. To apply it, remove the pool from `compute.gke.nodePools.workers` and `cluster apply`, then re-add it with the field and `cluster apply` again
 - Pin GPU pools to specific `zones` where the accelerator type is available
 - `gpuDriverInstallation.gpuDriverVersion` controls driver version (`DEFAULT`, `LATEST`, or specific version)
 - Capacity reservations go under `nodeConfig.capacityReservations`
@@ -292,6 +293,8 @@ The `network.gke.gpuNets` config enables dedicated GPU NIC networks for GPUDirec
 3. **K8s CRDs** -- `Network` and `GKENetworkParamSet` resources for each GPU NIC and gVNIC network, auto-applied to the cluster via a `local-exec` provisioner after deploy.
 
 The CRD manifest is generated from `templates/gpu-net-config.ytpl` and written to `<config-basename>-gpu-net-config.yaml` alongside the config file.
+
+**Removing `gvnicCidr` from a deployed cluster** (required for `a3-megagpu-8g`, whose plan fails with it set): the next apply recreates the GPU node pools and deletes the gVNIC network. The `<deployment.id>-gvnic` `Network` and `GKENetworkParamSet` objects are not pruned from the cluster; delete them with `kubectl delete network <deployment.id>-gvnic` and `kubectl delete gkenetworkparamset <deployment.id>-gvnic`.
 
 **When to use:**
 

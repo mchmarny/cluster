@@ -150,7 +150,7 @@ Tags matching `v*-eks`, `v*-gke`, or `v*-aks` pushed to `main` trigger CI builds
 
 Optional support for multi-NIC GPU networking (GPUDirect-TCPXO) on instances like `a3-megagpu-8g`, driven by the `network.gke.gpuNets` config block.
 
-- **Separate VPCs per GPU NIC** -- creates dedicated VPC networks for each GPU NIC plus a gVNIC network, with their own subnets and firewall rules.
+- **Separate VPCs per GPU NIC** -- creates dedicated VPC networks for each GPU NIC, plus an optional gVNIC network when `gpuNets.gvnicCidr` is set (not supported on `a3-megagpu-8g`), with their own subnets and firewall rules.
 - **Cluster flags** -- auto-enables `enable_multi_networking` on the cluster and activates Kubernetes beta APIs for Dynamic Resource Allocation (DRA).
 - **Post-deploy CRDs** -- generates and applies `Network` and `GKENetworkParamSet` custom resources to wire GPU NICs into the cluster networking layer.
 - **Conditional** -- only activates when `gpuNets.count > 0`. CPU-only clusters are unaffected.
