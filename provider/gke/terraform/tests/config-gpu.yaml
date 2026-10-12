@@ -1,0 +1,45 @@
+# Test fixture for terraform test (tests/*.tftest.hcl) — not a deployable config.
+# a3-megagpu-8g pool with 8 GPU NICs and no extra gVNIC network.
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: gke
+  tenancy: tftest-project
+  location: us-central1
+  state: tenancy
+  destroy: false
+
+cluster:
+  gke:
+    version: "1.35"
+
+network:
+  gke:
+    gpuNets:
+      count: 8
+      cidrBase: "192.168.0.0/16"
+
+compute:
+  gke:
+    nodePools:
+      system:
+        machineType: e2-standard-4
+
+      workers:
+        - name: cpu-worker
+          machineType: n2-standard-8
+
+        - name: gpu-worker
+          machineType: a3-megagpu-8g
+          diskType: pd-ssd
+          zones:
+            - us-central1-a
+          guestAccelerator:
+            type: nvidia-h100-mega-80gb
+            count: 8
+          nodeConfig:
+            gvnic: true
+            capacityReservations:
+              - projects/tftest-project/reservations/tftest-reservation

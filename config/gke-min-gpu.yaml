@@ -31,7 +31,6 @@ network:
       count: 8
       mtu: 8244
       cidrBase: "192.168.0.0/16"
-      gvnicCidr: "192.168.128.0/20"
     firewallRules:
       - name: nccl-internal
         direction: INGRESS

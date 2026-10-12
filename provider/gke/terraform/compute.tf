@@ -224,6 +224,15 @@ resource "google_container_node_pool" "pools" {
       node_config[0].taint,
       node_config[0].ephemeral_storage_local_ssd_config,
     ]
+
+    precondition {
+      condition = !(
+        local.gvnic_net_enabled &&
+        try(each.value.guestAccelerator, null) != null &&
+        contains(local.gvnic_net_unsupported_machine_types, each.value.machineType)
+      )
+      error_message = "Node pool ${each.key}: remove network.gke.gpuNets.gvnicCidr. ${each.value.machineType} has no free PCI slot for the extra gVNIC network; it displaces a GPU NIC and NCCL fails."
+    }
   }
 
   depends_on = [

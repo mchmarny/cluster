@@ -140,6 +140,10 @@ locals {
   gvnic_net_enabled = try(local.gpu_nets_config.gvnicCidr, "") != ""
   gvnic_net_cidr    = try(local.gpu_nets_config.gvnicCidr, "10.0.16.0/20")
 
+  // GPU NICs use every PCI slot on these machine types; an extra gVNIC
+  // network displaces a GPU NIC, RxDM sees too few NICs, and NCCL fails
+  gvnic_net_unsupported_machine_types = ["a3-megagpu-8g"]
+
   // Generate GPU network definitions: {0: {name: "gpu-nic-0", cidr: "10.0.32.0/20"}, ...}
   gpu_nets = {
     for i in range(local.gpu_nets_count) : i => {

@@ -192,7 +192,6 @@ network:
       count: 8
       mtu: 8244
       cidrBase: "192.168.0.0/16"
-      gvnicCidr: "192.168.128.0/20"
     firewallRules:
       - name: nccl-internal
         direction: INGRESS
@@ -282,12 +281,12 @@ The `network.gke.gpuNets` config enables dedicated GPU NIC networks for GPUDirec
 | `count` | Number of GPU NIC networks to create. Set to 8 for `a3-megagpu-8g`, 4 for `a3-highgpu-8g`. |
 | `mtu` | MTU for all GPU and gVNIC networks (default: `8244`). |
 | `cidrBase` | Base CIDR subdivided into `count` subnets (default: `10.0.32.0/16`). |
-| `gvnicCidr` | CIDR for the dedicated gVNIC subnet (default: `10.0.16.0/20`). |
+| `gvnicCidr` | CIDR for an optional dedicated gVNIC network attached to GPU node pools. Unset by default (no gVNIC network). Must be omitted for `a3-megagpu-8g`: its 8 GPU NICs use every PCI slot, so the extra gVNIC displaces a GPU NIC and NCCL fails (plan is rejected). |
 | `networkProfile` | GCP network profile for GPU VPCs (optional, null by default). |
 
 **What gets created when enabled:**
 
-1. **gVNIC network** -- dedicated VPC + subnet + internal firewall for high-bandwidth non-GPU traffic. Auto-created when `gpuNets.count > 0`.
+1. **gVNIC network** -- dedicated VPC + subnet + internal firewall for high-bandwidth non-GPU traffic. Only created when `gvnicCidr` is set.
 2. **GPU NIC networks** -- N separate VPCs (one per NIC), each with a subnet and internal firewall allowing tcp/udp/icmp across all GPU subnets.
 3. **K8s CRDs** -- `Network` and `GKENetworkParamSet` resources for each GPU NIC and gVNIC network, auto-applied to the cluster via a `local-exec` provisioner after deploy.
 
@@ -413,8 +412,7 @@ network:
       count: 0                   # Number of GPU NIC networks (8 for a3-megagpu-8g, 4 for a3-highgpu-8g)
       mtu: 8244                  # Jumbo frames for GPUDirect-TCPXO
       cidrBase: "10.0.32.0/16"  # Base CIDR for GPU networks (subdivided by count)
-      gvnic: true                # Auto-enabled when gpuNets.count > 0
-      gvnicCidr: "10.0.16.0/20" # Dedicated gVNIC subnet CIDR
+      # gvnicCidr: "10.0.16.0/20"  # Optional dedicated gVNIC network (omit for a3-megagpu-8g)
       networkProfile: null       # GCP network profile (optional)
     firewallRules: []            # Custom firewall rules (optional array)
       # - name: nccl-internal
@@ -497,7 +495,7 @@ compute:
 | GPU multi-NIC | Disabled (`gpuNets.count: 0`) |
 | GPU NIC MTU | 8244 |
 | GPU NIC CIDR base | `10.0.32.0/16` |
-| gVNIC CIDR | `10.0.16.0/20` |
+| gVNIC network | Disabled (created only when `gvnicCidr` is set) |
 | Custom firewall rules | `[]` (none) |
 
 ---
@@ -507,7 +505,7 @@ compute:
 | Category | Resources |
 |----------|-----------|
 | Network | VPC, system/worker subnets with secondary ranges, Cloud Router, Cloud NAT, custom firewall rules |
-| GPU Network | (when `gpuNets` enabled) gVNIC VPC + subnet, N GPU VPCs + subnets, internal firewall rules, K8s Network + GKENetworkParamSet CRDs |
+| GPU Network | (when `gpuNets` enabled) N GPU VPCs + subnets, gVNIC VPC + subnet (only with `gvnicCidr`), internal firewall rules, K8s Network + GKENetworkParamSet CRDs |
 | Security | KMS key ring and crypto key for secrets encryption, firewall rules |
 | GKE | Regional cluster, OIDC/Workload Identity, authorized networks |
 | Compute | System node pool, worker node pools (CPU and/or GPU) |
