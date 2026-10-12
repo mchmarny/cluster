@@ -34,7 +34,7 @@
         },
         "stateLocation": {
           "type": "string",
-          "description": "Region of the state backend, when it differs from location (one tenancy deploying into several regions). Defaults to location"
+          "description": "EKS only: region of the S3 state backend, when it differs from location (one tenancy deploying into several regions). Defaults to location. Ignored by GKE and AKS, whose backends take no region"
         },
         "destroy": {
           "type": "boolean",

@@ -102,9 +102,11 @@ restricted access: `cluster-state-{account-or-project-id}` for EKS/GKE and a
 `clst{subscription-hex}` Storage Account (`tfstate` container) for AKS.
 
 Because that container is named per tenancy, it exists in exactly one region —
-whichever one the tenancy deployed to first. A tenancy that later deploys into a
-second region must point back at it with `deployment.stateLocation`, which
-defaults to `deployment.location` and so is only needed in that case:
+whichever one the tenancy deployed to first. On **EKS** this matters, because the
+S3 backend is configured with an explicit region and a mismatch fails `init` with
+a 301. A tenancy that later deploys into a second region points back at the
+container with `deployment.stateLocation`, which defaults to
+`deployment.location` and so is only needed in that case:
 
 ```yaml
 deployment:
@@ -114,6 +116,9 @@ deployment:
 
 The state key still tracks the deployment region, so the two regions' states stay
 separate within the one container.
+
+GKE and AKS ignore `stateLocation`: the GCS and azurerm backends take no region
+in their init arguments, so neither can develop the mismatch it exists to fix.
 
 ## Container Images
 

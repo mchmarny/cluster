@@ -23,7 +23,8 @@ type Deployment struct {
 	// StateLocation is the region holding the state backend; empty means
 	// Location. The two differ only when one tenancy deploys into more than
 	// one region, since the state bucket is named per-tenancy and so lives in
-	// exactly one of them.
+	// exactly one of them. EKS only: the GCS and azurerm backends take no
+	// region, so GKE and AKS ignore it.
 	StateLocation string            `yaml:"stateLocation,omitempty"`
 	Destroy       bool              `yaml:"destroy"`
 	Tags          map[string]string `yaml:"tags,omitempty"`
