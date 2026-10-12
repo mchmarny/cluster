@@ -2,13 +2,13 @@
 
 # Common functions for cluster deployment tools
 # Source this file in other scripts:
-#   SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
-#   . "$(cd -- "$SCRIPT_DIR" >/dev/null && git rev-parse --show-toplevel)/tools/common"
+#   SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+#   . "$(CDPATH= cd -- "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
 set -euo pipefail
 
 # Repo root (works from any subdirectory)
-REPO_ROOT="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && git rev-parse --show-toplevel)"
+REPO_ROOT="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && git rev-parse --show-toplevel)"
 
 # Colors
 COLOR_GREEN='\033[0;32m'

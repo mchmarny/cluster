@@ -6,7 +6,7 @@ set -euo pipefail
 # (provider default_tags). Falls back to VPC traversal for VPC-scoped objects.
 # Usage: tools/delete-eks -x <prefix> -r <region> [-c <cluster>] [-a <account>]
 
-DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${DIR}/common"
 
 # ---------------------------------------------------------------------------

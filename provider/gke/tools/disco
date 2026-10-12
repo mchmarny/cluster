@@ -3,8 +3,8 @@
 # GKE discovery tool: shows identity, supported K8s versions, and machine type availability
 # Usage: ./disco [-r us-central1]
 
-SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
-. "$(cd -- "$SCRIPT_DIR" >/dev/null && git rev-parse --show-toplevel)/tools/common"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(CDPATH= cd -- "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
 has_tools gcloud jq curl
 

@@ -5,8 +5,8 @@
 # state, and writes backend.hcl. Authentication uses the Azure CLI login
 # (az login device-code flow); no service principal is required.
 
-SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
-. "$(cd -- "$SCRIPT_DIR" >/dev/null && git rev-parse --show-toplevel)/tools/common"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(CDPATH= cd -- "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
 
 REQUIRED_TOOLS=(az yq jq)
 TF_DIR="${SCRIPT_DIR}/../terraform"

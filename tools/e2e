@@ -4,7 +4,7 @@
 # Tests Go build, Docker image, tool presence, CLI, and Terraform validation
 # Usage: ./tools/e2e [--skip-build]
 
-SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${SCRIPT_DIR}/common"
 
 IMAGE="cluster:e2e-test"

@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" >/dev/null && pwd)"
+DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${DIR}/common"
 
 has_tools aws jq yq terraform
@@ -58,7 +58,7 @@ if [[ -z "$ACCOUNT" ]]; then
   ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
 fi
 
-REPO_ROOT=$(cd -- "$DIR/.." >/dev/null && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$DIR/.." && pwd)
 TF_SOURCE="$REPO_ROOT/provider/eks/terraform"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
