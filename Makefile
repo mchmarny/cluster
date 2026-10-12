@@ -11,13 +11,17 @@ SHELL           := bash
 .DEFAULT_GOAL   := help
 
 # Versions from .settings.yaml (single source of truth)
+GO_VERSION ?= $(shell yq -r '.languages.go' .settings.yaml 2>/dev/null)
+ifeq ($(GO_VERSION),)
+GO_VERSION := 1.26.9
+endif
 TERRAFORM_VERSION ?= $(shell yq -r '.tools.terraform' .settings.yaml 2>/dev/null)
 ifeq ($(TERRAFORM_VERSION),)
 TERRAFORM_VERSION := 1.15.5
 endif
 KUBECTL_VERSION ?= $(shell yq -r '.tools.kubectl' .settings.yaml 2>/dev/null)
 ifeq ($(KUBECTL_VERSION),)
-KUBECTL_VERSION := 1.36.1
+KUBECTL_VERSION := 1.36.5
 endif
 AWSCLI_VERSION ?= $(shell yq -r '.tools.awscli' .settings.yaml 2>/dev/null)
 ifeq ($(AWSCLI_VERSION),)
@@ -33,7 +37,7 @@ AZURECLI_VERSION := 2.87.0
 endif
 KUBELOGIN_VERSION ?= $(shell yq -r '.tools.kubelogin' .settings.yaml 2>/dev/null)
 ifeq ($(KUBELOGIN_VERSION),)
-KUBELOGIN_VERSION := 0.2.19
+KUBELOGIN_VERSION := 0.2.21
 endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)
@@ -201,6 +205,7 @@ build-eks: ## Build EKS Docker image (mirrors providers, then builds)
 	@docker build -f image/eks.dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
+		--build-arg GO_VERSION=$(GO_VERSION) \
 		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
 		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
 		--build-arg AWSCLI_VERSION=$(AWSCLI_VERSION) \
@@ -212,6 +217,7 @@ build-gke: ## Build GKE Docker image (mirrors providers, then builds)
 	@docker build -f image/gke.dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
+		--build-arg GO_VERSION=$(GO_VERSION) \
 		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
 		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
 		--build-arg GCLOUD_VERSION=$(GCLOUD_VERSION) \
@@ -223,6 +229,7 @@ build-aks: ## Build AKS Docker image (mirrors providers, then builds)
 	@docker build -f image/aks.dockerfile \
 		--build-arg VERSION=$(VERSION) \
 		--build-arg COMMIT=$(COMMIT) \
+		--build-arg GO_VERSION=$(GO_VERSION) \
 		--build-arg TERRAFORM_VERSION=$(TERRAFORM_VERSION) \
 		--build-arg KUBECTL_VERSION=$(KUBECTL_VERSION) \
 		--build-arg AZURECLI_VERSION=$(AZURECLI_VERSION) \

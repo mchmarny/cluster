@@ -1,6 +1,6 @@
 module github.com/mchmarny/cluster
 
-go 1.26.4
+go 1.26.9
 
 require (
 	github.com/urfave/cli/v3 v3.14.0

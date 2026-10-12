@@ -140,6 +140,7 @@ jobs:
           build-args: |
             VERSION=${{ steps.parse.outputs.version }}
             COMMIT=${{ github.sha }}
+            GO_VERSION=${{ steps.versions.outputs.go }}
             TERRAFORM_VERSION=${{ steps.versions.outputs.terraform }}
             KUBECTL_VERSION=${{ steps.versions.outputs.kubectl }}
             AWSCLI_VERSION=${{ steps.versions.outputs.awscli }}
@@ -266,7 +267,8 @@ jobs:
           set -euo pipefail
           # --vex applies OpenVEX statements with per-CVE reachability
           # evidence for bundled-binary CVEs (Python in gcloud/AWS CLI,
-          # Go stdlib + x/net in terraform). See .openvex.json.
+          # Go stdlib + x/net in terraform, kubectl, gke-gcloud-auth-plugin
+          # and kubelogin). See .openvex.json.
           grype "${IMAGE_REF}" \
             --config .grype.yaml \
             --vex .openvex.json \
