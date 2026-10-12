@@ -17,7 +17,7 @@ TERRAFORM_VERSION := 1.15.5
 endif
 KUBECTL_VERSION ?= $(shell yq -r '.tools.kubectl' .settings.yaml 2>/dev/null)
 ifeq ($(KUBECTL_VERSION),)
-KUBECTL_VERSION := 1.36.1
+KUBECTL_VERSION := 1.36.5
 endif
 AWSCLI_VERSION ?= $(shell yq -r '.tools.awscli' .settings.yaml 2>/dev/null)
 ifeq ($(AWSCLI_VERSION),)
@@ -33,7 +33,7 @@ AZURECLI_VERSION := 2.87.0
 endif
 KUBELOGIN_VERSION ?= $(shell yq -r '.tools.kubelogin' .settings.yaml 2>/dev/null)
 ifeq ($(KUBELOGIN_VERSION),)
-KUBELOGIN_VERSION := 0.2.19
+KUBELOGIN_VERSION := 0.2.21
 endif
 SCAN_SEVERITY ?= $(shell yq -r '.linting.scan_severity' .settings.yaml 2>/dev/null)
 ifeq ($(SCAN_SEVERITY),)

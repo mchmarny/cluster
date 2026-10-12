@@ -38,10 +38,10 @@ FROM debian:bookworm-slim AS tools
 
 ARG TARGETARCH
 ARG TERRAFORM_VERSION=1.15.5
-ARG KUBECTL_VERSION=1.36.1
+ARG KUBECTL_VERSION=1.36.5
 ARG AZURECLI_VERSION=2.87.0
 # kubelogin provides AAD (Entra) auth for kubectl against AKS clusters.
-ARG KUBELOGIN_VERSION=0.2.19
+ARG KUBELOGIN_VERSION=0.2.21
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -136,7 +136,7 @@ ENV TF_CLI_CONFIG_FILE=/etc/terraformrc
 
 ARG VERSION=dev
 ARG TERRAFORM_VERSION=1.15.5
-ARG KUBECTL_VERSION=1.36.1
+ARG KUBECTL_VERSION=1.36.5
 ARG AZURECLI_VERSION=2.87.0
 LABEL org.opencontainers.image.title="AKS v2 Actuator" \
       org.opencontainers.image.description="Self-contained Terraform deployment for Azure AKS" \

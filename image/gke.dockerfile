@@ -38,7 +38,7 @@ FROM debian:bookworm-slim AS tools
 
 ARG TARGETARCH
 ARG TERRAFORM_VERSION=1.15.5
-ARG KUBECTL_VERSION=1.36.1
+ARG KUBECTL_VERSION=1.36.5
 ARG GCLOUD_VERSION=569.0.0
 
 RUN apt-get update \
@@ -132,7 +132,7 @@ ENV TF_CLI_CONFIG_FILE=/etc/terraformrc
 
 ARG VERSION=dev
 ARG TERRAFORM_VERSION=1.15.5
-ARG KUBECTL_VERSION=1.36.1
+ARG KUBECTL_VERSION=1.36.5
 ARG GCLOUD_VERSION=569.0.0
 LABEL org.opencontainers.image.title="GKE v2 Actuator" \
       org.opencontainers.image.description="Self-contained Terraform deployment for Google GKE" \
