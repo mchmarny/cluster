@@ -183,6 +183,12 @@ go-build: ## Build the cluster binary
 .PHONY: go-qualify
 go-qualify: go-vet go-fmt go-lint go-test go-build ## Run all Go quality checks
 
+.PHONY: upgrade
+upgrade: ## Upgrades all Go dependencies to latest versions
+	@set -e; \
+	$(GO) get -u ./...; \
+	$(GO) mod tidy
+
 .PHONY: e2e
 e2e: ## Run end-to-end smoke tests (builds Docker image + validates)
 	@./tools/e2e
