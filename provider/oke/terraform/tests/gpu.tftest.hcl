@@ -38,9 +38,9 @@ override_data {
   target = data.oci_identity_availability_domains.this
   values = {
     availability_domains = [
-      { name = "VSwX:US-CHICAGO-1-AD-1" },
-      { name = "VSwX:US-CHICAGO-1-AD-2" },
-      { name = "VSwX:US-CHICAGO-1-AD-3" },
+      { name = "Uocm:US-CHICAGO-1-AD-1" },
+      { name = "Uocm:US-CHICAGO-1-AD-2" },
+      { name = "Uocm:US-CHICAGO-1-AD-3" },
     ]
   }
 }

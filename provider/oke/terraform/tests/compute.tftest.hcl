@@ -38,9 +38,9 @@ override_data {
   target = data.oci_identity_availability_domains.this
   values = {
     availability_domains = [
-      { name = "VSwX:US-CHICAGO-1-AD-1" },
-      { name = "VSwX:US-CHICAGO-1-AD-2" },
-      { name = "VSwX:US-CHICAGO-1-AD-3" },
+      { name = "Uocm:US-CHICAGO-1-AD-1" },
+      { name = "Uocm:US-CHICAGO-1-AD-2" },
+      { name = "Uocm:US-CHICAGO-1-AD-3" },
     ]
   }
 }
@@ -153,7 +153,7 @@ run "availability_domains_pin_placement" {
   assert {
     condition = [
       for p in oci_containerengine_node_pool.pools["l40s"].node_config_details[0].placement_configs : p.availability_domain
-    ] == ["VSwX:US-CHICAGO-1-AD-3"]
+    ] == ["Uocm:US-CHICAGO-1-AD-3"]
     error_message = "availabilityDomains [3] must place only in AD-3"
   }
 
