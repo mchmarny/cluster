@@ -180,8 +180,15 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
 - **Pool changes do not roll existing nodes:** image catalog updates, `imageId`,
   labels, or `gpuDriver` changes apply to nodes launched afterwards. Managed
   pools need node cycling (`oci ce node-pool update`, or scale down/up); fabric
-  pools need their GPU memory cluster recreated
-  (`terraform apply -replace='oci_core_compute_gpu_memory_cluster.fabric["<pool>"]'`).
+  pools need their GPU memory cluster recreated, which `actuate` can plan by
+  passing `-replace` to the plan step:
+
+  ```shell
+  TF_CLI_ARGS_plan="-replace='oci_core_compute_gpu_memory_cluster.fabric[\"<pool>\"]'" \
+    TERRAFORM_DIR=provider/oke/terraform tools/actuate -c "$PWD/config/<file>.yaml" plan
+  TERRAFORM_DIR=provider/oke/terraform tools/actuate -c "$PWD/config/<file>.yaml" apply
+  ```
+
   Replacing the cluster itself recreates fabric hosts automatically.
 - **Autoscaling:** OKE has no node-pool autoscaling field; pools use a fixed
   `size`. Autoscaling is the in-cluster cluster-autoscaler add-on, layered on

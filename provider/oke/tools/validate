@@ -118,9 +118,9 @@ POOLS_ACTIVE=$(echo "$POOLS_JSON" | jq '[.data[] | select(."lifecycle-state" == 
 EXPECTED_POOL_COUNT=$(( WORKER_COUNT + 1 ))
 
 SYSTEM_POOLS=$(echo "$POOLS_JSON" | jq '[.data[]? | select(.name | endswith("-system"))] | length')
-check "System node pool exists" '[[ $SYSTEM_POOLS -gt 0 ]]'
-check "Node pool count matches config (expected $EXPECTED_POOL_COUNT)" "[[ $POOL_COUNT -eq $EXPECTED_POOL_COUNT ]]"
-check "All node pools are ACTIVE ($POOLS_ACTIVE/$POOL_COUNT)" "[[ $POOLS_ACTIVE -eq $POOL_COUNT ]]"
+check "System node pool exists" '[[ "$SYSTEM_POOLS" -gt 0 ]]'
+check "Node pool count matches config (expected $EXPECTED_POOL_COUNT)" '[[ "$POOL_COUNT" -eq "$EXPECTED_POOL_COUNT" ]]'
+check "All node pools are ACTIVE ($POOLS_ACTIVE/$POOL_COUNT)" '[[ "$POOLS_ACTIVE" -eq "$POOL_COUNT" ]]'
 
 for pool in $FABRIC_POOLS; do
   GMC_STATE=$(oci compute compute-gpu-memory-cluster list --compartment-id "$COMPARTMENT_ID" --region "$REGION" \
@@ -161,8 +161,8 @@ NODE_COUNT=$(echo "$NODES_JSON" | jq '.items | length')
 READY_NODES=$(echo "$NODES_JSON" | jq '[.items[] | select(any(.status.conditions[]; .type == "Ready" and .status == "True"))] | length')
 
 check "API server reachable" "kubectl version --request-timeout=15s"
-check "Node count matches config ($NODE_COUNT/$EXPECTED_NODES)" "[[ $NODE_COUNT -eq $EXPECTED_NODES ]]"
-check "All nodes are Ready ($READY_NODES/$NODE_COUNT)" "[[ $READY_NODES -eq $NODE_COUNT && $NODE_COUNT -gt 0 ]]"
+check "Node count matches config ($NODE_COUNT/$EXPECTED_NODES)" '[[ "$NODE_COUNT" -eq "$EXPECTED_NODES" ]]'
+check "All nodes are Ready ($READY_NODES/$NODE_COUNT)" '[[ "$READY_NODES" -eq "$NODE_COUNT" && "$NODE_COUNT" -gt 0 ]]'
 check "CoreDNS is available" "kubectl -n kube-system rollout status deployment/coredns --timeout=60s"
 
 # VCN-native pods carry pod-subnet IPs, not the overlay range.
