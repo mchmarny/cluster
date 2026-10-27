@@ -34,7 +34,7 @@ override_data {
 override_data {
   target = data.oci_identity_availability_domains.this
   values = {
-    availability_domains = [{ name = "VSwX:AP-KULAI-2-AD-1" }]
+    availability_domains = [{ name = "Uocm:AP-KULAI-2-AD-1" }]
   }
 }
 
