@@ -4,7 +4,7 @@
   "author": "mchmarny/cluster maintainers",
   "role": "document creator",
   "timestamp": "2026-06-06T00:00:00Z",
-  "version": 3,
+  "version": 4,
   "last_updated": "2026-10-27T00:00:00Z",
   "tooling": "manual; reachability verified against image contents and Dockerfiles in image/",
   "statements": [
@@ -514,6 +514,7 @@
       "timestamp": "2026-10-12T00:00:00Z",
       "vulnerability": {
         "name": "GO-2026-6612",
+        "aliases": ["CVE-2026-78663"],
         "description": "Go HTTP/2 server refunds connection-level flow control twice for the same data (stdlib net/http bundled h2 and golang.org/x/net/http2; Critical). Statically linked into upstream prebuilt binaries: terraform, kubectl, gke-gcloud-auth-plugin (gke) and kubelogin (aks). As of 2026-10-12 the latest terraform (1.16.5) and kubectl (1.36.5) releases are built with go1.26.8 and kubelogin 0.2.21 with go1.26.6, all with x/net < 0.60.0."
       },
       "products": [
