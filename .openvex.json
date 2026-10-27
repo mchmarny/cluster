@@ -531,6 +531,7 @@
       "timestamp": "2026-10-12T00:00:00Z",
       "vulnerability": {
         "name": "GO-2026-6604",
+        "aliases": ["CVE-2026-56857"],
         "description": "Go stdlib os.Root Mkdir/MkdirAll can create a directory outside the root when the target is a Windows junction (Critical). Vendored into upstream prebuilt Go binaries built with Go < 1.26.9: terraform, kubectl, gke-gcloud-auth-plugin (gke) and kubelogin (aks)."
       },
       "products": [
