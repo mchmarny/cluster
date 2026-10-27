@@ -10,9 +10,10 @@ pkg/                  Go packages (aws, azure, gcp, oci, cluster, config, run, s
 provider/eks/         EKS Terraform + tools (actuate, setup, validate, disco)
 provider/gke/         GKE Terraform + tools (setup, disco, validate)
 provider/aks/         AKS Terraform + tools (setup, disco, validate)
-config/               Global config files (provider-prefixed: eks-*.yaml, gke-*.yaml, aks-*.yaml)
+provider/oke/         OKE Terraform + tools (setup, disco, validate)
+config/               Global config files (provider-prefixed: eks-*.yaml, gke-*.yaml, aks-*.yaml, oke-*.yaml)
 schema/               JSON Schema for config validation
-image/                Dockerfiles (eks.dockerfile, gke.dockerfile, aks.dockerfile)
+image/                Dockerfiles (eks.dockerfile, gke.dockerfile, aks.dockerfile, oke.dockerfile)
 tools/                Shared scripts (common, mirror, e2e, check-tools)
 .settings.yaml        Single source of truth for versions
 ```
@@ -33,12 +34,12 @@ A [JSON Schema](../schema/cluster-config.schema.json) is provided for editor aut
 
 ### Configuration Schema
 
-Shared top-level structure; provider-specific fields nest under the provider key, e.g. `cluster.gke`/`cluster.eks`/`cluster.aks` and the matching `compute.<provider>`.
+Shared top-level structure; provider-specific fields nest under the provider key, e.g. `cluster.gke`/`cluster.eks`/`cluster.aks`/`cluster.oke` and the matching `compute.<provider>`.
 
 ```yaml
 deployment:
   id: <string>           # Deployment identifier (required)
-  provider: <string>     # eks | gke | aks (required)
+  provider: <string>     # eks | gke | aks | oke (required)
   tenancy: <string>      # Account/Project ID (required)
   location: <string>     # Region (required)
   state: tenancy         # tenancy (cloud) | local (tfstate)
@@ -68,7 +69,7 @@ compute:
 network:                 # Optional -- auto-computed from VPC CIDR for both providers
 ```
 
-The `init` command generates the appropriate template based on the output filename prefix (`gke-*`, `aks-*` produce their respective templates; anything else produces EKS).
+The `init` command generates the appropriate template based on the output filename prefix (`gke-*`, `aks-*`, `oke-*` produce their respective templates; anything else produces EKS).
 
 ### CLI Commands
 
@@ -88,22 +89,28 @@ Every cluster uses two pool tiers:
 
 This separation ensures control plane components are isolated from user workload resource pressure.
 
+**OKE exception:** OKE managed node pools have no taint field, so OKE pools are
+separated by labels only and are untainted; schedule onto them with node
+selectors or affinity.
+
 ## State Management
 
 State storage is controlled by `deployment.state`:
 
 | Value | Backend | Location |
 |-------|---------|----------|
-| `tenancy` (default) | Cloud object store | S3 (EKS), GCS (GKE), or Azure Blob (AKS), keyed by `deployments/{region}/{id}/terraform.tfstate` |
+| `tenancy` (default) | Cloud object store | S3 (EKS), GCS (GKE), Azure Blob (AKS), or OCI Object Storage (OKE), keyed by `deployments/{region}/{id}/terraform.tfstate` |
 | `local` | Local filesystem | `terraform.tfstate` in the working directory |
 
 The `tenancy` mode provisions a per-tenancy state container with versioning and
 restricted access: `cluster-state-{account-or-project-id}` for EKS/GKE and a
-`clst{subscription-hex}` Storage Account (`tfstate` container) for AKS.
+`clst{subscription-hex}` Storage Account (`tfstate` container) for AKS, and
+`cluster-state` in the tenancy's Object Storage namespace for OKE (the namespace is
+passed via `OCI_NAMESPACE`, since it cannot be derived from config).
 
 Because that container is named per tenancy, it exists in exactly one region —
-whichever one the tenancy deployed to first. On **EKS** this matters, because the
-S3 backend is configured with an explicit region and a mismatch fails `init` with
+whichever one the tenancy deployed to first. On **EKS** and **OKE** this matters,
+because the S3 and oci backends are configured with an explicit region and a mismatch fails `init` with
 a 301. A tenancy that later deploys into a second region points back at the
 container with `deployment.stateLocation`, which defaults to
 `deployment.location` and so is only needed in that case:
@@ -135,6 +142,7 @@ Images are multi-arch (amd64 + arm64), built on native runners (no QEMU).
 | EKS | `ghcr.io/mchmarny/cluster/eks:<version>` |
 | GKE | `ghcr.io/mchmarny/cluster/gke:<version>` |
 | AKS | `ghcr.io/mchmarny/cluster/aks:<version>` |
+| OKE | `ghcr.io/mchmarny/cluster/oke:<version>` |
 
 ### Building Images
 
@@ -142,9 +150,10 @@ Images are multi-arch (amd64 + arm64), built on native runners (no QEMU).
 make build-eks   # Mirror providers + build EKS image
 make build-gke   # Mirror providers + build GKE image
 make build-aks   # Mirror providers + build AKS image
+make build-oke   # Mirror providers + build OKE image
 ```
 
-Tags matching `v*-eks`, `v*-gke`, or `v*-aks` pushed to `main` trigger CI builds.
+Tags matching `v*-eks`, `v*-gke`, `v*-aks`, or `v*-oke` pushed to `main` trigger CI builds.
 
 ## GKE: GPU Multi-NIC Networking
 
@@ -165,7 +174,7 @@ EFA (Elastic Fabric Adapter) support for GPU instances uses dynamic network card
 
 - **Private API endpoints** -- cluster control plane is not publicly accessible by default
 - **Authorized networks** -- only explicitly allowed CIDRs can reach the API server
-- **Workload identity** -- pods authenticate via IRSA (EKS), Workload Identity (GKE), or Entra Workload Identity (AKS), no static secrets
+- **Workload identity** -- pods authenticate via IRSA (EKS), Workload Identity (GKE), Entra Workload Identity (AKS), or OKE Workload Identity (OKE enhanced clusters), no static secrets
 
 ### Account Validation
 

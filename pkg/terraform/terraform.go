@@ -19,7 +19,7 @@ const (
 type RunConfig struct {
 	TerraformDir string
 	ConfigPath   string
-	Provider     string // config.ProviderEKS, ProviderGKE, or ProviderAKS
+	Provider     string // config.ProviderEKS, ProviderGKE, ProviderAKS, or ProviderOKE
 	State        string // config.StateTenancy or config.StateLocal
 	Bucket       string
 	// Region is where the cluster is provisioned: the provider's region.
@@ -42,6 +42,10 @@ type RunConfig struct {
 	ResourceGroup  string
 	StorageAccount string
 	Container      string
+
+	// OCI Object Storage namespace (oci backend). Tenancy-specific and not
+	// derivable from config, so it is supplied by the caller.
+	Namespace string
 
 	// ImportTargets lists resources to import if missing from state.
 	// Each entry maps a Terraform resource address to its provider ID.
@@ -217,6 +221,10 @@ func buildEnv(cfg RunConfig) []string {
 		// azurerm authenticates via ARM_* env vars (service principal) or the
 		// Azure CLI default chain; both are inherited from the process env and
 		// not owned by this tool, so no per-run env vars are injected here.
+	case config.ProviderOKE:
+		// The oci provider and backend authenticate via OCI_AUTH /
+		// OCI_CONFIG_FILE_PROFILE and ~/.oci/config, inherited from the
+		// process env and not owned by this tool.
 	}
 
 	return env
@@ -256,6 +264,13 @@ func buildInitArgs(cfg RunConfig) []string {
 			fmt.Sprintf("-backend-config=resource_group_name=%s", cfg.ResourceGroup),
 			fmt.Sprintf("-backend-config=storage_account_name=%s", cfg.StorageAccount),
 			fmt.Sprintf("-backend-config=container_name=%s", cfg.Container),
+			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
+		)
+	case config.ProviderOKE:
+		args = append(args,
+			fmt.Sprintf("-backend-config=bucket=%s", cfg.Bucket),
+			fmt.Sprintf("-backend-config=namespace=%s", cfg.Namespace),
+			fmt.Sprintf("-backend-config=region=%s", cfg.stateRegion()),
 			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
 		)
 	}

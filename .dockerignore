@@ -1,10 +1,12 @@
 .git
 .github
-.claude
+**/.claude
 .vscode
 **/.terraform
-*.tfstate*
-plan.cache
+**/*.tfstate*
+**/plan.cache
+**/backend.hcl
+**/*-status.json
 docs/
 *.md
 !mirror/
