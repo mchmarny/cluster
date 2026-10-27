@@ -1,6 +1,6 @@
 # Cluster
 
-Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurations with sensible defaults and YAML-based customization for EKS (AWS), GKE (Google Cloud), and AKS (Azure).
+Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurations with sensible defaults and YAML-based customization for EKS (AWS), GKE (Google Cloud), AKS (Azure), and OKE (Oracle Cloud).
 
 ## Platforms
 
@@ -9,16 +9,17 @@ Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurat
 | [AWS (EKS)](./provider/eks/) | `provider/eks/` | Multi-AZ, optional VPC CNI custom networking, self-managed nodes, CloudWatch |
 | [Google Cloud (GKE)](./provider/gke/) | `provider/gke/` | Regional cluster, Workload Identity, Shielded Nodes, multi-NIC GPU networking for GPUDirect-TCPXO (a3-megagpu-8g) |
 | [Azure (AKS)](./provider/aks/) | `provider/aks/` | Private cluster, Entra ID RBAC, OIDC + Workload Identity, VNet/NSG + NAT gateway, Key Vault etcd encryption |
+| [Oracle Cloud (OKE)](./provider/oke/) | `provider/oke/` | Enhanced cluster, VCN-native pod networking, per-role NSGs, KMS etcd encryption, GPU pools by `gpuType` |
 
 > **Note:** all three providers are live-validated end-to-end, including a GPU (H100) node pool on AKS. See each provider's README for operational notes.
 
 ## How It Works
 
-Every provider follows the same shape: a single YAML config (`deployment.provider` selects the cloud) is loaded by the `cluster` Go CLI, which resolves provider-specific state backend and credentials, then drives per-provider Terraform. Provider-specific settings nest under a provider key (`cluster.eks`, `cluster.gke`, `cluster.aks`), so the workflow, CLI, and container interface are identical across clouds.
+Every provider follows the same shape: a single YAML config (`deployment.provider` selects the cloud) is loaded by the `cluster` Go CLI, which resolves provider-specific state backend and credentials, then drives per-provider Terraform. Provider-specific settings nest under a provider key (`cluster.eks`, `cluster.gke`, `cluster.aks`, `cluster.oke`), so the workflow, CLI, and container interface are identical across clouds.
 
 ```
 config.yaml ──▶ cluster CLI ──▶ provider/<csp>/terraform ──▶ managed Kubernetes
-   (deployment.provider: eks | gke | aks)
+   (deployment.provider: eks | gke | aks | oke)
 ```
 
 ## Usage
@@ -30,7 +31,7 @@ config.yaml ──▶ cluster CLI ──▶ provider/<csp>/terraform ──▶ m
 5. **Validate** (optional) -- `provider/<csp>/tools/validate` runs post-deploy health checks
 6. **Destroy** -- set `deployment.destroy: true` in config and re-run apply
 
-See provider-specific guides for detailed steps: [EKS](./provider/eks/) | [GKE](./provider/gke/) | [AKS](./provider/aks/)
+See provider-specific guides for detailed steps: [EKS](./provider/eks/) | [GKE](./provider/gke/) | [AKS](./provider/aks/) | [OKE](./provider/oke/)
 
 ### Per-Provider Model
 
@@ -39,6 +40,7 @@ See provider-specific guides for detailed steps: [EKS](./provider/eks/) | [GKE](
 | EKS | `aws` | IAM access key (`KEY_CONTENT`) or default chain | S3 (`cluster-state-<account>`) |
 | GKE | `gcloud` | ADC JSON (`KEY_CONTENT`) or default chain | GCS (`cluster-state-<project>`) |
 | AKS | `az` (+ `kubelogin`) | `az login` CLI chain (mount `~/.azure` into the container) | Azure Blob (`clst<subscription-hex>` / `tfstate`) |
+| OKE | `oci` | `~/.oci/config` via `OCI_AUTH` / `OCI_CONFIG_FILE_PROFILE` (mount `~/.oci`) | OCI Object Storage (`cluster-state`, namespace from `OCI_NAMESPACE`) |
 
 ## Container Images
 
@@ -49,6 +51,7 @@ Self-contained actuator images with pre-mirrored Terraform providers. Multi-arch
 | EKS | `ghcr.io/mchmarny/cluster/eks:<version>` |
 | GKE | `ghcr.io/mchmarny/cluster/gke:<version>` |
 | AKS | `ghcr.io/mchmarny/cluster/aks:<version>` |
+| OKE | `ghcr.io/mchmarny/cluster/oke:<version>` |
 
 Check image version (any provider):
 
@@ -56,6 +59,7 @@ Check image version (any provider):
 docker run --rm ghcr.io/mchmarny/cluster/eks:<version> --version
 docker run --rm ghcr.io/mchmarny/cluster/gke:<version> --version
 docker run --rm ghcr.io/mchmarny/cluster/aks:<version> --version
+docker run --rm ghcr.io/mchmarny/cluster/oke:<version> --version
 ```
 
 Images are published by pushing a `v*-<csp>` tag (e.g. `v0.3.0-aks`), which triggers the multi-arch build in CI.
@@ -64,7 +68,7 @@ Images are published by pushing a `v*-<csp>` tag (e.g. `v0.3.0-aks`), which trig
 
 | Command | Description |
 |---------|-------------|
-| `init <path>` | Generate a starter configuration file (provider-aware by filename prefix: `gke-*`, `aks-*`, else EKS) |
+| `init <path>` | Generate a starter configuration file (provider-aware by filename prefix: `gke-*`, `aks-*`, `oke-*`, else EKS) |
 | `plan -c <config>` | Show Terraform plan output without applying |
 | `apply -c <config>` | Deploy or destroy infrastructure via Terraform; on successful deploy, prints the deployment status JSON to stdout |
 | `output -c <config>` | Retrieve Terraform outputs and save to state directory |
@@ -77,7 +81,7 @@ Destroy is triggered by setting `deployment.destroy: true` in the config and run
 |--------|---------------|-------------|
 | File path | `-c` / `CONFIG_PATH` | Path to YAML config file |
 | Base64 content | `CONFIG_CONTENT` | Base64-encoded YAML config |
-| Base64 key | `KEY_CONTENT` | Base64-encoded credentials (AWS key JSON or GCP ADC JSON; AKS uses the az CLI chain — mount `~/.azure` instead) |
+| Base64 key | `KEY_CONTENT` | Base64-encoded credentials (AWS key JSON or GCP ADC JSON; AKS uses the az CLI chain — mount `~/.azure` instead; OKE uses `~/.oci/config` — mount `~/.oci`) |
 
 ## Architecture
 

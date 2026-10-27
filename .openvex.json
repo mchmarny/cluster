@@ -519,11 +519,12 @@
       "products": [
         { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
         { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } },
-        { "@id": "pkg:oci/aks", "identifiers": { "purl": "pkg:oci/aks" } }
+        { "@id": "pkg:oci/aks", "identifiers": { "purl": "pkg:oci/aks" } },
+        { "@id": "pkg:oci/oke", "identifiers": { "purl": "pkg:oci/oke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",
-      "impact_statement": "The flaw is in the HTTP/2 server's flow-control accounting when a client resets streams. In the image, the cluster binary execs only terraform (pkg/run, pkg/terraform); the only other tool invocations are terraform local-exec provisioners in provider/eks/terraform/network.tf (aws eks update-kubeconfig, kubectl apply) and provider/gke/terraform/network.tf (gcloud auth activate-service-account / application-default print-access-token, gcloud container clusters get-credentials, kubectl apply). tools/ and provider/*/tools/ are excluded from the image by .dockerignore. All of these are HTTP clients: terraform calls cloud APIs over HTTPS and talks to provider processes it spawns itself over go-plugin gRPC on a local socket with AutoMTLS (grpc-go uses its own HTTP/2 transport, not the net/http or x/net/http2 Server); kubectl and gke-gcloud-auth-plugin call the Kubernetes API and Google identity endpoints. Nothing runs `kubectl proxy` or `kubectl port-forward`. kubelogin (aks) is installed only as a kubectl exec credential plugin and is not invoked by repo code. No HTTP/2 server reachable by a remote client exists in this image."
+      "impact_statement": "The flaw is in the HTTP/2 server's flow-control accounting when a client resets streams. In the image, the cluster binary execs only terraform (pkg/run, pkg/terraform); the only other tool invocations are terraform local-exec provisioners in provider/eks/terraform/network.tf (aws eks update-kubeconfig, kubectl apply) and provider/gke/terraform/network.tf (gcloud auth activate-service-account / application-default print-access-token, gcloud container clusters get-credentials, kubectl apply). provider/oke/terraform has no local-exec provisioners, and the OCI CLI in the oke image is Python, not Go. tools/ and provider/*/tools/ are excluded from the image by .dockerignore. All of these are HTTP clients: terraform calls cloud APIs over HTTPS and talks to provider processes it spawns itself over go-plugin gRPC on a local socket with AutoMTLS (grpc-go uses its own HTTP/2 transport, not the net/http or x/net/http2 Server); kubectl and gke-gcloud-auth-plugin call the Kubernetes API and Google identity endpoints. Nothing runs `kubectl proxy` or `kubectl port-forward`. kubelogin (aks) is installed only as a kubectl exec credential plugin and is not invoked by repo code. No HTTP/2 server reachable by a remote client exists in this image."
     },
     {
       "timestamp": "2026-10-12T00:00:00Z",
@@ -534,7 +535,8 @@
       "products": [
         { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } },
         { "@id": "pkg:oci/gke", "identifiers": { "purl": "pkg:oci/gke" } },
-        { "@id": "pkg:oci/aks", "identifiers": { "purl": "pkg:oci/aks" } }
+        { "@id": "pkg:oci/aks", "identifiers": { "purl": "pkg:oci/aks" } },
+        { "@id": "pkg:oci/oke", "identifiers": { "purl": "pkg:oci/oke" } }
       ],
       "status": "not_affected",
       "justification": "vulnerable_code_not_in_execute_path",

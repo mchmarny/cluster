@@ -252,9 +252,73 @@ compute:
         #     nodeGroup: gpu-worker
 `
 
+const okeTemplate = `# yaml-language-server: $schema=https://raw.githubusercontent.com/mchmarny/cluster/main/schema/oke-config.schema.json
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: my-cluster
+  provider: oke                 # eks | gke | aks | oke
+  # tenancy: "ocid1.tenancy.oc1..aaaa"  # REQUIRED: Your OCI tenancy OCID
+  location: us-ashburn-1
+  state: tenancy              # "tenancy" = OCI Object Storage in target tenancy | "local" = tfstate in /state
+  # destroy: false            # Set to true to destroy the cluster
+  # tags:                      # Optional: freeform tags applied to all resources
+  #   owner: your-name
+  #   env: dev
+
+cluster:
+  oke:
+    # name: my-cluster          # Optional: defaults to deployment.id
+    version: "v1.36.4"
+    # compartmentId: ocid1.compartment.oc1..aaaa  # Optional: defaults to tenancy (root)
+    # controlPlane:
+    #   isPublicIpEnabled: false
+    #   allowedCidrs:           # Optional: restrict API access (your IP auto-added)
+    #     - 0.0.0.0/32
+
+# Network uses defaults: 10.0.0.0/16 VCN, auto-computed subnets
+# network:
+#   oke:
+#     cidr: 10.0.0.0/16
+#     podsCidr: 10.244.0.0/16
+#     servicesCidr: 10.96.0.0/16
+#     subnets:
+#       system:
+#         cidr: 10.0.0.0/22
+#       worker:
+#         cidr: 10.0.128.0/17
+
+compute:
+  oke:
+    nodePools:
+      system:
+        shape: VM.Standard.E5.Flex
+        ocpus: 4
+        memoryGb: 32
+        size: 3
+      workers:
+        - name: cpu-worker-1
+          shape: VM.Standard.E5.Flex
+          ocpus: 8
+          memoryGb: 64
+          bootVolumeSizeGb: 200
+          size: 1
+          labels:
+            nodeGroup: cpu-worker
+        # GPU worker example (GPU capacity is AD-specific; pin the AD):
+        # - name: gpu-worker-1
+        #   gpuType: l40s           # a10 | l40s | h100 | gb200 | gb300
+        #   availabilityDomains: [3]
+        #   bootVolumeSizeGb: 200
+        #   size: 1
+        #   labels:
+        #     nodeGroup: gpu-worker
+`
+
 // GenerateTemplate writes a starter config file to the given path.
 // Fails if the file already exists. Detects provider from filename prefix
-// (gke-* → GKE, aks-* → AKS, otherwise EKS).
+// (gke-* → GKE, aks-* → AKS, oke-* → OKE, otherwise EKS).
 func GenerateTemplate(path string) error {
 	if _, err := os.Stat(path); err == nil {
 		return fmt.Errorf("file already exists: %s (delete it first or choose a different path)", path)
@@ -271,6 +335,8 @@ func GenerateTemplate(path string) error {
 		tmpl = gkeTemplate
 	case strings.HasPrefix(base, "aks"):
 		tmpl = aksTemplate
+	case strings.HasPrefix(base, "oke"):
+		tmpl = okeTemplate
 	}
 
 	if err := os.WriteFile(path, []byte(tmpl), 0600); err != nil {

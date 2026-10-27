@@ -23,8 +23,8 @@ type Deployment struct {
 	// StateLocation is the region holding the state backend; empty means
 	// Location. The two differ only when one tenancy deploys into more than
 	// one region, since the state bucket is named per-tenancy and so lives in
-	// exactly one of them. EKS only: the GCS and azurerm backends take no
-	// region, so GKE and AKS ignore it.
+	// exactly one of them. EKS and OKE only: the GCS and azurerm backends take
+	// no region, so GKE and AKS ignore it.
 	StateLocation string            `yaml:"stateLocation,omitempty"`
 	Destroy       bool              `yaml:"destroy"`
 	Tags          map[string]string `yaml:"tags,omitempty"`
@@ -51,6 +51,7 @@ const (
 	ProviderEKS = "eks"
 	ProviderGKE = "gke"
 	ProviderAKS = "aks"
+	ProviderOKE = "oke"
 )
 
 // Load reads a YAML config file, applies defaults, and validates.
@@ -86,6 +87,7 @@ var validProviders = map[string]bool{
 	ProviderEKS: true,
 	ProviderGKE: true,
 	ProviderAKS: true,
+	ProviderOKE: true,
 }
 
 func (c *Config) validate() error {
@@ -96,7 +98,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("deployment.provider is required")
 	}
 	if !validProviders[c.Deployment.Provider] {
-		return fmt.Errorf("deployment.provider must be one of eks, gke, aks; got %q", c.Deployment.Provider)
+		return fmt.Errorf("deployment.provider must be one of eks, gke, aks, oke; got %q", c.Deployment.Provider)
 	}
 	if c.Deployment.Tenancy == "" {
 		return fmt.Errorf("deployment.tenancy is required")

@@ -15,6 +15,7 @@ import (
 	"github.com/mchmarny/cluster/pkg/azure"
 	"github.com/mchmarny/cluster/pkg/config"
 	"github.com/mchmarny/cluster/pkg/gcp"
+	"github.com/mchmarny/cluster/pkg/oci"
 	"github.com/mchmarny/cluster/pkg/state"
 	"github.com/mchmarny/cluster/pkg/terraform"
 )
@@ -305,6 +306,16 @@ func buildRunConfig(cmd *cli.Command) (*runConfigResult, func(), error) {
 		// azurerm authenticates via ARM_* env / az CLI default chain, inherited
 		// from the process environment.
 		logAzureCredentials()
+	case config.ProviderOKE:
+		rc.Bucket = oci.BucketName(cfg)
+		rc.StateKey = oci.StateKey(cfg)
+		rc.Namespace = os.Getenv(oci.NamespaceEnv)
+		rc.outputFile = oci.OutputFileName(cfg)
+		if cfg.Deployment.State == config.StateTenancy && rc.Namespace == "" {
+			cfgCleanup()
+			return nil, noop, fmt.Errorf("%s is required for OKE tenancy state (provider/oke/tools/setup prints it)", oci.NamespaceEnv)
+		}
+		logOCICredentials()
 	default:
 		cfgCleanup()
 		return nil, noop, fmt.Errorf("unsupported provider: %s", cfg.Deployment.Provider)
@@ -379,6 +390,22 @@ func logAzureCredentials() {
 		return
 	}
 	slog.Info("no ARM_* service principal set, terraform will use the Azure CLI default chain")
+}
+
+// logOCICredentials reports which OCI authentication source terraform will use.
+// The oci provider and backend read OCI_AUTH / OCI_CONFIG_FILE_PROFILE and
+// ~/.oci/config; this tool does not own those secrets, it only surfaces which
+// path is active for operator visibility.
+func logOCICredentials() {
+	auth := os.Getenv("OCI_AUTH")
+	if auth == "" {
+		auth = "ApiKey"
+	}
+	profile := os.Getenv("OCI_CONFIG_FILE_PROFILE")
+	if profile == "" {
+		profile = "DEFAULT"
+	}
+	slog.Info("using OCI credentials from config file", "auth", auth, "profile", profile)
 }
 
 // resolveCredentials returns AWS credentials using the following priority:

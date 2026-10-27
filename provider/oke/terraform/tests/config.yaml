@@ -1,0 +1,36 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: oke
+  tenancy: ocid1.tenancy.oc1..tftest
+  location: us-chicago-1
+  state: local
+
+cluster:
+  oke:
+    version: v1.36.4
+    compartmentId: ocid1.compartment.oc1..tftest
+
+compute:
+  oke:
+    nodePools:
+      system:
+        shape: VM.Standard.E5.Flex
+        ocpus: 4
+        memoryGb: 32
+        size: 3
+      workers:
+        - name: arm
+          shape: VM.Standard.A1.Flex
+          size: 1
+        - name: l40s
+          gpuType: l40s
+          availabilityDomains: [3]
+          size: 1
+        - name: gb300
+          gpuType: GB300
+          imageId: ocid1.image.oc1..custom-gb300
+          availabilityDomains: [1]
+          size: 1
