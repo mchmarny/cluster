@@ -15,8 +15,8 @@
         },
         "provider": {
           "type": "string",
-          "enum": ["eks", "gke", "aks"],
-          "description": "Cloud provider (eks, gke, aks)"
+          "enum": ["eks", "gke", "aks", "oke"],
+          "description": "Cloud provider (eks, gke, aks, oke)"
         },
         "tenancy": {
           "type": "string",
@@ -34,7 +34,7 @@
         },
         "stateLocation": {
           "type": "string",
-          "description": "EKS only: region of the S3 state backend, when it differs from location (one tenancy deploying into several regions). Defaults to location. Ignored by GKE and AKS, whose backends take no region"
+          "description": "EKS and OKE only: region of the S3 or OCI Object Storage state backend, when it differs from location (one tenancy deploying into several regions). Defaults to location. Ignored by GKE and AKS, whose backends take no region"
         },
         "destroy": {
           "type": "boolean",

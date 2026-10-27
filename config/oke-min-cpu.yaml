@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=../schema/oke-config.schema.json
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-cpu
+  provider: oke
+  tenancy: "ocid1.tenancy.oc1..aaaaaaaaplaceholder" # placeholder OCI tenancy OCID
+  location: us-ashburn-1
+  state: tenancy
+  destroy: false
+  tags:
+    env: demo
+    stack: mini
+
+cluster:
+  oke:
+    version: "v1.36.4"
+    compartmentId: "ocid1.compartment.oc1..aaaaaaaaplaceholder" # placeholder compartment OCID
+
+compute:
+  oke:
+    nodePools:
+      system:
+        shape: VM.Standard.E5.Flex
+        ocpus: 2
+        memoryGb: 16
+        size: 3
+      workers:
+        - name: cpu-worker-1
+          shape: VM.Standard.E5.Flex
+          ocpus: 8
+          memoryGb: 64
+          bootVolumeSizeGb: 200
+          size: 1
+          labels:
+            nodeGroup: cpu-worker

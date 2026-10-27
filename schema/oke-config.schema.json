@@ -1,0 +1,272 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/mchmarny/cluster/schema/oke-config.schema.json",
+  "title": "OKE Cluster Config",
+  "description": "Schema for OKE (Oracle Container Engine for Kubernetes) cluster deployment configuration",
+  "type": "object",
+  "required": [
+    "apiVersion",
+    "kind",
+    "deployment",
+    "cluster"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "apiVersion": {
+      "type": "string",
+      "const": "github.com/mchmarny/cluster/v1alpha1"
+    },
+    "kind": {
+      "type": "string",
+      "const": "Cluster"
+    },
+    "deployment": {
+      "$ref": "cluster-config.schema.json#/$defs/deployment"
+    },
+    "cluster": {
+      "type": "object",
+      "required": [
+        "oke"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "oke": {
+          "type": "object",
+          "required": [
+            "version"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "string",
+              "description": "Kubernetes version, OCI format (e.g. v1.33.1)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Cluster name (defaults to deployment.id)"
+            },
+            "compartmentId": {
+              "type": "string",
+              "description": "Compartment OCID for cluster resources (defaults to tenancy/root)"
+            },
+            "controlPlane": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "isPublicIpEnabled": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Assign a public IP to the API server endpoint"
+                },
+                "allowedCidrs": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "CIDRs allowed to reach the API server (terraform executor IP is auto-added)"
+                }
+              }
+            },
+            "identity": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "manage": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Create a tenancy-level dynamic group and policy for node instance principals (requires tenancy admin; not needed by managed node pools)"
+                }
+              }
+            },
+            "gpuDriver": {
+              "type": "string",
+              "enum": [
+                "image",
+                "operator"
+              ],
+              "default": "image",
+              "description": "Where the NVIDIA driver comes from; the module deploys no GPU runtime components beyond it. image: the node image ships the driver (OKE GPU platform images; Oracle GPU images for imageId pools) and OKE's default NvidiaGpuPlugin add-on stays in place. operator: driverless Ubuntu imageId; a GPU Operator installed outside this module (e.g. AICR) provides driver, toolkit, and device plugin, and OKE's NvidiaGpuPlugin is disabled on GPU pools"
+            }
+          }
+        }
+      }
+    },
+    "compute": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "oke": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "nodePools": {
+              "type": "object",
+              "required": [
+                "system"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "system": {
+                  "$ref": "#/$defs/nodePool"
+                },
+                "workers": {
+                  "type": "array",
+                  "items": {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/nodePool"
+                      },
+                      {
+                        "required": [
+                          "name"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "network": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "oke": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cidr": {
+              "type": "string",
+              "description": "VCN CIDR block (default: 10.0.0.0/16)"
+            },
+            "podsCidr": {
+              "type": "string",
+              "description": "Cluster pods CIDR setting (default: 10.244.0.0/16). With OCI_VCN_IP_NATIVE it does not set pod addresses: pods take VCN IPs from the pod subnet derived from cidr"
+            },
+            "servicesCidr": {
+              "type": "string",
+              "description": "Kubernetes service CIDR (default: 10.96.0.0/16)"
+            },
+            "subnets": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Subnet definitions. Auto-computed from VCN CIDR if omitted.",
+              "properties": {
+                "system": {
+                  "$ref": "#/$defs/subnet"
+                },
+                "worker": {
+                  "$ref": "#/$defs/subnet"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "security": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "secretsEncryption": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Encrypt Kubernetes secrets in etcd with a customer-managed KMS key (creates a vault, key, and compartment policy for the OKE service)"
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "nodePool": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Node pool name (required for worker pools)"
+        },
+        "shape": {
+          "type": "string",
+          "description": "OCI compute shape (e.g. VM.Standard.E5.Flex); overrides the gpuType mapping"
+        },
+        "ocpus": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "OCPUs per node (Flex shapes only)"
+        },
+        "memoryGb": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Memory in GB per node (Flex shapes only)"
+        },
+        "bootVolumeSizeGb": {
+          "type": "integer",
+          "minimum": 50,
+          "description": "Boot volume size in GB"
+        },
+        "size": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of nodes in the pool"
+        },
+        "gpuType": {
+          "type": "string",
+          "enum": [
+            "a10",
+            "l40s",
+            "h100",
+            "gb200",
+            "gb300"
+          ],
+          "description": "GPU accelerator type; selects the shape when shape is unset (a10=VM.GPU.A10.1, l40s=BM.GPU.L40S.4, h100=BM.GPU.H100.8, gb200=BM.GPU.GB200.4, gb300=BM.GPU.GB300.4) and a GPU image"
+        },
+        "labels": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Kubernetes node labels"
+        },
+        "imageId": {
+          "type": "string",
+          "pattern": "^ocid1\\.image\\.",
+          "description": "Node image OCID. Overrides OKE platform image selection (newest build for the cluster version and shape architecture). Required for aarch64 GPU shapes (GB200/GB300), which have no OKE platform image"
+        },
+        "availabilityDomains": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "uniqueItems": true,
+          "description": "Availability domain numbers (1-based) to place nodes in; defaults to every AD in the region. GPU capacity is usually AD-specific, so pin GPU pools"
+        },
+        "gpuMemoryFabricId": {
+          "type": "string",
+          "pattern": "^ocid1\\.computegpumemoryfabric\\.",
+          "description": "GPU memory fabric (NVL72 rack) to place this pool in. Makes the pool self-managed: a compute cluster, instance configuration, and GPU memory cluster of `size` hosts, joined to the cluster via oke-init. Requires imageId and a single availability domain"
+        }
+      }
+    },
+    "subnet": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cidr": {
+          "type": "string",
+          "description": "Subnet CIDR block"
+        }
+      }
+    }
+  }
+}

@@ -7,6 +7,7 @@ on:
       - 'v*-eks'
       - 'v*-gke'
       - 'v*-aks'
+      - 'v*-oke'
 
 concurrency:
   group: build-${{ github.ref_name }}
@@ -147,6 +148,7 @@ jobs:
             GCLOUD_VERSION=${{ steps.versions.outputs.gcloud }}
             AZURECLI_VERSION=${{ steps.versions.outputs.azurecli }}
             KUBELOGIN_VERSION=${{ steps.versions.outputs.kubelogin }}
+            OCI_VERSION=${{ steps.versions.outputs.oci }}
           labels: |
             org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
             org.opencontainers.image.revision=${{ github.sha }}

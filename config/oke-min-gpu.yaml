@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=../schema/oke-config.schema.json
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: min-gpu
+  provider: oke
+  tenancy: "ocid1.tenancy.oc1..aaaaaaaaplaceholder" # placeholder OCI tenancy OCID
+  location: ap-kulai-2
+  state: tenancy
+  destroy: false
+  tags:
+    env: demo
+    stack: gpu
+
+cluster:
+  oke:
+    version: "v1.36.4"
+    compartmentId: "ocid1.compartment.oc1..aaaaaaaaplaceholder" # placeholder compartment OCID
+    controlPlane:
+      isPublicIpEnabled: true # API reachable from the executor (egress IP auto-allowed)
+
+compute:
+  oke:
+    nodePools:
+      system:
+        shape: VM.Standard.E5.Flex
+        ocpus: 2
+        memoryGb: 16
+        size: 3
+      workers:
+        - name: gpu-worker-1
+          gpuType: gb300 # BM.GPU.GB300.4: 4x GB300 per node (aarch64)
+          # GB300 hosts live in an NVL72 GPU memory fabric; list fabrics with
+          # provider/oke/tools/disco -r <region> -p <compartment>
+          gpuMemoryFabricId: "ocid1.computegpumemoryfabric.oc1.ap-kulai-2.placeholder" # placeholder fabric OCID
+          # Driver-bearing Oracle GPU image (imported from oci-hpc-oke
+          # docs/worker-node-images.md), e.g. Canonical-Ubuntu-24.04-aarch64
+          # NVIDIA-64K-6.14 GPU-595 CUDA-13.2
+          imageId: "ocid1.image.oc1.ap-kulai-2.aaaaaaaaplaceholder" # placeholder custom image OCID
+          availabilityDomains: [1]
+          bootVolumeSizeGb: 300
+          size: 1
+          labels:
+            nodeGroup: gpu-worker

@@ -1,0 +1,170 @@
+#!/bin/bash
+
+# OKE discovery tool: shows identity, supported K8s versions, GPU shapes per AD,
+# and the OKE node image catalog for a version.
+# Usage: ./disco -r <region> [-p <compartment-ocid>] [-v <k8s-version>] [-i <image-compartment-ocid>]
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$(CDPATH= cd -- "$SCRIPT_DIR" && git rev-parse --show-toplevel)/tools/common"
+
+has_tools oci jq curl
+
+REGION="${OCI_CLI_REGION:-}"
+COMPARTMENT_ID=""
+K8S_VERSION=""
+IMAGE_COMPARTMENT_ID=""
+
+while getopts "r:p:v:i:h" opt; do
+  case $opt in
+    r) REGION="$OPTARG" ;;
+    p) COMPARTMENT_ID="$OPTARG" ;;
+    v) K8S_VERSION="$OPTARG" ;;
+    i) IMAGE_COMPARTMENT_ID="$OPTARG" ;;
+    h)
+      echo "Usage: $0 -r region [-p compartment-ocid] [-v k8s-version] [-i image-compartment-ocid]"
+      echo "  -r region                  OCI region (e.g. us-ashburn-1)"
+      echo "  -p compartment-ocid        Compartment (defaults to tenancy root)"
+      echo "  -v k8s-version             OKE version for the image catalog (defaults to newest)"
+      echo "  -i image-compartment-ocid  Also list custom images there (e.g. aarch64 GPU images)"
+      exit 0
+      ;;
+    *) err "Invalid option: -$OPTARG" ;;
+  esac
+done
+
+[[ -z "$REGION" ]] && err "Region required. Set via -r (e.g. -r us-ashburn-1)"
+
+# Single auth contract: OCI_AUTH / OCI_CONFIG_FILE_PROFILE (read by terraform)
+# also drive the oci CLI.
+[[ -n "${OCI_CONFIG_FILE_PROFILE:-}" ]] && export OCI_CLI_PROFILE="$OCI_CONFIG_FILE_PROFILE"
+if [[ -n "${OCI_AUTH:-}" ]]; then
+  OCI_CLI_AUTH="$(echo "$OCI_AUTH" | sed -E 's/([a-z])([A-Z])/\1_\2/g' | tr '[:upper:]' '[:lower:]')"
+  export OCI_CLI_AUTH
+fi
+export OCI_CLI_REGION="$REGION"
+
+# Discovery is best-effort: a section the caller lacks permission for must not
+# hide the sections after it.
+set +e
+
+msg "Discovering OKE information in region: ${REGION}"
+echo ""
+
+# =============================================================================
+# Identity
+# =============================================================================
+echo "Identity:"
+echo "---------"
+
+TENANCY_OCID=$(sed -n "/^\[${OCI_CLI_PROFILE:-DEFAULT}\]/,/^\[/p" ~/.oci/config 2>/dev/null | grep -E '^tenancy' | head -1 | cut -d= -f2 | tr -d ' ' || true)
+[[ -z "$COMPARTMENT_ID" ]] && COMPARTMENT_ID="$TENANCY_OCID"
+
+OS_NAMESPACE=$(oci os ns get --query 'data' --raw-output 2>/dev/null || echo "unavailable")
+EGRESS_IP=$(curl -sf https://checkip.amazonaws.com 2>/dev/null || curl -sf https://ifconfig.me 2>/dev/null || echo "unavailable")
+
+echo "  Tenancy:      ${TENANCY_OCID:-unavailable}"
+echo "  Compartment:  ${COMPARTMENT_ID:-unavailable}"
+echo "  Namespace:    $OS_NAMESPACE"
+echo "  Egress IP:    $EGRESS_IP"
+echo ""
+echo "  Ready-to-paste allowedCidrs snippet:"
+echo "    cluster:"
+echo "      oke:"
+echo "        controlPlane:"
+echo "          allowedCidrs:"
+echo "            - \"${EGRESS_IP}/32\""
+echo ""
+
+# =============================================================================
+# Kubernetes Versions
+# =============================================================================
+echo "Kubernetes Versions:"
+echo "--------------------"
+
+VERSIONS=$(oci ce cluster-options get --cluster-option-id all \
+  --query 'data."kubernetes-versions"' 2>/dev/null || echo "[]")
+
+if [[ "$VERSIONS" == "[]" ]]; then
+  warn "Could not retrieve OKE versions"
+else
+  echo "$VERSIONS" | jq -r '.[]' 2>/dev/null | sort -Vr | head -5 | while read -r v; do
+    echo "    - $v"
+  done
+  if [[ -z "$K8S_VERSION" ]]; then
+    K8S_VERSION=$(echo "$VERSIONS" | jq -r '.[]' | sort -V | tail -1)
+  fi
+fi
+echo ""
+
+# =============================================================================
+# Availability Domains
+# =============================================================================
+echo "Availability Domains:"
+echo "---------------------"
+
+if [[ -n "$COMPARTMENT_ID" ]]; then
+  oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" \
+    --query 'data[].name' 2>/dev/null | jq -r '.[]?' 2>/dev/null | while read -r ad; do
+    echo "  - $ad"
+  done
+else
+  warn "Compartment unknown; skipping AD listing"
+fi
+echo ""
+
+# =============================================================================
+# GPU Shapes
+# =============================================================================
+echo "GPU Shapes (per AD, compartment-visible):"
+echo "-----------------------------------------"
+
+oci iam availability-domain list --compartment-id "$COMPARTMENT_ID" --query 'data[].name' 2>/dev/null \
+  | jq -r '.[]?' | while read -r ad; do
+  shapes=$(oci compute shape list --compartment-id "$COMPARTMENT_ID" --availability-domain "$ad" --all 2>/dev/null \
+    | jq -r '[.data[]? | select(.shape | test("GPU")) | .shape] | unique | join(" ")')
+  echo "  $ad: ${shapes:-none}"
+done
+echo ""
+echo "  gpuType map (provider/oke/terraform/main.tf): a10=VM.GPU.A10.1 l40s=BM.GPU.L40S.4"
+echo "    h100=BM.GPU.H100.8 gb200=BM.GPU.GB200.4 gb300=BM.GPU.GB300.4"
+echo ""
+
+# =============================================================================
+# GPU Memory Fabrics
+# =============================================================================
+echo "GPU Memory Fabrics (use as gpuMemoryFabricId):"
+echo "----------------------------------------------"
+
+oci compute compute-gpu-memory-fabric list --compartment-id "$COMPARTMENT_ID" --all 2>/dev/null \
+  | jq -r '.data.items[]? | "  \(."display-name") \(."lifecycle-state") health=\(."fabric-health") available=\(."available-host-count")/\(."total-host-count")\n    \(.id)"'
+echo ""
+
+# =============================================================================
+# Node Images
+# =============================================================================
+echo "OKE Platform Images (${K8S_VERSION:-unknown}, newest per arch/GPU):"
+echo "-----------------------------------------------------------------"
+
+for arch in X86_64 AARCH64; do
+  oci ce node-pool-options get --node-pool-option-id all --compartment-id "$COMPARTMENT_ID" \
+    --node-pool-k8s-version "$K8S_VERSION" --node-pool-os-arch "$arch" 2>/dev/null \
+    | jq -r --arg arch "$arch" '
+        [.data.sources[]? | {gpu: (."source-name" | test("-GPU-")), name: ."source-name"}]
+        | group_by(.gpu)[] | max_by((.name | capture("(?<d>[0-9]{4}\\.[0-9]{2}\\.[0-9]{2}-[0-9]+)").d) + "|" + .name)
+        | "  \($arch) gpu=\(.gpu): \(.name)"'
+done
+echo "  (aarch64 GPU shapes such as GB200/GB300 have no platform image; set imageId)"
+echo ""
+echo "  Shapes OKE offers for managed node pools:"
+oci ce node-pool-options get --node-pool-option-id all --compartment-id "$COMPARTMENT_ID" \
+  --node-pool-k8s-version "$K8S_VERSION" 2>/dev/null | jq -r '.data.shapes[]? | "    - \(.)"' | sort
+echo ""
+
+if [[ -n "$IMAGE_COMPARTMENT_ID" ]]; then
+  echo "Custom aarch64 images in ${IMAGE_COMPARTMENT_ID}:"
+  oci compute image list --compartment-id "$IMAGE_COMPARTMENT_ID" --all --sort-by TIMECREATED --sort-order DESC 2>/dev/null \
+    | jq -r '.data[]? | select(."compartment-id" != null and (."display-name" | test("aarch64"))) | "  \(."display-name")  \(.id)"' | head -10
+  echo ""
+fi
+
+msg "Done"
