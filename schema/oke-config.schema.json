@@ -144,7 +144,7 @@
             },
             "podsCidr": {
               "type": "string",
-              "description": "Pod network CIDR for OCI_VCN_IP_NATIVE (default: 10.244.0.0/16)"
+              "description": "Cluster pods CIDR setting (default: 10.244.0.0/16). With OCI_VCN_IP_NATIVE it does not set pod addresses: pods take VCN IPs from the pod subnet derived from cidr"
             },
             "servicesCidr": {
               "type": "string",

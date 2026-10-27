@@ -24,8 +24,10 @@ Deploys a production-ready OKE (Container Engine for Kubernetes) cluster from a 
 - **oci CLI** configured (`~/.oci/config`)
 - **yq** >= 4.0 for YAML parsing
 - Permissions in the target compartment to manage VCNs, OKE clusters, instances,
-  KMS vaults/keys, Object Storage buckets, and policies (the etcd key policy is
-  compartment-scoped; no tenancy admin needed)
+  KMS vaults/keys, Object Storage buckets, and policies. The module's policies
+  (etcd key, fabric-pool cluster join) live in `cluster.oke.compartmentId`, so
+  tenancy admin is needed only when that is unset and they land in the root
+  compartment
 
 ### Authentication
 
@@ -175,6 +177,12 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
 
 ## Notes
 
+- **Pool changes do not roll existing nodes:** image catalog updates, `imageId`,
+  labels, or `gpuDriver` changes apply to nodes launched afterwards. Managed
+  pools need node cycling (`oci ce node-pool update`, or scale down/up); fabric
+  pools need their GPU memory cluster recreated
+  (`terraform apply -replace='oci_core_compute_gpu_memory_cluster.fabric["<pool>"]'`).
+  Replacing the cluster itself recreates fabric hosts automatically.
 - **Autoscaling:** OKE has no node-pool autoscaling field; pools use a fixed
   `size`. Autoscaling is the in-cluster cluster-autoscaler add-on, layered on
   post-deploy. EKS/GKE/AKS autoscale from config.

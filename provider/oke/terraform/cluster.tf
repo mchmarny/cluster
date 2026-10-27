@@ -34,8 +34,9 @@ resource "oci_kms_key" "etcd" {
 }
 
 // OKE encrypts etcd with the key only if both the OKE service and the cluster's
-// own resource principal may use it. The policy is compartment-scoped (no
-// tenancy admin needed) and pinned to the key.
+// own resource principal may use it. The policy is pinned to the key and lives
+// in the deployment compartment, so it needs tenancy-level policy rights only
+// when compartmentId is unset (root).
 resource "oci_identity_policy" "oke_kms" {
   count    = local.etcd_encryption_enabled ? 1 : 0
   provider = oci.home
@@ -49,10 +50,6 @@ resource "oci_identity_policy" "oke_kms" {
     "Allow service oke to use keys in ${local.policy_scope} where target.key.id = '${oci_kms_key.etcd[0].id}'",
     "Allow any-user to use keys in ${local.policy_scope} where ALL {request.principal.type = 'cluster', target.key.id = '${oci_kms_key.etcd[0].id}'}",
   ]
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 // IAM is eventually consistent; cluster create fails if the policy has not

@@ -89,6 +89,10 @@ Every cluster uses two pool tiers:
 
 This separation ensures control plane components are isolated from user workload resource pressure.
 
+**OKE exception:** OKE managed node pools have no taint field, so OKE pools are
+separated by labels only and are untainted; schedule onto them with node
+selectors or affinity.
+
 ## State Management
 
 State storage is controlled by `deployment.state`:

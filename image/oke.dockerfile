@@ -8,7 +8,7 @@
 #
 # Run:
 #   docker run --rm cluster:dev --version
-#   docker run --rm -e CONFIG_CONTENT -e OCI_AUTH -e OCI_CONFIG_FILE_PROFILE \
+#   docker run --rm -e CONFIG_CONTENT -e OCI_NAMESPACE -e OCI_AUTH -e OCI_CONFIG_FILE_PROFILE \
 #     -v $HOME/.oci:/home/builder/.oci:ro cluster:dev apply
 
 # =============================================================================

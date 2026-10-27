@@ -133,7 +133,8 @@ data "oci_containerengine_cluster_kube_config" "main" {
 }
 
 // Self-managed nodes may join only this cluster, and only as instances in the
-// deployment compartment. Compartment-scoped: no tenancy admin needed.
+// deployment compartment. Lives in the deployment compartment, so it needs
+// tenancy-level policy rights only when compartmentId is unset (root).
 resource "oci_identity_policy" "cluster_join" {
   count    = length(local.fabric_pools) > 0 ? 1 : 0
   provider = oci.home
@@ -146,10 +147,6 @@ resource "oci_identity_policy" "cluster_join" {
   statements = [
     "Allow any-user to {CLUSTER_JOIN} in ${local.policy_scope} where ALL {request.principal.type = 'instance', request.principal.compartment.id = '${local.compartment}', target.cluster.id = '${oci_containerengine_cluster.main.id}'}",
   ]
-
-  lifecycle {
-    create_before_destroy = true
-  }
 }
 
 resource "time_sleep" "cluster_join_policy" {
@@ -262,6 +259,13 @@ resource "oci_core_compute_gpu_memory_cluster" "fabric" {
   freeform_tags             = local.tags
 
   depends_on = [time_sleep.cluster_join_policy]
+
+  // Hosts take their cluster binding (API endpoint, CA) only at launch, so a
+  // replaced cluster must relaunch them; an instance configuration change
+  // alone does not.
+  lifecycle {
+    replace_triggered_by = [oci_containerengine_cluster.main.id]
+  }
 
   timeouts {
     create = "60m"

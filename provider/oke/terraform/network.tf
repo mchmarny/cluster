@@ -157,6 +157,30 @@ resource "oci_core_subnet" "pod" {
   freeform_tags              = local.tags
 }
 
+// The OKE cloud controller writes LoadBalancer listener rules into the LB
+// subnet's security list. A dedicated list keeps those rules off the subnets
+// that share the VCN default list, notably the control-plane endpoint subnet
+// whose API access is gated only by its NSG. It starts with the default list's
+// egress (LB to backends) and no ingress; listeners are added by the
+// controller.
+resource "oci_core_security_list" "lb" {
+  compartment_id = local.compartment
+  vcn_id         = oci_core_vcn.main.id
+  display_name   = "${local.prefix}-lb-sl"
+  freeform_tags  = local.tags
+
+  egress_security_rules {
+    destination = "0.0.0.0/0"
+    protocol    = "all"
+    stateless   = false
+  }
+
+  // Rules after creation are owned by the cloud controller, not Terraform.
+  lifecycle {
+    ignore_changes = [ingress_security_rules, egress_security_rules]
+  }
+}
+
 // Service load balancer subnet. Public by default so ingress LBs are reachable.
 resource "oci_core_subnet" "lb" {
   compartment_id             = local.compartment
@@ -166,7 +190,7 @@ resource "oci_core_subnet" "lb" {
   dns_label                  = "lb"
   prohibit_public_ip_on_vnic = false
   route_table_id             = oci_core_route_table.public.id
-  security_list_ids          = [oci_core_vcn.main.default_security_list_id]
+  security_list_ids          = [oci_core_security_list.lb.id]
   freeform_tags              = local.tags
 }
 

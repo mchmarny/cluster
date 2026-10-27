@@ -1,4 +1,5 @@
 #!/bin/bash
+# shellcheck disable=SC2034 # values are read inside single-quoted check() conditions
 set -euo pipefail
 
 # Post-deployment validation of OKE cluster
@@ -47,7 +48,8 @@ IS_PUBLIC="$(yq -r '.cluster.oke.controlPlane.isPublicIpEnabled // false' "$CONF
 # Fabric pools (gpuMemoryFabricId) are self-managed, not OKE node pools.
 WORKER_COUNT="$(yq '[.compute.oke.nodePools.workers[]? | select(.gpuMemoryFabricId == null)] | length' "$CONFIG_FILE" 2>/dev/null || echo "0")"
 FABRIC_POOLS="$(yq -r '.compute.oke.nodePools.workers[]? | select(.gpuMemoryFabricId != null) | .name' "$CONFIG_FILE" 2>/dev/null || true)"
-EXPECTED_NODES="$(yq '[.compute.oke.nodePools.system.size // 3] + [.compute.oke.nodePools.workers[]?.size // 1] | .[] as $n ireduce (0; . + $n)' "$CONFIG_FILE")"
+# Mirrors the module defaults: system pool 3 nodes, each worker 1.
+EXPECTED_NODES="$(yq '[.compute.oke.nodePools.system.size // 3] + [.compute.oke.nodePools.workers[]? | .size // 1] | .[] as $n ireduce (0; . + $n)' "$CONFIG_FILE")"
 EXPECTED_GPU_NODES="$(yq '[.compute.oke.nodePools.workers[]? | select(.gpuType != null) | .size // 1] | .[] as $n ireduce (0; . + $n)' "$CONFIG_FILE")"
 
 msg "Validating cluster: ${CLUSTER_NAME} in ${REGION} (compartment: ${COMPARTMENT_ID})"
@@ -55,6 +57,8 @@ msg "Validating cluster: ${CLUSTER_NAME} in ${REGION} (compartment: ${COMPARTMEN
 FAILED=0
 PASSED=0
 
+# Conditions are eval'd; pass them single-quoted so API-derived values are
+# expanded as data at eval time, never spliced into the command text.
 check() {
   local desc="$1"; shift
   if eval "$@" &>/dev/null; then
@@ -88,17 +92,17 @@ PUBLIC_ENDPOINT=$(echo "$CLUSTER_JSON" | jq -r '.data.endpoints."public-endpoint
 PRIVATE_ENDPOINT=$(echo "$CLUSTER_JSON" | jq -r '.data.endpoints."private-endpoint" // ""')
 CNI_TYPE=$(echo "$CLUSTER_JSON" | jq -r '.data."cluster-pod-network-options"[0]."cni-type" // ""')
 
-check "Cluster lifecycle state is ACTIVE" "[[ '$LIFECYCLE_STATE' == 'ACTIVE' ]]"
-check "Cluster has a private endpoint" "[[ -n '$PRIVATE_ENDPOINT' ]]"
+check "Cluster lifecycle state is ACTIVE" '[[ "$LIFECYCLE_STATE" == ACTIVE ]]'
+check "Cluster has a private endpoint" '[[ -n "$PRIVATE_ENDPOINT" ]]'
 if [[ "$IS_PUBLIC" == "true" ]]; then
-  check "Cluster has a public endpoint (controlPlane.isPublicIpEnabled)" "[[ -n '$PUBLIC_ENDPOINT' ]]"
+  check "Cluster has a public endpoint (controlPlane.isPublicIpEnabled)" '[[ -n "$PUBLIC_ENDPOINT" ]]'
 else
-  check "Cluster has no public endpoint (private by default)" "[[ -z '$PUBLIC_ENDPOINT' ]]"
+  check "Cluster has no public endpoint (private by default)" '[[ -z "$PUBLIC_ENDPOINT" ]]'
 fi
-check "Cluster uses VCN-native pod networking" "[[ '$CNI_TYPE' == 'OCI_VCN_IP_NATIVE' ]]"
+check "Cluster uses VCN-native pod networking" '[[ "$CNI_TYPE" == OCI_VCN_IP_NATIVE ]]'
 
 if [[ -n "$EXPECTED_VERSION" ]]; then
-  check "Cluster version matches $EXPECTED_VERSION" "[[ '$CLUSTER_VERSION' == ${EXPECTED_VERSION}* ]]"
+  check "Cluster version matches $EXPECTED_VERSION" '[[ "$CLUSTER_VERSION" == "$EXPECTED_VERSION"* ]]'
 fi
 
 # =============================================================================
@@ -113,14 +117,15 @@ POOL_COUNT=$(echo "$POOLS_JSON" | jq '.data | length')
 POOLS_ACTIVE=$(echo "$POOLS_JSON" | jq '[.data[] | select(."lifecycle-state" == "ACTIVE")] | length')
 EXPECTED_POOL_COUNT=$(( WORKER_COUNT + 1 ))
 
-check "System node pool exists" "echo '$POOLS_JSON' | jq -e '.data[] | select(.name | endswith(\"-system\"))'"
+SYSTEM_POOLS=$(echo "$POOLS_JSON" | jq '[.data[]? | select(.name | endswith("-system"))] | length')
+check "System node pool exists" '[[ $SYSTEM_POOLS -gt 0 ]]'
 check "Node pool count matches config (expected $EXPECTED_POOL_COUNT)" "[[ $POOL_COUNT -eq $EXPECTED_POOL_COUNT ]]"
 check "All node pools are ACTIVE ($POOLS_ACTIVE/$POOL_COUNT)" "[[ $POOLS_ACTIVE -eq $POOL_COUNT ]]"
 
 for pool in $FABRIC_POOLS; do
   GMC_STATE=$(oci compute compute-gpu-memory-cluster list --compartment-id "$COMPARTMENT_ID" --region "$REGION" \
     --all 2>/dev/null | jq -r --arg n "${DEP_ID}-${pool}" '[.data.items[]? | select(."display-name" == $n and ."lifecycle-state" != "DELETED")][0]."lifecycle-state" // ""')
-  check "GPU memory cluster ${DEP_ID}-${pool} is ACTIVE" "[[ '$GMC_STATE' == 'ACTIVE' ]]"
+  check "GPU memory cluster ${DEP_ID}-${pool} is ACTIVE" '[[ "$GMC_STATE" == ACTIVE ]]'
 done
 
 # =============================================================================
@@ -166,7 +171,7 @@ POD_SUBNET_CIDR=$(oci network subnet list --compartment-id "$COMPARTMENT_ID" --r
   --query 'data[0]."cidr-block"' --raw-output 2>/dev/null || echo "")
 COREDNS_IP=$(kubectl -n kube-system get pods -l k8s-app=kube-dns -o jsonpath='{.items[0].status.podIP}' 2>/dev/null || echo "")
 check "Pods get VCN IPs from the pod subnet ($COREDNS_IP in $POD_SUBNET_CIDR)" \
-  "[[ -n '$COREDNS_IP' && -n '$POD_SUBNET_CIDR' ]] && python3 -c 'import ipaddress,sys; sys.exit(ipaddress.ip_address(\"$COREDNS_IP\") not in ipaddress.ip_network(\"$POD_SUBNET_CIDR\"))'"
+  '[[ -n "$COREDNS_IP" && -n "$POD_SUBNET_CIDR" ]] && python3 -c "import ipaddress,sys; sys.exit(ipaddress.ip_address(sys.argv[1]) not in ipaddress.ip_network(sys.argv[2]))" "$COREDNS_IP" "$POD_SUBNET_CIDR"'
 
 # =============================================================================
 # GPU Validation

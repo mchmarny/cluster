@@ -281,7 +281,7 @@ cluster:
 # network:
 #   oke:
 #     cidr: 10.0.0.0/16
-#     podsCidr: 10.244.0.0/16
+#     podsCidr: 10.244.0.0/16   # not the pod IP range: VCN-native pods use a subnet of cidr
 #     servicesCidr: 10.96.0.0/16
 #     subnets:
 #       system:

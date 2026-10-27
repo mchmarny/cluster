@@ -133,6 +133,15 @@ run "control_plane_reachable_from_nodes_and_pods" {
   }
 }
 
+run "lb_security_list_isolated_from_control_plane" {
+  command = apply
+
+  assert {
+    condition     = length(setintersection(toset(oci_core_subnet.control_plane.security_list_ids), toset(oci_core_subnet.lb.security_list_ids))) == 0
+    error_message = "Cloud-controller LB rules must not land on a security list attached to the API endpoint subnet"
+  }
+}
+
 run "service_gateway_uses_all_services" {
   command = plan
 
