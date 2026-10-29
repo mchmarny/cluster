@@ -1,0 +1,27 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: oke
+  tenancy: ocid1.tenancy.oc1..tftest
+  location: us-chicago-1
+  state: local
+
+cluster:
+  oke:
+    version: v1.36.4
+    gpuDriver: operator
+    addons:
+      NvidiaGpuPlugin:
+        deviceListStrategy: volume-mounts
+
+compute:
+  oke:
+    nodePools:
+      system:
+        size: 1
+      workers:
+        - name: l40s
+          gpuType: l40s
+          imageId: ocid1.image.oc1..ubuntu-driverless

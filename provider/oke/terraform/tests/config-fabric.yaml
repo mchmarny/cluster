@@ -12,6 +12,7 @@ cluster:
   oke:
     version: v1.36.4
     compartmentId: ocid1.compartment.oc1..tftest
+    cni: vcn-native
 
 compute:
   oke:

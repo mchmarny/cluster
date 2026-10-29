@@ -4,8 +4,8 @@
 //
 // Identity resources live in the tenancy (root compartment) and require
 // root-tenancy manage permissions, so creation is opt-in via
-// cluster.oke.identity.manage. Managed node pools with VCN-native pod
-// networking do not need them; they grant node instance principals read access
+// cluster.oke.identity.manage. Managed node pools do not need them (with
+// either CNI); they grant node instance principals read access
 // to Object Storage for in-cluster workloads. The matching rule covers every
 // instance in the compartment, which is broad in a shared compartment.
 

@@ -482,3 +482,29 @@ func TestImportIfMissingImportsNew(t *testing.T) {
 		t.Errorf("call[1] = %q", m.cmdString(1))
 	}
 }
+
+func TestBuildInitArgsOCIAuth(t *testing.T) {
+	args := buildInitArgs(RunConfig{
+		Provider:   config.ProviderOKE,
+		State:      config.StateTenancy,
+		Bucket:     "cluster-state",
+		Namespace:  "axb4example",
+		Region:     "ap-kulai-2",
+		StateKey:   "deployments/ap-kulai-2/demo/terraform.tfstate",
+		OCIAuth:    "SecurityToken",
+		OCIProfile: "dev",
+	})
+	want := []string{
+		"-backend-config=auth=SecurityToken",
+		"-backend-config=config_file_profile=dev",
+	}
+	if len(args) < len(want) {
+		t.Fatalf("args too short: %v", args)
+	}
+	tail := args[len(args)-len(want):]
+	for i := range want {
+		if tail[i] != want[i] {
+			t.Errorf("args tail[%d] = %q, want %q\nargs: %v", i, tail[i], want[i], args)
+		}
+	}
+}

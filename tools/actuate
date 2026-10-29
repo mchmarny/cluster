@@ -254,11 +254,17 @@ init_terraform() {
         namespace="$(oci os ns get --profile "${OCI_CONFIG_FILE_PROFILE:-DEFAULT}" ${cli_auth[@]+"${cli_auth[@]}"} \
           --region "$state_region" --query data --raw-output)" || err "Failed to resolve OCI namespace (set OCI_NAMESPACE)"
       fi
+      # The backend authenticates on its own; pass the same profile/auth so
+      # session-token users can reach state.
+      local backend_auth=()
+      [[ -n "${OCI_AUTH:-}" ]] && backend_auth+=(-backend-config="auth=$OCI_AUTH")
+      [[ -n "${OCI_CONFIG_FILE_PROFILE:-}" ]] && backend_auth+=(-backend-config="config_file_profile=$OCI_CONFIG_FILE_PROFILE")
       terraform -chdir="$tf_dir" init \
         -backend-config="bucket=cluster-state" \
         -backend-config="namespace=$namespace" \
         -backend-config="region=$state_region" \
-        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate"
+        -backend-config="key=deployments/${dep_region}/${dep_id}/terraform.tfstate" \
+        ${backend_auth[@]+"${backend_auth[@]}"}
       ;;
     *)
       err "Unknown CSP: $csp"

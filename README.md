@@ -9,7 +9,7 @@ Opinionated Kubernetes cluster deployment toolkit. Provides Terraform configurat
 | [AWS (EKS)](./provider/eks/) | `provider/eks/` | Multi-AZ, optional VPC CNI custom networking, self-managed nodes, CloudWatch |
 | [Google Cloud (GKE)](./provider/gke/) | `provider/gke/` | Regional cluster, Workload Identity, Shielded Nodes, multi-NIC GPU networking for GPUDirect-TCPXO (a3-megagpu-8g) |
 | [Azure (AKS)](./provider/aks/) | `provider/aks/` | Private cluster, Entra ID RBAC, OIDC + Workload Identity, VNet/NSG + NAT gateway, Key Vault etcd encryption |
-| [Oracle Cloud (OKE)](./provider/oke/) | `provider/oke/` | Enhanced cluster, VCN-native pod networking, per-role NSGs, KMS etcd encryption, GPU pools by `gpuType` |
+| [Oracle Cloud (OKE)](./provider/oke/) | `provider/oke/` | Enhanced cluster, Flannel or VCN-native pod networking, per-role NSGs, KMS etcd encryption, GPU pools by `gpuType` |
 
 > **Note:** all four providers are live-validated end-to-end, including a GPU (H100) node pool on AKS and a GB300 GPU memory fabric pool on OKE. See each provider's README for operational notes.
 

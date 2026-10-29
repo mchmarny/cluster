@@ -86,6 +86,29 @@
               ],
               "default": "image",
               "description": "Where the NVIDIA driver comes from; the module deploys no GPU runtime components beyond it. image: the node image ships the driver (OKE GPU platform images; Oracle GPU images for imageId pools) and OKE's default NvidiaGpuPlugin add-on stays in place. operator: driverless Ubuntu imageId; a GPU Operator installed outside this module (e.g. AICR) provides driver, toolkit, and device plugin, and OKE's NvidiaGpuPlugin is disabled on GPU pools"
+            },
+            "cni": {
+              "type": "string",
+              "enum": [
+                "vcn-native",
+                "flannel"
+              ],
+              "default": "flannel",
+              "description": "Pod networking (create-time only). flannel: FLANNEL_OVERLAY, pods take addresses from network.oke.podsCidr. vcn-native: OCI_VCN_IP_NATIVE, pods take VCN IPs from the pod subnet; it disables IPv6 in pod namespaces, which breaks RoCE on RDMA VFs attached to pods, so GPU/RDMA clusters should use flannel"
+            },
+            "addons": {
+              "type": "object",
+              "description": "OKE add-on configurations keyed by add-on name (e.g. NvidiaGpuPlugin); values map the add-on's configuration keys (oci ce addon-option list) to values. Installs the add-on, or adopts it when OKE pre-installed it. NvidiaGpuPlugin conflicts with gpuDriver: operator",
+              "additionalProperties": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                }
+              }
             }
           }
         }
@@ -125,6 +148,22 @@
                   }
                 }
               }
+            },
+            "nodePoolEviction": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Optional eviction settings for managed node pools when nodes are deleted or scaled down. Absent: OKE defaults (60 minute grace, no force delete). Test and CI clusters set forceDelete so a PodDisruptionBudget cannot block teardown",
+              "properties": {
+                "gracePeriod": {
+                  "type": "string",
+                  "pattern": "^PT([0-9]|[1-5][0-9]|60)M$",
+                  "description": "How long OKE tries to drain a node before deleting it, as an ISO-8601 duration in minutes (PT0M to PT60M)"
+                },
+                "forceDelete": {
+                  "type": "boolean",
+                  "description": "Delete the node after the grace period even if the drain has not finished"
+                }
+              }
             }
           }
         }
@@ -144,7 +183,7 @@
             },
             "podsCidr": {
               "type": "string",
-              "description": "Cluster pods CIDR setting (default: 10.244.0.0/16). With OCI_VCN_IP_NATIVE it does not set pod addresses: pods take VCN IPs from the pod subnet derived from cidr"
+              "description": "Cluster pods CIDR setting (default: 10.240.0.0/12, room for ~8k nodes at OKE's /25 per node; create-time only, must not overlap the VCN, subnets, or servicesCidr). With cni flannel it is the pod address range; with vcn-native it does not set pod addresses: pods take VCN IPs from the pod subnet derived from cidr"
             },
             "servicesCidr": {
               "type": "string",
@@ -235,6 +274,14 @@
             "type": "string"
           },
           "description": "Kubernetes node labels"
+        },
+        "taints": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9./_-]+(=[A-Za-z0-9._-]*)?:(NoSchedule|PreferNoSchedule|NoExecute)$"
+          },
+          "description": "Kubernetes node taints (key[=value]:effect), registered by kubelet at join so the node never exists untainted. Pools that set taints bootstrap through templates/custom-image-init.sh"
         },
         "imageId": {
           "type": "string",

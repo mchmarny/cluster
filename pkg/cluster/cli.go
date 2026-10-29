@@ -310,6 +310,8 @@ func buildRunConfig(cmd *cli.Command) (*runConfigResult, func(), error) {
 		rc.Bucket = oci.BucketName(cfg)
 		rc.StateKey = oci.StateKey(cfg)
 		rc.Namespace = os.Getenv(oci.NamespaceEnv)
+		rc.OCIAuth = os.Getenv("OCI_AUTH")
+		rc.OCIProfile = os.Getenv("OCI_CONFIG_FILE_PROFILE")
 		rc.outputFile = oci.OutputFileName(cfg)
 		if cfg.Deployment.State == config.StateTenancy && rc.Namespace == "" {
 			cfgCleanup()

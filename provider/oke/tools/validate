@@ -45,6 +45,8 @@ CLUSTER_NAME="$(config_get "$CONFIG_FILE" cluster.oke.name "$DEP_ID")"
 COMPARTMENT_ID="$(config_get "$CONFIG_FILE" cluster.oke.compartmentId "$TENANCY_OCID")"
 EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.oke.version "")"
 IS_PUBLIC="$(yq -r '.cluster.oke.controlPlane.isPublicIpEnabled // false' "$CONFIG_FILE")"
+EXPECTED_CNI="$(yq -r '.cluster.oke.cni // "flannel"' "$CONFIG_FILE")"
+PODS_CIDR="$(yq -r '.network.oke.podsCidr // "10.244.0.0/16"' "$CONFIG_FILE")"
 # Fabric pools (gpuMemoryFabricId) are self-managed, not OKE node pools.
 WORKER_COUNT="$(yq '[.compute.oke.nodePools.workers[]? | select(.gpuMemoryFabricId == null)] | length' "$CONFIG_FILE" 2>/dev/null || echo "0")"
 FABRIC_POOLS="$(yq -r '.compute.oke.nodePools.workers[]? | select(.gpuMemoryFabricId != null) | .name' "$CONFIG_FILE" 2>/dev/null || true)"
@@ -99,7 +101,11 @@ if [[ "$IS_PUBLIC" == "true" ]]; then
 else
   check "Cluster has no public endpoint (private by default)" '[[ -z "$PUBLIC_ENDPOINT" ]]'
 fi
-check "Cluster uses VCN-native pod networking" '[[ "$CNI_TYPE" == OCI_VCN_IP_NATIVE ]]'
+if [[ "$EXPECTED_CNI" == flannel ]]; then
+  check "Cluster uses Flannel overlay pod networking" '[[ "$CNI_TYPE" == FLANNEL_OVERLAY ]]'
+else
+  check "Cluster uses VCN-native pod networking" '[[ "$CNI_TYPE" == OCI_VCN_IP_NATIVE ]]'
+fi
 
 if [[ -n "$EXPECTED_VERSION" ]]; then
   check "Cluster version matches $EXPECTED_VERSION" '[[ "$CLUSTER_VERSION" == "$EXPECTED_VERSION"* ]]'
@@ -165,13 +171,19 @@ check "Node count matches config ($NODE_COUNT/$EXPECTED_NODES)" '[[ "$NODE_COUNT
 check "All nodes are Ready ($READY_NODES/$NODE_COUNT)" '[[ "$READY_NODES" -eq "$NODE_COUNT" && "$NODE_COUNT" -gt 0 ]]'
 check "CoreDNS is available" "kubectl -n kube-system rollout status deployment/coredns --timeout=60s"
 
-# VCN-native pods carry pod-subnet IPs, not the overlay range.
-POD_SUBNET_CIDR=$(oci network subnet list --compartment-id "$COMPARTMENT_ID" --region "$REGION" \
-  --vcn-id "$(echo "$CLUSTER_JSON" | jq -r '.data."vcn-id"')" --display-name "${DEP_ID}-pod" \
-  --query 'data[0]."cidr-block"' --raw-output 2>/dev/null || echo "")
+# VCN-native pods carry pod-subnet IPs; Flannel pods carry podsCidr IPs.
+if [[ "$EXPECTED_CNI" == flannel ]]; then
+  POD_CIDR="$PODS_CIDR"
+  POD_CIDR_DESC="the Flannel pods CIDR"
+else
+  POD_CIDR=$(oci network subnet list --compartment-id "$COMPARTMENT_ID" --region "$REGION" \
+    --vcn-id "$(echo "$CLUSTER_JSON" | jq -r '.data."vcn-id"')" --display-name "${DEP_ID}-pod" \
+    --query 'data[0]."cidr-block"' --raw-output 2>/dev/null || echo "")
+  POD_CIDR_DESC="the pod subnet"
+fi
 COREDNS_IP=$(kubectl -n kube-system get pods -l k8s-app=kube-dns -o jsonpath='{.items[0].status.podIP}' 2>/dev/null || echo "")
-check "Pods get VCN IPs from the pod subnet ($COREDNS_IP in $POD_SUBNET_CIDR)" \
-  '[[ -n "$COREDNS_IP" && -n "$POD_SUBNET_CIDR" ]] && python3 -c "import ipaddress,sys; sys.exit(ipaddress.ip_address(sys.argv[1]) not in ipaddress.ip_network(sys.argv[2]))" "$COREDNS_IP" "$POD_SUBNET_CIDR"'
+check "Pods get IPs from ${POD_CIDR_DESC} ($COREDNS_IP in $POD_CIDR)" \
+  '[[ -n "$COREDNS_IP" && -n "$POD_CIDR" ]] && python3 -c "import ipaddress,sys; sys.exit(ipaddress.ip_address(sys.argv[1]) not in ipaddress.ip_network(sys.argv[2]))" "$COREDNS_IP" "$POD_CIDR"'
 
 # =============================================================================
 # GPU Validation

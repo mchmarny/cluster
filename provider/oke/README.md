@@ -3,7 +3,7 @@
 Deploys a production-ready OKE (Container Engine for Kubernetes) cluster from a single YAML config:
 
 - Enhanced cluster, private API endpoint by default (optional public endpoint gated by CIDR allowlist)
-- OCI_VCN_IP_NATIVE pod networking (pods get VCN IPs from a dedicated pod subnet)
+- Flannel overlay pod networking by default, or OCI_VCN_IP_NATIVE with `cluster.oke.cni: vcn-native` (pods get VCN IPs from a dedicated pod subnet; see [Notes](#notes) for why it is not the default)
 - VCN with internet/NAT/service gateways and NSGs per role (control plane, nodes, pods)
 - System node pool separated from worker pools; GPU pools via `gpuType`
 - Kubernetes secrets encrypted in etcd with a customer-managed KMS key
@@ -13,7 +13,9 @@ Deploys a production-ready OKE (Container Engine for Kubernetes) cluster from a 
 > 1x E5.Flex CPU worker, and a 1-host BM.GPU.GB300.4 fabric pool in an NVL72 GPU
 > memory fabric (Oracle Ubuntu 24.04 aarch64 driver-595 image). All nodes Ready,
 > OKE's NvidiaGpuPlugin advertising 4 GPUs; destroyed and re-applied from clean
-> state to confirm reproducibility.
+> state to confirm reproducibility. Validated again (2026-10-29) with Flannel,
+> a 4-host GB300 fabric pool joining with a Nodewright taint, and
+> `NvidiaGpuPlugin` configured with `deviceListStrategy: volume-mounts`.
 
 ---
 
@@ -99,7 +101,7 @@ provider/oke/tools/validate -c config/oke-example.yaml
 ```
 
 Checks cluster, node-pool, and GPU memory cluster state, that every configured
-node is Ready, CoreDNS, and VCN-native pod IPs. GPU allocatable is reported but
+node is Ready, CoreDNS, and pod IPs for the configured CNI. GPU allocatable is reported but
 not checked: the GPU runtime belongs to the workload layer (e.g. AICR). The API
 must be reachable: set `cluster.oke.controlPlane.isPublicIpEnabled: true` or run
 from inside the VCN.
@@ -193,8 +195,27 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
 - **Autoscaling:** OKE has no node-pool autoscaling field; pools use a fixed
   `size`. Autoscaling is the in-cluster cluster-autoscaler add-on, layered on
   post-deploy. EKS/GKE/AKS autoscale from config.
-- **Taints:** OKE managed node pools have no taint field, so the system pool is
-  not tainted (unlike EKS/GKE/AKS).
+- **Taints:** OKE managed node pools have no taint field, so pools are untainted
+  by default (unlike EKS/GKE/AKS). A pool's `taints` (`key[=value]:effect`) are
+  passed to kubelet as `--register-with-taints` through the `kubelet-extra-args`
+  instance metadata, so the node registers already tainted. Tainted pools boot
+  through `templates/custom-image-init.sh`, including platform-image pools,
+  because OKE's default bootstrap takes no kubelet arguments.
+- **Pod networking:** `cluster.oke.cni` defaults to `flannel`. VCN-native pod
+  networking sets `disable_ipv6=1` in pod namespaces, so an RDMA VF that
+  `host-device` moves into a pod never gets its IPv6 address, GID index 3 stays
+  empty, and RoCEv2 (NCCL over the GB200/GB300 RDMA VFs) fails. Flannel leaves
+  IPv6 at the kernel default. The CNI is create-time only.
+- **Add-ons:** `cluster.oke.addons` maps an OKE add-on name to its configuration
+  keys (`oci ce addon-option list`). The module installs the add-on, or adopts it
+  when OKE pre-installed it (enhanced clusters install `NvidiaGpuPlugin`), for
+  example `NvidiaGpuPlugin: {deviceListStrategy: volume-mounts}`. Configuring
+  `NvidiaGpuPlugin` is rejected with `gpuDriver: operator`.
+- **Node pool eviction:** `compute.oke.nodePoolEviction` (optional) sets how long
+  OKE drains a managed node before deleting it (`gracePeriod`, e.g. `PT15M`) and
+  whether to delete it anyway once that time is up (`forceDelete`). Absent, OKE's
+  defaults apply. Test clusters set `forceDelete: true` so a PodDisruptionBudget
+  cannot hang a destroy.
 - **etcd encryption** (`security.secretsEncryption.enabled`, default true) creates
   a KMS vault, key, and a compartment policy letting OKE (service and cluster
   principal) use the key. It is create-time only: toggling it replaces the

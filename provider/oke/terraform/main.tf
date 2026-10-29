@@ -92,6 +92,20 @@ locals {
   // OKE's NvidiaGpuPlugin must not compete with a GPU Operator's device plugin.
   disable_oke_gpu_plugin = local.gpu_driver == "operator"
 
+  // OKE add-on configurations, keyed by add-on name (e.g. NvidiaGpuPlugin).
+  // Values are the add-on's configuration keys (oci ce addon-option list).
+  addons = try(local.config.cluster.oke.addons, {})
+
+  // Pod networking. flannel (default): overlay on podsCidr (FLANNEL_OVERLAY);
+  // the pod subnet and pod NSG still exist but nothing attaches to them.
+  // vcn-native: pods take VCN IPs from the dedicated pod subnet
+  // (OCI_VCN_IP_NATIVE). Flannel is the default because VCN-native sets
+  // disable_ipv6=1 in pod namespaces, so an RDMA VF moved into a pod never
+  // gets its IPv6 address and RoCEv2 (GID index 3) fails.
+  cni        = try(local.config.cluster.oke.cni, "flannel")
+  cni_type   = local.cni == "flannel" ? "FLANNEL_OVERLAY" : "OCI_VCN_IP_NATIVE"
+  vcn_native = local.cni_type == "OCI_VCN_IP_NATIVE"
+
   // Freeform tags applied to every taggable resource.
   tags = try(local.config.deployment.tags, {})
 
@@ -110,8 +124,10 @@ locals {
   ))
 
   // Network CIDRs.
-  vcn_cidr      = try(local.config.network.oke.cidr, "10.0.0.0/16")
-  pods_cidr     = try(local.config.network.oke.podsCidr, "10.244.0.0/16")
+  vcn_cidr = try(local.config.network.oke.cidr, "10.0.0.0/16")
+  // /12: OKE gives each node a /25, so a /16 caps the cluster at 512 nodes and
+  // the pods CIDR cannot change after create; /12 leaves room for ~8k nodes.
+  pods_cidr     = try(local.config.network.oke.podsCidr, "10.240.0.0/12")
   services_cidr = try(local.config.network.oke.servicesCidr, "10.96.0.0/16")
 
   // Subnet CIDRs derived from the VCN CIDR (try() honors config overrides).
@@ -147,6 +163,9 @@ locals {
 
   system_pool_config = try(local.config.compute.oke.nodePools.system, local.default_system_pool)
 
+  // Managed node pool eviction on delete/scale-down; null keeps OKE's defaults.
+  node_pool_eviction = try(local.config.compute.oke.nodePoolEviction, null)
+
   // Flatten node pools: system object + workers array, each tagged with type.
   all_node_pools = concat(
     [merge(local.system_pool_config, { name = "system", type = "system" })],
@@ -165,6 +184,7 @@ locals {
         bootVolumeSizeGb = try(np.bootVolumeSizeGb, 100)
         size             = try(np.size, np.type == "system" ? 3 : 1)
         labels           = try(np.labels, {})
+        taints           = try(np.taints, [])
         image_override   = try(np.imageId, null)
         // Self-managed pool in a GPU memory fabric (see compute.tf).
         gpu_memory_fabric_id = try(np.gpuMemoryFabricId, null)
@@ -218,6 +238,10 @@ locals {
       image_name = np.image_override != null ? null : try(
         local.platform_images[local.pool_traits[k].os_arch][tostring(local.pool_traits[k].is_gpu)][1], null
       )
+      // Taints are registered by kubelet, so the node never exists untainted.
+      // The bootstrap (templates/custom-image-init.sh, or oke-init on images
+      // that ship it) reads this from the kubelet-extra-args metadata key.
+      kubelet_extra_args = length(np.taints) > 0 ? "--register-with-taints=${join(",", np.taints)}" : null
       // Oracle's per-node switch for the NvidiaGpuPlugin add-on.
       labels = merge(np.labels, local.pool_traits[k].is_gpu && local.disable_oke_gpu_plugin ? {
         "oci.oraclecloud.com/disable-gpu-device-plugin" = "true"

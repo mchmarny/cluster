@@ -1,0 +1,32 @@
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: oke
+  tenancy: ocid1.tenancy.oc1..tftest
+  location: ap-kulai-2
+  state: local
+
+cluster:
+  oke:
+    version: v1.36.4
+    compartmentId: ocid1.compartment.oc1..tftest
+    cni: flannel
+
+compute:
+  oke:
+    nodePools:
+      system:
+        size: 1
+      workers:
+        - name: gb300
+          gpuType: gb300
+          imageId: ocid1.image.oc1..custom-gb300
+          gpuMemoryFabricId: ocid1.computegpumemoryfabric.oc1..tftest
+          bootVolumeSizeGb: 500
+          size: 2
+          labels:
+            nodeGroup: gpu-worker
+          taints:
+            - nodewright.nvidia.com=runtime-required:NoSchedule

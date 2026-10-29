@@ -47,6 +47,12 @@ type RunConfig struct {
 	// derivable from config, so it is supplied by the caller.
 	Namespace string
 
+	// OCI auth method and config file profile for the oci backend (OCI_AUTH and
+	// OCI_CONFIG_FILE_PROFILE). The backend does not read those variables
+	// itself, so they are passed as backend config when set.
+	OCIAuth    string
+	OCIProfile string
+
 	// ImportTargets lists resources to import if missing from state.
 	// Each entry maps a Terraform resource address to its provider ID.
 	ImportTargets []ImportTarget
@@ -222,9 +228,9 @@ func buildEnv(cfg RunConfig) []string {
 		// Azure CLI default chain; both are inherited from the process env and
 		// not owned by this tool, so no per-run env vars are injected here.
 	case config.ProviderOKE:
-		// The oci provider and backend authenticate via OCI_AUTH /
-		// OCI_CONFIG_FILE_PROFILE and ~/.oci/config, inherited from the
-		// process env and not owned by this tool.
+		// The oci provider authenticates via OCI_AUTH / OCI_CONFIG_FILE_PROFILE
+		// and ~/.oci/config, inherited from the process env and not owned by
+		// this tool. The backend gets the same values from buildInitArgs.
 	}
 
 	return env
@@ -273,6 +279,12 @@ func buildInitArgs(cfg RunConfig) []string {
 			fmt.Sprintf("-backend-config=region=%s", cfg.stateRegion()),
 			fmt.Sprintf("-backend-config=key=%s", cfg.StateKey),
 		)
+		if cfg.OCIAuth != "" {
+			args = append(args, fmt.Sprintf("-backend-config=auth=%s", cfg.OCIAuth))
+		}
+		if cfg.OCIProfile != "" {
+			args = append(args, fmt.Sprintf("-backend-config=config_file_profile=%s", cfg.OCIProfile))
+		}
 	}
 
 	return args

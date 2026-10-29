@@ -79,9 +79,10 @@ resource "oci_containerengine_cluster" "main" {
   // security.secretsEncryption.enabled replaces the cluster.
   kms_key_id = local.etcd_encryption_enabled ? oci_kms_key.etcd[0].id : null
 
-  // Native pod networking (required for the pod subnet / OCI_VCN_IP_NATIVE CNI).
+  // Pod networking: FLANNEL_OVERLAY (default) or OCI_VCN_IP_NATIVE
+  // (cluster.oke.cni). Create-time only: changing it replaces the cluster.
   cluster_pod_network_options {
-    cni_type = "OCI_VCN_IP_NATIVE"
+    cni_type = local.cni_type
   }
 
   // Control-plane endpoint. Private by default; allowed CIDRs are enforced via
@@ -112,6 +113,10 @@ resource "oci_containerengine_cluster" "main" {
       condition     = contains(["image", "operator"], local.gpu_driver)
       error_message = "cluster.oke.gpuDriver must be 'image' or 'operator', got '${local.gpu_driver}'."
     }
+    precondition {
+      condition     = contains(["vcn-native", "flannel"], local.cni)
+      error_message = "cluster.oke.cni must be 'vcn-native' or 'flannel', got '${local.cni}'."
+    }
   }
 
   depends_on = [time_sleep.oke_kms_policy]
@@ -120,5 +125,35 @@ resource "oci_containerengine_cluster" "main" {
     create = "45m"
     update = "45m"
     delete = "45m"
+  }
+}
+
+// Configured OKE add-ons. Enhanced clusters pre-install some (NvidiaGpuPlugin),
+// so override_existing adopts an installed add-on instead of failing. Node
+// pools and fabric hosts depend on this, so GPU nodes join with the add-on
+// already configured. Removing an entry stops managing the add-on but leaves it
+// installed (remove_addon_resources_on_delete = false): for an add-on OKE
+// pre-installed, deleting it would not be a return to the default.
+resource "oci_containerengine_addon" "configured" {
+  for_each = local.addons
+
+  cluster_id                       = oci_containerengine_cluster.main.id
+  addon_name                       = each.key
+  override_existing                = true
+  remove_addon_resources_on_delete = false
+
+  dynamic "configurations" {
+    for_each = each.value
+    content {
+      key   = configurations.key
+      value = tostring(configurations.value)
+    }
+  }
+
+  lifecycle {
+    precondition {
+      condition     = !(each.key == "NvidiaGpuPlugin" && local.gpu_driver == "operator")
+      error_message = "cluster.oke.addons.NvidiaGpuPlugin conflicts with gpuDriver: operator (the GPU Operator owns the device plugin)."
+    }
   }
 }
