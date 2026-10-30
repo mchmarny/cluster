@@ -1,0 +1,28 @@
+# Test fixture for terraform test (tests/*.tftest.hcl) — not a deployable config.
+# Regional cluster pinned to one zone with an explicit default-pool machine
+# type, so the throwaway default pool avoids zones/families that are out of
+# capacity at cluster create.
+apiVersion: github.com/mchmarny/cluster/v1alpha1
+kind: Cluster
+
+deployment:
+  id: tftest
+  provider: gke
+  tenancy: tftest-project
+  location: us-central1
+  state: tenancy
+  destroy: false
+
+cluster:
+  gke:
+    version: "1.35"
+    zones:
+      - us-central1-c
+    defaultPool:
+      machineType: e2-standard-4
+
+compute:
+  gke:
+    nodePools:
+      system:
+        machineType: e2-standard-4

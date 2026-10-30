@@ -47,6 +47,22 @@
               "default": false,
               "description": "Enable deletion protection on the cluster"
             },
+            "zones": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Cluster node locations, all in deployment.location (default: 3 zones GKE picks in the region). Also used by node pools created without their own zones; minNodes/maxNodes are per zone. Create-time only"
+            },
+            "defaultPool": {
+              "type": "object",
+              "additionalProperties": false,
+              "description": "Default node pool GKE creates with the cluster; Terraform deletes it right after create",
+              "properties": {
+                "machineType": {
+                  "type": "string",
+                  "description": "GCE machine type (default: e2-medium). Create-time only"
+                }
+              }
+            },
             "controlPlane": {
               "type": "object",
               "additionalProperties": false,
@@ -164,6 +180,11 @@
                       "minimum": 10,
                       "description": "Boot disk size in GB (default: 100)"
                     },
+                    "zones": {
+                      "type": "array",
+                      "items": { "type": "string" },
+                      "description": "Zones for this pool (default: the cluster's node locations)"
+                    },
                     "autoscaling": { "$ref": "#/$defs/autoscaling" },
                     "autoUpgrade": {
                       "type": "boolean",
@@ -205,6 +226,11 @@
                         "type": "integer",
                         "minimum": 10,
                         "description": "Boot disk size in GB"
+                      },
+                      "zones": {
+                        "type": "array",
+                        "items": { "type": "string" },
+                        "description": "Zones for this pool (default: the cluster's node locations)"
                       },
                       "accelerators": {
                         "type": "array",

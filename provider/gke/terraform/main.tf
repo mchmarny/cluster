@@ -57,6 +57,14 @@ locals {
   release_channel     = local.gke_version != null ? null : try(local.config.cluster.gke.releaseChannel, "STABLE")
   deletion_protection = try(local.config.cluster.gke.deletionProtection, false)
 
+  // Default node pool placement. GKE creates a default pool with the cluster
+  // (one e2-medium node in each of three zones it picks in the region) before
+  // remove_default_node_pool deletes it, so a stockout in any of those zones
+  // fails the create. cluster_zones is also the node_locations GKE gives every
+  // pool created without its own zones.
+  cluster_zones             = try(local.config.cluster.gke.zones, null)
+  default_pool_machine_type = try(local.config.cluster.gke.defaultPool.machineType, null)
+
   // Cluster features
   workload_identity_enabled = try(local.config.cluster.gke.features.workloadIdentity, true)
   filestore_csi_enabled     = try(local.config.cluster.gke.features.gcpFilestoreCsiDriver, false)
@@ -249,3 +257,16 @@ locals {
 
 // Project validation is enforced via lifecycle precondition on google_compute_network.main
 // (see network.tf) to halt execution on mismatch, matching the EKS pattern.
+
+// cluster.gke.zones only applies at cluster create (node_locations is in
+// ignore_changes), so warn instead of silently drifting when it no longer
+// matches the cluster: pools created without their own zones follow the cluster.
+check "cluster_zones" {
+  assert {
+    condition = (
+      length(coalesce(local.cluster_zones, [])) == 0 ||
+      toset(coalesce(local.cluster_zones, [])) == google_container_cluster.main.node_locations
+    )
+    error_message = "cluster.gke.zones ${jsonencode(local.cluster_zones)} differs from the cluster's node locations ${jsonencode(google_container_cluster.main.node_locations)}. zones only applies when the cluster is created; node pools without their own zones use the cluster's node locations."
+  }
+}

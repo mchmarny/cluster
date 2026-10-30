@@ -272,6 +272,26 @@ controlPlane:
 
 Then re-apply with the same container image. This persists the CIDR in config for future applies.
 
+### Default Node Pool Placement
+
+GKE creates a default node pool with every new cluster, and Terraform deletes it right after create (`remove_default_node_pool = true`). Unless configured, GKE gives that pool one `e2-medium` node in each of three zones it picks in the region, and the set of zones can differ between creates. A stockout in any of those zones fails the create before any configured pool exists, even if none of your pools run in that zone. Two optional fields under `cluster.gke` control where it goes:
+
+```yaml
+cluster:
+  gke:
+    zones:                        # Cluster node locations
+      - us-central1-c
+    defaultPool:
+      machineType: e2-standard-4  # Default pool machine type
+```
+
+- `zones` sets the cluster's node locations, not just the default pool's: every node pool created without its own `zones` (the system pool included) runs in these zones. `autoscaling.minNodes`/`maxNodes` are per zone, so pinning a regional cluster to one zone shrinks every zone-less pool (`minNodes: 3` goes from 9 nodes to 3). Set `zones` on a pool to place it elsewhere
+- Plan fails when a zone is outside `deployment.location`; a zone name that does not exist in the region fails at cluster create
+- Both fields apply only when the cluster is created; they take effect the next time the cluster is created or replaced, including the retry after a failed create. Adding or changing them on an existing cluster plans no change:
+  - `zones` is not applied in place because changing cluster locations makes GKE move every node pool, including pools pinned to their own `zones`. Plan warns when `zones` differs from the cluster's node locations; node pools added later without their own `zones` use the cluster's node locations, not `zones`
+  - `defaultPool.machineType` describes a pool that no longer exists after create
+- `zones` keeps the default pool out of a zone that is out of capacity; `defaultPool.machineType` alone only helps when a single machine family is short
+
 ### GPU Multi-NIC Networking
 
 The `network.gke.gpuNets` config enables dedicated GPU NIC networks for GPUDirect-TCPXO, used by A3 machine types for high-bandwidth inter-node GPU communication.
@@ -367,6 +387,9 @@ cluster:
     version: ""                  # K8s version (null = latest in release channel)
     releaseChannel: STABLE       # RAPID, REGULAR, STABLE, or null
     deletionProtection: false    # Prevent accidental cluster deletion
+    zones: []                    # Cluster node locations, also used by pools without zones (default: 3 zones GKE picks, create-time only)
+    defaultPool:
+      machineType: e2-medium     # Temporary default pool machine type (create-time only)
     features:
       workloadIdentity: true
       gcpFilestoreCsiDriver: false
@@ -435,6 +458,7 @@ compute:
         imageType: COS_CONTAINERD
         diskType: pd-standard
         diskSizeGb: 100
+        zones: []                # Restrict to specific zones (default: the cluster's node locations)
         autoscaling:
           enabled: true
           minNodes: 1
@@ -484,6 +508,8 @@ compute:
 | Pod ranges | Auto-computed (system: `10.100.0.0/17`, worker: `10.100.128.0/17`) |
 | Service ranges | Auto-computed |
 | Master CIDR | `172.16.0.0/28` |
+| Cluster zones | 3 zones GKE picks in the region |
+| Default pool machine type | `e2-medium` (GKE default) |
 | Private cluster | `true` |
 | Workload Identity | `true` |
 | Shielded Nodes | `true` (secure boot + integrity monitoring) |
@@ -534,6 +560,14 @@ Check quotas and request increases in GCP Console:
 ```bash
 gcloud compute project-info describe --project=PROJECT_ID
 ```
+
+### Cluster Create Fails: Not Enough Resources
+
+```
+Error: Error waiting for creating GKE cluster: Try a different location, or try again later: Google Compute Engine does not have enough resources available to fulfill request: us-central1.
+```
+
+A zone ran out of capacity for the temporary default node pool. The error names only the region. Set `cluster.gke.zones` to zones with capacity (and optionally `cluster.gke.defaultPool.machineType`) and re-apply; the failed cluster is replaced using the new settings. See [Default Node Pool Placement](#default-node-pool-placement).
 
 ### Node Pool Creation Timeout
 
