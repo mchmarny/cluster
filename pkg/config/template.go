@@ -107,6 +107,10 @@ cluster:
     # name: my-cluster          # Optional: defaults to deployment.id
     version: "1.33"
     releaseChannel: STABLE
+    # zones:                    # Optional: cluster node locations, create-time only (default: GKE picks)
+    #   - us-west1-a            # Default for pools created without zones; minNodes/maxNodes are per zone
+    # defaultPool:
+    #   machineType: e2-standard-4  # Optional: temporary create-time pool (default: e2-medium)
     # controlPlane:
     #   authorizedNetworks:     # Optional: restrict API access
     #     - cidr: 0.0.0.0/32

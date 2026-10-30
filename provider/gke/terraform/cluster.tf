@@ -66,6 +66,18 @@ resource "google_container_cluster" "main" {
   remove_default_node_pool = true
   initial_node_count       = 1
 
+  # Zones for the default pool and for any node pool that sets no zones of its own
+  # (create-time only, see lifecycle)
+  node_locations = local.cluster_zones
+
+  # Default pool machine type (create-time only; the pool is removed after create)
+  dynamic "node_config" {
+    for_each = local.default_pool_machine_type != null ? [1] : []
+    content {
+      machine_type = local.default_pool_machine_type
+    }
+  }
+
   # Delete protection
   deletion_protection     = local.deletion_protection
   enable_shielded_nodes   = true
@@ -217,7 +229,17 @@ resource "google_container_cluster" "main" {
     ignore_changes = [
       # Ignore changes to initial_node_count as we manage node pools separately
       initial_node_count,
+      # Describes the default pool, which no longer exists after create
+      node_config,
+      # Create-time only: GKE moves every node pool, including pools pinned to
+      # their own zones, when cluster locations change
+      node_locations,
     ]
+
+    precondition {
+      condition     = alltrue([for z in coalesce(local.cluster_zones, []) : startswith(z, "${local.region}-")])
+      error_message = "cluster.gke.zones must all be in deployment.location (${local.region}), got ${jsonencode(local.cluster_zones)}."
+    }
   }
 
   depends_on = [
