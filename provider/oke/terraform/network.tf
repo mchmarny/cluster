@@ -144,7 +144,7 @@ resource "oci_core_subnet" "worker" {
   freeform_tags              = local.tags
 }
 
-// Pod subnet (private) — required by the OCI_VCN_IP_NATIVE CNI.
+// Pod subnet (private) — used by the OCI_VCN_IP_NATIVE CNI; created with either CNI.
 resource "oci_core_subnet" "pod" {
   compartment_id             = local.compartment
   vcn_id                     = oci_core_vcn.main.id
@@ -214,7 +214,7 @@ resource "oci_core_network_security_group" "nodes" {
   freeform_tags  = local.tags
 }
 
-// Pod NSG (OCI_VCN_IP_NATIVE).
+// Pod NSG (OCI_VCN_IP_NATIVE); created with either CNI.
 resource "oci_core_network_security_group" "pods" {
   compartment_id = local.compartment
   vcn_id         = oci_core_vcn.main.id

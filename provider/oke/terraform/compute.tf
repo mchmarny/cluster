@@ -16,6 +16,8 @@
 resource "oci_containerengine_node_pool" "pools" {
   for_each = local.managed_pools
 
+  depends_on = [oci_containerengine_addon.configured]
+
   cluster_id         = oci_containerengine_cluster.main.id
   compartment_id     = local.compartment
   name               = "${local.prefix}-${each.key}"
@@ -48,18 +50,21 @@ resource "oci_containerengine_node_pool" "pools" {
 
     nsg_ids = [oci_core_network_security_group.nodes.id]
 
-    // Native pod networking — pods get VCN IPs from the dedicated pod subnet.
+    // VCN-native: pods get VCN IPs from the dedicated pod subnet. Flannel: the
+    // overlay needs no pod subnet.
     node_pool_pod_network_option_details {
-      cni_type       = "OCI_VCN_IP_NATIVE"
-      pod_subnet_ids = [oci_core_subnet.pod.id]
-      pod_nsg_ids    = [oci_core_network_security_group.pods.id]
+      cni_type       = local.cni_type
+      pod_subnet_ids = local.vcn_native ? [oci_core_subnet.pod.id] : null
+      pod_nsg_ids    = local.vcn_native ? [oci_core_network_security_group.pods.id] : null
     }
   }
 
-  // Custom images get an explicit bootstrap; platform images keep OKE's default.
-  node_metadata = each.value.image_override != null ? {
-    user_data = base64encode(file("${path.module}/templates/custom-image-init.sh"))
-  } : null
+  // Custom images and tainted pools get an explicit bootstrap (OKE's default
+  // takes no kubelet arguments); other platform-image pools keep OKE's default.
+  node_metadata = each.value.image_override != null || each.value.kubelet_extra_args != null ? merge(
+    { user_data = base64encode(file("${path.module}/templates/custom-image-init.sh")) },
+    each.value.kubelet_extra_args != null ? { kubelet-extra-args = each.value.kubelet_extra_args } : {},
+  ) : null
 
   node_source_details {
     source_type             = "IMAGE"
@@ -96,6 +101,31 @@ resource "oci_containerengine_node_pool" "pools" {
     precondition {
       condition     = length(each.value.availability_domains) > 0
       error_message = "Node pool ${each.key}: availabilityDomains ${jsonencode(each.value.ad_numbers)} match no AD in ${local.region}."
+    }
+    precondition {
+      condition     = alltrue([for t in each.value.taints : can(regex("^[A-Za-z0-9./_-]+=[A-Za-z0-9._-]+:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
+      error_message = "Node pool ${each.key}: taints must be key=value:NoSchedule|PreferNoSchedule|NoExecute, got ${jsonencode(each.value.taints)}."
+    }
+    precondition {
+      condition     = local.node_pool_eviction == null || can(regex("^PT([0-9]|[12][0-9]|30)M$", try(local.node_pool_eviction.gracePeriod, "PT0M")))
+      error_message = "compute.oke.nodePoolEviction.gracePeriod must be PT0M to PT30M (inside the 45m node pool delete timeout), got ${jsonencode(try(local.node_pool_eviction.gracePeriod, null))}."
+    }
+  }
+
+  // Opt-in (compute.oke.nodePoolEviction). OKE drains nodes before deleting
+  // them, and a PodDisruptionBudget that never allows an eviction blocks the
+  // drain indefinitely; test clusters set forceDelete so teardown cannot hang.
+  // forceDelete without gracePeriod deletes at once: OKE's own default grace
+  // is 60m, longer than the 45m delete timeout below. OKE returns a zero
+  // duration as PT0S, so zero is sent in that form to avoid a perpetual diff.
+  dynamic "node_eviction_node_pool_settings" {
+    for_each = local.node_pool_eviction == null ? [] : [local.node_pool_eviction]
+    content {
+      eviction_grace_duration = try(
+        node_eviction_node_pool_settings.value.gracePeriod == "PT0M" ? "PT0S" : node_eviction_node_pool_settings.value.gracePeriod,
+        try(node_eviction_node_pool_settings.value.forceDelete, false) ? "PT0S" : null,
+      )
+      is_force_delete_after_grace_duration = try(node_eviction_node_pool_settings.value.forceDelete, null)
     }
   }
 
@@ -197,15 +227,19 @@ resource "oci_core_instance_configuration" "fabric" {
         boot_volume_size_in_gbs = each.value.bootVolumeSizeGb
       }
 
-      metadata = {
-        user_data               = base64encode(file("${path.module}/templates/custom-image-init.sh"))
-        oke-initial-node-labels = join(",", [for k, v in each.value.labels : "${k}=${v}"])
-
-        // VCN-native pod networking for self-managed nodes.
-        oke-native-pod-networking = "true"
-        pod-subnets               = oci_core_subnet.pod.id
-        pod-nsgids                = oci_core_network_security_group.pods.id
-      }
+      metadata = merge(
+        {
+          user_data               = base64encode(file("${path.module}/templates/custom-image-init.sh"))
+          oke-initial-node-labels = join(",", [for k, v in each.value.labels : "${k}=${v}"])
+        },
+        each.value.kubelet_extra_args != null ? { kubelet-extra-args = each.value.kubelet_extra_args } : {},
+        // VCN-native pod networking for self-managed nodes; Flannel needs none.
+        local.vcn_native ? {
+          oke-native-pod-networking = "true"
+          pod-subnets               = oci_core_subnet.pod.id
+          pod-nsgids                = oci_core_network_security_group.pods.id
+        } : {},
+      )
 
       extended_metadata = {
         apiserver_host           = local.apiserver_host
@@ -237,6 +271,10 @@ resource "oci_core_instance_configuration" "fabric" {
       condition     = length(each.value.availability_domains) == 1
       error_message = "Fabric pool ${each.key}: a GPU memory cluster lives in one AD; pin availabilityDomains to the fabric's AD."
     }
+    precondition {
+      condition     = alltrue([for t in each.value.taints : can(regex("^[A-Za-z0-9./_-]+=[A-Za-z0-9._-]+:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
+      error_message = "Fabric pool ${each.key}: taints must be key=value:NoSchedule|PreferNoSchedule|NoExecute, got ${jsonencode(each.value.taints)}."
+    }
 
     // Instance configurations are immutable and the GPU memory cluster
     // references this one; the replacement must exist before the old one is
@@ -258,7 +296,7 @@ resource "oci_core_compute_gpu_memory_cluster" "fabric" {
   display_name              = "${local.prefix}-${each.key}"
   freeform_tags             = local.tags
 
-  depends_on = [time_sleep.cluster_join_policy]
+  depends_on = [time_sleep.cluster_join_policy, oci_containerengine_addon.configured]
 
   // Hosts take their cluster binding (API endpoint, CA) only at launch, so a
   // replaced cluster must relaunch them; an instance configuration change

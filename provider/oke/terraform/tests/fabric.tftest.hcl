@@ -131,3 +131,21 @@ run "cluster_join_scoped_to_cluster" {
     error_message = "CLUSTER_JOIN must be scoped to this cluster"
   }
 }
+
+run "fabric_flannel_and_taints" {
+  command = apply
+
+  variables {
+    CONFIG_PATH = "tests/config-fabric-flannel-taints.yaml"
+  }
+
+  assert {
+    condition     = !contains(keys(oci_core_instance_configuration.fabric["gb300"].instance_details[0].launch_details[0].metadata), "pod-subnets") && !contains(keys(oci_core_instance_configuration.fabric["gb300"].instance_details[0].launch_details[0].metadata), "oke-native-pod-networking")
+    error_message = "Flannel fabric nodes must not request VCN-native pod networking"
+  }
+
+  assert {
+    condition     = oci_core_instance_configuration.fabric["gb300"].instance_details[0].launch_details[0].metadata["kubelet-extra-args"] == "--register-with-taints=nodewright.nvidia.com=runtime-required:NoSchedule"
+    error_message = "Fabric pool taints must reach kubelet as --register-with-taints"
+  }
+}

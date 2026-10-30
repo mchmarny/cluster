@@ -192,3 +192,159 @@ run "shape_not_offered_fails" {
 
   expect_failures = [oci_containerengine_node_pool.pools]
 }
+
+run "default_cni_is_flannel_without_taints" {
+  command = plan
+
+  assert {
+    condition = (
+      oci_containerengine_cluster.main.cluster_pod_network_options[0].cni_type == "FLANNEL_OVERLAY" &&
+      oci_containerengine_node_pool.pools["l40s"].node_config_details[0].node_pool_pod_network_option_details[0].cni_type == "FLANNEL_OVERLAY"
+    )
+    error_message = "cni must default to FLANNEL_OVERLAY on the cluster and node pools"
+  }
+
+  assert {
+    condition     = length(oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings) == 0
+    error_message = "Without compute.oke.nodePoolEviction, node pools keep OKE's eviction defaults"
+  }
+
+  assert {
+    condition     = length(coalesce(oci_containerengine_node_pool.pools["l40s"].node_metadata, {})) == 0 && !can(oci_containerengine_node_pool.pools["gb300"].node_metadata["kubelet-extra-args"])
+    error_message = "Pools without taints must not carry kubelet-extra-args, and platform-image pools keep OKE's default bootstrap"
+  }
+}
+
+run "flannel_and_taints" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-flannel-taints.yaml"
+  }
+
+  assert {
+    condition = (
+      oci_containerengine_cluster.main.cluster_pod_network_options[0].cni_type == "FLANNEL_OVERLAY" &&
+      oci_containerengine_node_pool.pools["l40s"].node_config_details[0].node_pool_pod_network_option_details[0].cni_type == "FLANNEL_OVERLAY"
+    )
+    error_message = "cni flannel must set FLANNEL_OVERLAY on the cluster and node pools"
+  }
+
+  assert {
+    condition     = oci_containerengine_node_pool.pools["l40s"].node_metadata["kubelet-extra-args"] == "--register-with-taints=nodewright.nvidia.com=runtime-required:NoSchedule,nvidia.com/gpu=present:NoSchedule"
+    error_message = "Pool taints must reach kubelet as --register-with-taints"
+  }
+
+  assert {
+    condition     = can(oci_containerengine_node_pool.pools["l40s"].node_metadata["user_data"]) && length(coalesce(oci_containerengine_node_pool.pools["system"].node_metadata, {})) == 0
+    error_message = "Tainted platform-image pools need the explicit bootstrap; untainted ones keep OKE's default"
+  }
+}
+
+run "malformed_taint_fails" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-bad-taint.yaml"
+  }
+
+  expect_failures = [oci_containerengine_node_pool.pools]
+}
+
+run "valueless_taint_fails" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-valueless-taint.yaml"
+  }
+
+  expect_failures = [oci_containerengine_node_pool.pools]
+}
+
+run "force_delete_defaults_grace_to_zero" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-eviction-force.yaml"
+  }
+
+  assert {
+    condition = (
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].eviction_grace_duration == "PT0S" &&
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].is_force_delete_after_grace_duration
+    )
+    error_message = "forceDelete without gracePeriod must delete without waiting, inside the node pool delete timeout"
+  }
+}
+
+run "eviction_grace_beyond_delete_timeout_fails" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-eviction-too-long.yaml"
+  }
+
+  expect_failures = [oci_containerengine_node_pool.pools]
+}
+
+run "addons_adopt_and_configure" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-addons.yaml"
+  }
+
+  assert {
+    condition = (
+      oci_containerengine_addon.configured["NvidiaGpuPlugin"].override_existing &&
+      length(oci_containerengine_addon.configured["NvidiaGpuPlugin"].configurations) == 2 &&
+      contains([for c in oci_containerengine_addon.configured["NvidiaGpuPlugin"].configurations : "${c.key}=${c.value}"], "deviceListStrategy=volume-mounts") &&
+      contains([for c in oci_containerengine_addon.configured["NvidiaGpuPlugin"].configurations : "${c.key}=${c.value}"], "failOnInitError=true")
+    )
+    error_message = "Configured add-ons must adopt the installed add-on and pass every configuration key as a string"
+  }
+
+  assert {
+    condition = (
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].eviction_grace_duration == "PT15M" &&
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].is_force_delete_after_grace_duration
+    )
+    error_message = "compute.oke.nodePoolEviction must set the pools' eviction grace period and force delete"
+  }
+}
+
+run "gpu_plugin_addon_conflicts_with_operator" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-gpu-operator-addon.yaml"
+  }
+
+  expect_failures = [oci_containerengine_addon.configured]
+}
+
+run "vcn_native_cni" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-vcn-native.yaml"
+  }
+
+  assert {
+    condition = (
+      oci_containerengine_cluster.main.cluster_pod_network_options[0].cni_type == "OCI_VCN_IP_NATIVE" &&
+      oci_containerengine_node_pool.pools["l40s"].node_config_details[0].node_pool_pod_network_option_details[0].cni_type == "OCI_VCN_IP_NATIVE"
+    )
+    error_message = "cni vcn-native must set OCI_VCN_IP_NATIVE on the cluster and node pools"
+  }
+}
+
+run "invalid_cni_fails" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-bad-cni.yaml"
+  }
+
+  expect_failures = [oci_containerengine_cluster.main]
+}

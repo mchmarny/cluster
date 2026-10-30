@@ -28,6 +28,11 @@ until imds identity/cert.pem 2>/dev/null | grep -q "BEGIN CERTIFICATE"; do sleep
 . /etc/os-release
 SHAPE=$(imds instance/shape || true)
 K8S_VERSION=$(imds instance/metadata/oke-k8version || true)
+# Optional; carries --register-with-taints for pools with taints. oke-init.service
+# reads the same metadata key itself.
+KUBELET_EXTRA_ARGS=$(imds instance/metadata/kubelet-extra-args || true)
+BOOTSTRAP_ARGS=()
+[[ -z "$KUBELET_EXTRA_ARGS" ]] || BOOTSTRAP_ARGS=(--kubelet-extra-args "$KUBELET_EXTRA_ARGS")
 
 if [[ "$SHAPE" == *GPU* ]]; then
   # GPU/RDMA workloads (NCCL) need unlimited locked memory.
@@ -67,8 +72,8 @@ elif [[ "$ID" == ubuntu ]]; then
     retry apt-get -y update
     retry apt-get -y install "oci-oke-node-all-${version}"
   fi
-  retry oke bootstrap
+  retry oke bootstrap ${BOOTSTRAP_ARGS[@]+"${BOOTSTRAP_ARGS[@]}"}
 else
   imds instance/metadata/oke_init_script | base64 --decode >/var/run/oke-init.sh
-  retry bash /var/run/oke-init.sh
+  retry bash /var/run/oke-init.sh ${BOOTSTRAP_ARGS[@]+"${BOOTSTRAP_ARGS[@]}"}
 fi

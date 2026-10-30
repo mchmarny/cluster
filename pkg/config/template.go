@@ -276,6 +276,10 @@ cluster:
     # name: my-cluster          # Optional: defaults to deployment.id
     version: "v1.36.4"
     # compartmentId: ocid1.compartment.oc1..aaaa  # Optional: defaults to tenancy (root)
+    # cni: flannel              # Optional: flannel (default) or vcn-native
+    # addons:                   # Optional: OKE add-on configuration keys
+    #   NvidiaGpuPlugin:
+    #     deviceListStrategy: volume-mounts
     # controlPlane:
     #   isPublicIpEnabled: false
     #   allowedCidrs:           # Optional: restrict API access (your IP auto-added)
@@ -285,7 +289,7 @@ cluster:
 # network:
 #   oke:
 #     cidr: 10.0.0.0/16
-#     podsCidr: 10.244.0.0/16   # not the pod IP range: VCN-native pods use a subnet of cidr
+#     podsCidr: 10.240.0.0/12   # flannel pod IP range (/25 per node); with cni: vcn-native pods use a subnet of cidr instead
 #     servicesCidr: 10.96.0.0/16
 #     subnets:
 #       system:
@@ -295,6 +299,9 @@ cluster:
 
 compute:
   oke:
+    # nodePoolEviction:         # Optional: drain grace and force delete for managed pools
+    #   gracePeriod: PT15M
+    #   forceDelete: true
     nodePools:
       system:
         shape: VM.Standard.E5.Flex
@@ -318,6 +325,8 @@ compute:
         #   size: 1
         #   labels:
         #     nodeGroup: gpu-worker
+        #   taints:                 # Optional: registered at join (key=value:effect)
+        #     - nodewright.nvidia.com=runtime-required:NoSchedule
 `
 
 // GenerateTemplate writes a starter config file to the given path.
