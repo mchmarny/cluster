@@ -321,7 +321,7 @@ compute:
         #   size: 1
         #   labels:
         #     nodeGroup: gpu-worker
-        #   taints:                 # Optional: registered at join (key[=value]:effect)
+        #   taints:                 # Optional: registered at join (key=value:effect)
         #     - nodewright.nvidia.com=runtime-required:NoSchedule
 `
 

@@ -156,8 +156,8 @@
               "properties": {
                 "gracePeriod": {
                   "type": "string",
-                  "pattern": "^PT([0-9]|[1-5][0-9]|60)M$",
-                  "description": "How long OKE tries to drain a node before deleting it, as an ISO-8601 duration in minutes (PT0M to PT60M)"
+                  "pattern": "^PT([0-9]|[12][0-9]|30)M$",
+                  "description": "How long OKE tries to drain a node before deleting it, as an ISO-8601 duration in minutes (PT0M to PT30M, inside the 45 minute node pool delete timeout). Defaults to PT0M when forceDelete is true, otherwise OKE's 60 minutes"
                 },
                 "forceDelete": {
                   "type": "boolean",
@@ -279,9 +279,9 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9./_-]+(=[A-Za-z0-9._-]*)?:(NoSchedule|PreferNoSchedule|NoExecute)$"
+            "pattern": "^[A-Za-z0-9./_-]+=[A-Za-z0-9._-]+:(NoSchedule|PreferNoSchedule|NoExecute)$"
           },
-          "description": "Kubernetes node taints (key[=value]:effect), registered by kubelet at join so the node never exists untainted. Pools that set taints bootstrap through templates/custom-image-init.sh"
+          "description": "Kubernetes node taints (key=value:effect; oke bootstrap drops a taint without a value), registered by kubelet at join so the node never exists untainted. Pools that set taints bootstrap through templates/custom-image-init.sh"
         },
         "imageId": {
           "type": "string",

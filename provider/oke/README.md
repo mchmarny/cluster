@@ -179,8 +179,14 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
 
 ## Notes
 
+- **Upgrading a deployment created before Flannel became the default**
+  (images `v0.1.0-oke` and `v0.1.1-oke`, VCN-native with a `10.244.0.0/16` pods
+  CIDR): before the next `cluster apply`, add `cluster.oke.cni: vcn-native`, and
+  `network.oke.podsCidr: 10.244.0.0/16` if the config does not set it. Both are
+  create-time settings, and `cluster apply` applies its plan without a prompt,
+  so without them the cluster and its fabric hosts are destroyed and recreated.
 - **Pool changes do not roll existing nodes:** image catalog updates, `imageId`,
-  labels, or `gpuDriver` changes apply to nodes launched afterwards. Managed
+  labels, `taints`, or `gpuDriver` changes apply to nodes launched afterwards. Managed
   pools need node cycling (`oci ce node-pool update`, or scale down/up); fabric
   pools need their GPU memory cluster recreated, which `actuate` can plan by
   passing `-replace` to the plan step:
@@ -196,7 +202,7 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
   `size`. Autoscaling is the in-cluster cluster-autoscaler add-on, layered on
   post-deploy. EKS/GKE/AKS autoscale from config.
 - **Taints:** OKE managed node pools have no taint field, so pools are untainted
-  by default (unlike EKS/GKE/AKS). A pool's `taints` (`key[=value]:effect`) are
+  by default (unlike EKS/GKE/AKS). A pool's `taints` (`key=value:effect`) are
   passed to kubelet as `--register-with-taints` through the `kubelet-extra-args`
   instance metadata, so the node registers already tainted. Tainted pools boot
   through `templates/custom-image-init.sh`, including platform-image pools,
@@ -212,10 +218,12 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
   example `NvidiaGpuPlugin: {deviceListStrategy: volume-mounts}`. Configuring
   `NvidiaGpuPlugin` is rejected with `gpuDriver: operator`.
 - **Node pool eviction:** `compute.oke.nodePoolEviction` (optional) sets how long
-  OKE drains a managed node before deleting it (`gracePeriod`, e.g. `PT15M`) and
-  whether to delete it anyway once that time is up (`forceDelete`). Absent, OKE's
-  defaults apply. Test clusters set `forceDelete: true` so a PodDisruptionBudget
-  cannot hang a destroy.
+  OKE drains a managed node before deleting it (`gracePeriod`, `PT0M` to `PT30M`)
+  and whether to delete it anyway once that time is up (`forceDelete`). Absent,
+  OKE's defaults apply (60 minutes, no force delete). Test clusters set
+  `forceDelete: true` so a PodDisruptionBudget cannot hang a destroy; with
+  `gracePeriod` omitted the node is then deleted without waiting (`PT0M`), since
+  OKE's 60-minute default outlasts the 45-minute node pool delete timeout.
 - **etcd encryption** (`security.secretsEncryption.enabled`, default true) creates
   a KMS vault, key, and a compartment policy letting OKE (service and cluster
   principal) use the key. It is create-time only: toggling it replaces the

@@ -103,22 +103,24 @@ resource "oci_containerengine_node_pool" "pools" {
       error_message = "Node pool ${each.key}: availabilityDomains ${jsonencode(each.value.ad_numbers)} match no AD in ${local.region}."
     }
     precondition {
-      condition     = alltrue([for t in each.value.taints : can(regex("^[A-Za-z0-9./_-]+(=[A-Za-z0-9._-]*)?:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
-      error_message = "Node pool ${each.key}: taints must be key[=value]:NoSchedule|PreferNoSchedule|NoExecute, got ${jsonencode(each.value.taints)}."
+      condition     = alltrue([for t in each.value.taints : can(regex("^[A-Za-z0-9./_-]+=[A-Za-z0-9._-]+:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
+      error_message = "Node pool ${each.key}: taints must be key=value:NoSchedule|PreferNoSchedule|NoExecute, got ${jsonencode(each.value.taints)}."
     }
     precondition {
-      condition     = local.node_pool_eviction == null || can(regex("^PT([0-9]|[1-5][0-9]|60)M$", try(local.node_pool_eviction.gracePeriod, "PT60M")))
-      error_message = "compute.oke.nodePoolEviction.gracePeriod must be PT0M to PT60M, got ${jsonencode(try(local.node_pool_eviction.gracePeriod, null))}."
+      condition     = local.node_pool_eviction == null || can(regex("^PT([0-9]|[12][0-9]|30)M$", try(local.node_pool_eviction.gracePeriod, "PT0M")))
+      error_message = "compute.oke.nodePoolEviction.gracePeriod must be PT0M to PT30M (inside the 45m node pool delete timeout), got ${jsonencode(try(local.node_pool_eviction.gracePeriod, null))}."
     }
   }
 
   // Opt-in (compute.oke.nodePoolEviction). OKE drains nodes before deleting
   // them, and a PodDisruptionBudget that never allows an eviction blocks the
   // drain indefinitely; test clusters set forceDelete so teardown cannot hang.
+  // forceDelete without gracePeriod deletes at once (PT0M): OKE's own default
+  // grace is 60m, longer than the 45m delete timeout below.
   dynamic "node_eviction_node_pool_settings" {
     for_each = local.node_pool_eviction == null ? [] : [local.node_pool_eviction]
     content {
-      eviction_grace_duration              = try(node_eviction_node_pool_settings.value.gracePeriod, null)
+      eviction_grace_duration              = try(node_eviction_node_pool_settings.value.gracePeriod, try(node_eviction_node_pool_settings.value.forceDelete, false) ? "PT0M" : null)
       is_force_delete_after_grace_duration = try(node_eviction_node_pool_settings.value.forceDelete, null)
     }
   }
@@ -266,8 +268,8 @@ resource "oci_core_instance_configuration" "fabric" {
       error_message = "Fabric pool ${each.key}: a GPU memory cluster lives in one AD; pin availabilityDomains to the fabric's AD."
     }
     precondition {
-      condition     = alltrue([for t in each.value.taints : can(regex("^[A-Za-z0-9./_-]+(=[A-Za-z0-9._-]*)?:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
-      error_message = "Fabric pool ${each.key}: taints must be key[=value]:NoSchedule|PreferNoSchedule|NoExecute, got ${jsonencode(each.value.taints)}."
+      condition     = alltrue([for t in each.value.taints : can(regex("^[A-Za-z0-9./_-]+=[A-Za-z0-9._-]+:(NoSchedule|PreferNoSchedule|NoExecute)$", t))])
+      error_message = "Fabric pool ${each.key}: taints must be key=value:NoSchedule|PreferNoSchedule|NoExecute, got ${jsonencode(each.value.taints)}."
     }
 
     // Instance configurations are immutable and the GPU memory cluster

@@ -395,9 +395,10 @@ func logAzureCredentials() {
 }
 
 // logOCICredentials reports which OCI authentication source terraform will use.
-// The oci provider and backend read OCI_AUTH / OCI_CONFIG_FILE_PROFILE and
-// ~/.oci/config; this tool does not own those secrets, it only surfaces which
-// path is active for operator visibility.
+// The oci provider reads OCI_AUTH / OCI_CONFIG_FILE_PROFILE and ~/.oci/config;
+// the backend gets the same method and profile as -backend-config. This tool
+// does not own those secrets, it only surfaces which path is active for
+// operator visibility.
 func logOCICredentials() {
 	auth := os.Getenv("OCI_AUTH")
 	if auth == "" {

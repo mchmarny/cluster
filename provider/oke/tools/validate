@@ -46,7 +46,8 @@ COMPARTMENT_ID="$(config_get "$CONFIG_FILE" cluster.oke.compartmentId "$TENANCY_
 EXPECTED_VERSION="$(config_get "$CONFIG_FILE" cluster.oke.version "")"
 IS_PUBLIC="$(yq -r '.cluster.oke.controlPlane.isPublicIpEnabled // false' "$CONFIG_FILE")"
 EXPECTED_CNI="$(yq -r '.cluster.oke.cni // "flannel"' "$CONFIG_FILE")"
-PODS_CIDR="$(yq -r '.network.oke.podsCidr // "10.244.0.0/16"' "$CONFIG_FILE")"
+# Mirrors the module default (main.tf).
+PODS_CIDR="$(yq -r '.network.oke.podsCidr // "10.240.0.0/12"' "$CONFIG_FILE")"
 # Fabric pools (gpuMemoryFabricId) are self-managed, not OKE node pools.
 WORKER_COUNT="$(yq '[.compute.oke.nodePools.workers[]? | select(.gpuMemoryFabricId == null)] | length' "$CONFIG_FILE" 2>/dev/null || echo "0")"
 FABRIC_POOLS="$(yq -r '.compute.oke.nodePools.workers[]? | select(.gpuMemoryFabricId != null) | .name' "$CONFIG_FILE" 2>/dev/null || true)"

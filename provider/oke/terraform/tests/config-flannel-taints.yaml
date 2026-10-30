@@ -27,4 +27,4 @@ compute:
           size: 1
           taints:
             - nodewright.nvidia.com=runtime-required:NoSchedule
-            - nvidia.com/gpu:NoSchedule
+            - nvidia.com/gpu=present:NoSchedule

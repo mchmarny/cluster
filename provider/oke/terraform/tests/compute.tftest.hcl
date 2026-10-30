@@ -231,7 +231,7 @@ run "flannel_and_taints" {
   }
 
   assert {
-    condition     = oci_containerengine_node_pool.pools["l40s"].node_metadata["kubelet-extra-args"] == "--register-with-taints=nodewright.nvidia.com=runtime-required:NoSchedule,nvidia.com/gpu:NoSchedule"
+    condition     = oci_containerengine_node_pool.pools["l40s"].node_metadata["kubelet-extra-args"] == "--register-with-taints=nodewright.nvidia.com=runtime-required:NoSchedule,nvidia.com/gpu=present:NoSchedule"
     error_message = "Pool taints must reach kubelet as --register-with-taints"
   }
 
@@ -246,6 +246,42 @@ run "malformed_taint_fails" {
 
   variables {
     CONFIG_PATH = "tests/config-bad-taint.yaml"
+  }
+
+  expect_failures = [oci_containerengine_node_pool.pools]
+}
+
+run "valueless_taint_fails" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-valueless-taint.yaml"
+  }
+
+  expect_failures = [oci_containerengine_node_pool.pools]
+}
+
+run "force_delete_defaults_grace_to_zero" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-eviction-force.yaml"
+  }
+
+  assert {
+    condition = (
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].eviction_grace_duration == "PT0M" &&
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].is_force_delete_after_grace_duration
+    )
+    error_message = "forceDelete without gracePeriod must delete without waiting, inside the node pool delete timeout"
+  }
+}
+
+run "eviction_grace_beyond_delete_timeout_fails" {
+  command = plan
+
+  variables {
+    CONFIG_PATH = "tests/config-eviction-too-long.yaml"
   }
 
   expect_failures = [oci_containerengine_node_pool.pools]
