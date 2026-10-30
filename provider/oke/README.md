@@ -76,6 +76,11 @@ export OCI_NAMESPACE=<namespace>
 
 ### 3. Apply
 
+> **Existing clusters:** `apply` does not prompt. Before applying a newer image
+> to an existing cluster, check [Notes](#notes) for changed create-time defaults:
+> `v0.2.0-oke` changed the CNI and pods CIDR defaults, which replaces clusters
+> created with earlier images unless their config is updated first.
+
 ```shell
 docker run --rm \
   -e CONFIG_CONTENT="$(base64 < config/oke-example.yaml)" \
@@ -179,12 +184,13 @@ Discovery, DCGM). Those belong to the workload layer (e.g. AICR).
 
 ## Notes
 
-- **Upgrading a deployment created before Flannel became the default**
-  (images `v0.1.0-oke` and `v0.1.1-oke`, VCN-native with a `10.244.0.0/16` pods
-  CIDR): before the next `cluster apply`, add `cluster.oke.cni: vcn-native`, and
-  `network.oke.podsCidr: 10.244.0.0/16` if the config does not set it. Both are
-  create-time settings, and `cluster apply` applies its plan without a prompt,
-  so without them the cluster and its fabric hosts are destroyed and recreated.
+- **Upgrading a deployment created before `v0.2.0-oke`**, which made Flannel the
+  default (`v0.1.0-oke` and `v0.1.1-oke` create VCN-native clusters with a
+  `10.244.0.0/16` pods CIDR): before the next `cluster apply`, add
+  `cluster.oke.cni: vcn-native`, and `network.oke.podsCidr: 10.244.0.0/16` if
+  the config does not set it. Both are create-time settings, and `cluster apply`
+  applies its plan without a prompt, so without them the cluster and its fabric
+  hosts are destroyed and recreated.
 - **Pool changes do not roll existing nodes:** image catalog updates, `imageId`,
   labels, `taints`, or `gpuDriver` changes apply to nodes launched afterwards. Managed
   pools need node cycling (`oci ce node-pool update`, or scale down/up); fabric
