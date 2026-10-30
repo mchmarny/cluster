@@ -11,7 +11,7 @@ tools:
   kubectl: '1.36.5'
   kubelogin: '0.2.21'
   awscli: '2.34.63'
-  gcloud: '569.0.0'
+  gcloud: '591.0.0'
   azurecli: '2.87.0'
   oci: '3.95.1'
   tflint: '0.63.1'
