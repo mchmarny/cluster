@@ -29,7 +29,7 @@ AWSCLI_VERSION := 2.34.63
 endif
 GCLOUD_VERSION ?= $(shell yq -r '.tools.gcloud' .settings.yaml 2>/dev/null)
 ifeq ($(GCLOUD_VERSION),)
-GCLOUD_VERSION := 569.0.0
+GCLOUD_VERSION := 591.0.0
 endif
 AZURECLI_VERSION ?= $(shell yq -r '.tools.azurecli' .settings.yaml 2>/dev/null)
 ifeq ($(AZURECLI_VERSION),)
