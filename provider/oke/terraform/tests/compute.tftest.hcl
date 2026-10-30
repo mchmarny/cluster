@@ -270,7 +270,7 @@ run "force_delete_defaults_grace_to_zero" {
 
   assert {
     condition = (
-      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].eviction_grace_duration == "PT0M" &&
+      oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].eviction_grace_duration == "PT0S" &&
       oci_containerengine_node_pool.pools["system"].node_eviction_node_pool_settings[0].is_force_delete_after_grace_duration
     )
     error_message = "forceDelete without gracePeriod must delete without waiting, inside the node pool delete timeout"

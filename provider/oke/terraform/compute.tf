@@ -115,12 +115,16 @@ resource "oci_containerengine_node_pool" "pools" {
   // Opt-in (compute.oke.nodePoolEviction). OKE drains nodes before deleting
   // them, and a PodDisruptionBudget that never allows an eviction blocks the
   // drain indefinitely; test clusters set forceDelete so teardown cannot hang.
-  // forceDelete without gracePeriod deletes at once (PT0M): OKE's own default
-  // grace is 60m, longer than the 45m delete timeout below.
+  // forceDelete without gracePeriod deletes at once: OKE's own default grace
+  // is 60m, longer than the 45m delete timeout below. OKE returns a zero
+  // duration as PT0S, so zero is sent in that form to avoid a perpetual diff.
   dynamic "node_eviction_node_pool_settings" {
     for_each = local.node_pool_eviction == null ? [] : [local.node_pool_eviction]
     content {
-      eviction_grace_duration              = try(node_eviction_node_pool_settings.value.gracePeriod, try(node_eviction_node_pool_settings.value.forceDelete, false) ? "PT0M" : null)
+      eviction_grace_duration = try(
+        node_eviction_node_pool_settings.value.gracePeriod == "PT0M" ? "PT0S" : node_eviction_node_pool_settings.value.gracePeriod,
+        try(node_eviction_node_pool_settings.value.forceDelete, false) ? "PT0S" : null,
+      )
       is_force_delete_after_grace_duration = try(node_eviction_node_pool_settings.value.forceDelete, null)
     }
   }
