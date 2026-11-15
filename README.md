@@ -97,6 +97,14 @@ make e2e          # Full end-to-end (qualify + Docker build + smoke tests)
 make tools-check  # Verify tool versions match .settings.yaml
 ```
 
+## Contributing
+
+- [CONTRIBUTING.md](CONTRIBUTING.md): development workflow, conventions and pull requests
+- [RELEASE.md](RELEASE.md): how provider images are released
+- [SECURITY.md](SECURITY.md): reporting vulnerabilities and verifying images
+- [SUPPORT.md](SUPPORT.md): where to ask for help
+- [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+
 ## License
 
 MIT -- see [LICENSE](LICENSE)

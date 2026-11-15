@@ -1,0 +1,97 @@
+name: Bug Report
+description: Report a bug or unexpected behavior
+title: "[Bug]: "
+labels: ["bug"]
+
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I searched existing issues and found no duplicates
+          required: true
+        - label: This is not a security vulnerability (report those privately, see SECURITY.md)
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      options:
+        - EKS
+        - GKE
+        - AKS
+        - OKE
+        - Not provider-specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      options:
+        - CLI (init / plan / apply / output)
+        - Terraform (cluster, node pools, network, IAM)
+        - Container image
+        - Provider tools (setup, validate, disco)
+        - Docs / examples
+        - Other / unknown
+    validations:
+      required: true
+
+  - type: dropdown
+    id: regression
+    attributes:
+      label: Regression?
+      options:
+        - "Yes, this worked in an earlier version (name it under Additional Context)"
+        - "No, this is a new use case"
+        - "Unknown"
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      value: |
+        - Image and version (`docker run --rm <image> --version`), or commit SHA:
+        - Region:
+        - Kubernetes version:
+        - Node pool instance or machine types:
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to Reproduce
+      description: The command you ran and the relevant part of your configuration. Redact account and tenancy IDs and credentials.
+      placeholder: |
+        1. docker run ... apply -c /config/eks-min-cpu.yaml
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Relevant output. Redact credentials and account IDs; never paste KEY_CONTENT or CONFIG_CONTENT.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Anything else that might help.

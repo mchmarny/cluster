@@ -70,7 +70,7 @@ tools/                # Shared scripts (common, mirror, e2e, check-tools)
 ### Terraform Module Convention (per platform)
 Each platform (`provider/eks/`, `provider/gke/`) has `terraform/` with:
 - **variables.tf**: Single variable `CONFIG_PATH`
-- **main.tf**: `yamldecode(file(var.CONFIG_PATH))` loads YAML, then `locals {}` block extracts all values with `try()` for optional fields with defaults. Includes `check` block to validate account/project matches config.
+- **main.tf**: `yamldecode(file(var.CONFIG_PATH))` loads YAML, then `locals {}` block extracts all values with `try()` for optional fields with defaults.
 - **cluster.tf**: Managed K8s cluster resource
 - **compute.tf**: Node pools (system + worker) with autoscaling
 - **network.tf**: VPC/VNet, subnets, NAT, routing
@@ -90,7 +90,7 @@ Built from `image/<csp>.dockerfile`. Include pre-mirrored Terraform providers fo
 
 **Node Pool Separation**: System pools (with `dedicated=system-workload` taints) for control plane components; worker pools for user workloads.
 
-**Account Validation**: Terraform `check` blocks verify the active cloud account matches config's `deployment.tenancy` to prevent cross-account mistakes.
+**Account Validation**: A lifecycle `precondition` on the base network resource (EKS, GKE, AKS) fails the plan when the active account, project or subscription differs from config's `deployment.tenancy`; OKE resolves the configured tenancy via `data "oci_identity_tenancy"`. Prevents cross-account mistakes.
 
 **AWS helpers in pkg/aws**: Provider-specific functions like `BucketName()`, `PolicyARN()`, `SAName()` live in `pkg/aws`, not on the generic `Config` struct.
 
