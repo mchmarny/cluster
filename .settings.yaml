@@ -10,7 +10,7 @@ tools:
   terraform: '1.15.5'
   kubectl: '1.36.5'
   kubelogin: '0.2.21'
-  awscli: '2.34.63'
+  awscli: '2.40.3'
   gcloud: '591.0.0'
   azurecli: '2.87.0'
   oci: '3.95.1'
