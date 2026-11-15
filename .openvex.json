@@ -4,8 +4,8 @@
   "author": "mchmarny/cluster maintainers",
   "role": "document creator",
   "timestamp": "2026-06-06T00:00:00Z",
-  "version": 5,
-  "last_updated": "2026-10-30T00:00:00Z",
+  "version": 6,
+  "last_updated": "2026-11-15T00:00:00Z",
   "tooling": "manual; reachability verified against image contents and Dockerfiles in image/",
   "statements": [
     {
@@ -570,6 +570,19 @@
       "status": "not_affected",
       "justification": "inline_mitigations_already_exist",
       "impact_statement": "The bundled interpreter is only a TLS client to Google API endpoints in this image (the gcloud calls listed under CVE-2026-19445). gcloud's HTTP transport (requests) verifies servers against the certifi bundle the SDK ships, lib/third_party/certifi/cacert.pem under the SDK root (/opt/google-cloud-sdk), which is certifi 2026.10.19, the patched release, as of v591.0.0. openssl verify -CAfile <bundle> -untrusted <chain> <chain> rejects all 16 chains in https://emudhra.we-have-a-problem.com/chains.zip (regular and rollover, via emSign Root TLS CA - G3 and the AAA Certificate Services cross-signs) with 'unable to get local issuer certificate' for that bundle, for every other CA bundle in the SDK (httplib2, bq, gsutil, boto, botocore, grpc roots.pem, pip), and for the system store that the mTLS and gRPC paths and the Debian python3 (3.11, not used by gcloud) use: /etc/ssl/certs/ca-certificates.crt from ca-certificates 20250419~deb12u2. The certifi and httplib2 bundles in gcloud 569.0.0 trusted 8 chains each. This assumes no CA override: the image sets none of REQUESTS_CA_BUNDLE, CURL_CA_BUNDLE, core/custom_ca_certs_file (CLOUDSDK_CORE_CUSTOM_CA_CERTS_FILE) or auth/disable_ssl_validation, and an operator who passes one in makes that bundle the trust store. Python's denylist is defense in depth for trust stores that still carry these chains. Re-verify on each gcloud bump, and drop this statement once gcloud bundles Python 3.14.10 or later."
+    },
+    {
+      "timestamp": "2026-11-15T00:00:00Z",
+      "vulnerability": {
+        "name": "CVE-2026-115557",
+        "description": "CPython ssl: no denylist for the eight eMudhra intermediate CA keys disclosed as compromised on 2026-10-20, so a client whose trust store still trusts them accepts certificates minted with those keys for any host (Critical). Fixed in 3.14.10; AWS CLI v2 (eks) bundles Python 3.14.8 as of 2.40.3."
+      },
+      "products": [
+        { "@id": "pkg:oci/eks", "identifiers": { "purl": "pkg:oci/eks" } }
+      ],
+      "status": "not_affected",
+      "justification": "inline_mitigations_already_exist",
+      "impact_statement": "The bundled interpreter is only a TLS client to AWS API endpoints in this image (aws eks update-kubeconfig in the provider/eks/terraform/network.tf local-exec, and the aws eks get-token exec credential that kubeconfig gives kubectl). The image holds two CA bundles: botocore's /opt/aws-cli/v2/<version>/dist/awscli/botocore/cacert.pem, which botocore verifies against because AWS CLI v2 ships no certifi, and the Debian system store /etc/ssl/certs/ca-certificates.crt from ca-certificates 20250419~deb12u2 (also /usr/lib/ssl/cert.pem, a link to it); no other CA bundle exists in the image. openssl verify -CAfile <bundle> -untrusted <chain> <chain> rejects all 16 chains in https://emudhra.we-have-a-problem.com/chains.zip (regular and rollover, via emSign Root TLS CA - G3 and the AAA Certificate Services cross-signs) with 'unable to get local issuer certificate' for both bundles: botocore's carries no emSign or AAA Certificate Services root, and the system store carries neither emSign ECC Root CA - G3 nor AAA Certificate Services. As a control, a store that still carries those roots (macOS /etc/ssl/cert.pem) accepts all 16. This assumes no CA override: the image sets none of AWS_CA_BUNDLE, SSL_CERT_FILE or SSL_CERT_DIR and has no AWS config file (ca_bundle), the in-image aws calls pass neither --ca-bundle nor --no-verify-ssl, and an operator who supplies a bundle makes it the trust store. Python's denylist is defense in depth for trust stores that still carry these chains. Re-verify on each awscli bump and whenever the image's ca-certificates version changes (debian:bookworm-slim is not pinned by digest and the build runs apt-get upgrade), and drop this statement once AWS CLI v2 bundles Python 3.14.10 or later."
     }
   ]
 }

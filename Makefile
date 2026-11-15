@@ -25,7 +25,7 @@ KUBECTL_VERSION := 1.36.5
 endif
 AWSCLI_VERSION ?= $(shell yq -r '.tools.awscli' .settings.yaml 2>/dev/null)
 ifeq ($(AWSCLI_VERSION),)
-AWSCLI_VERSION := 2.34.63
+AWSCLI_VERSION := 2.40.3
 endif
 GCLOUD_VERSION ?= $(shell yq -r '.tools.gcloud' .settings.yaml 2>/dev/null)
 ifeq ($(GCLOUD_VERSION),)

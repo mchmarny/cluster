@@ -40,7 +40,7 @@ FROM debian:bookworm-slim AS tools
 ARG TARGETARCH
 ARG TERRAFORM_VERSION=1.15.5
 ARG KUBECTL_VERSION=1.36.5
-ARG AWSCLI_VERSION=2.34.63
+ARG AWSCLI_VERSION=2.40.3
 
 RUN apt-get update \
     && apt-get upgrade -y \
@@ -133,7 +133,7 @@ ENV TF_CLI_CONFIG_FILE=/etc/terraformrc
 ARG VERSION=dev
 ARG TERRAFORM_VERSION=1.15.5
 ARG KUBECTL_VERSION=1.36.5
-ARG AWSCLI_VERSION=2.34.63
+ARG AWSCLI_VERSION=2.40.3
 LABEL org.opencontainers.image.title="EKS v2 Actuator" \
       org.opencontainers.image.description="Self-contained Terraform deployment for AWS EKS" \
       org.opencontainers.image.version="${VERSION}" \
