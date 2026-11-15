@@ -136,3 +136,16 @@ run "non_gpu_worker_is_untainted" {
     error_message = "non-GPU worker pools must be untainted (empty taints string)"
   }
 }
+
+run "worker_asgs_wait_through_failed_scaling_activities" {
+  command = plan
+
+  # A transient capacity error must not end the capacity wait: Auto Scaling
+  # retries the launch, so only the timeout should fail the apply.
+  assert {
+    condition = alltrue([
+      for asg in aws_autoscaling_group.node_groups : asg.ignore_failed_scaling_activities
+    ])
+    error_message = "every worker ASG must set ignore_failed_scaling_activities = true"
+  }
+}

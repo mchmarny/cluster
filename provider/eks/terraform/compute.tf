@@ -276,6 +276,11 @@ resource "aws_autoscaling_group" "node_groups" {
   health_check_type         = "EC2"
   health_check_grace_period = local.asg_health_check_grace_period
   wait_for_capacity_timeout = local.asg_capacity_timeout
+  # Keep waiting through failed scaling activities (e.g. transient
+  # InsufficientInstanceCapacity) until healthy capacity reaches the target
+  # or the timeout expires. With the default (false), the provider returns
+  # on the first failed activity even when Auto Scaling recovers on retry.
+  ignore_failed_scaling_activities = true
 
   # Termination policies
   termination_policies = [
