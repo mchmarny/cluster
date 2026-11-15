@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/mchmarny/cluster/security/advisories/new
+    about: Report it privately through a security advisory, not a public issue
+  - name: Questions and support
+    url: https://github.com/mchmarny/cluster/blob/main/SUPPORT.md
+    about: Where to ask, and what to include

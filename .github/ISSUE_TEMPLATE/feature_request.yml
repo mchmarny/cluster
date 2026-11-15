@@ -1,0 +1,65 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+
+body:
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      options:
+        - label: I searched existing issues
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Use Case
+      description: What are you trying to do, and what gets in the way today?
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should it work? Include the configuration you would expect to write, if any.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Provider
+      multiple: true
+      options:
+        - EKS
+        - GKE
+        - AKS
+        - OKE
+        - Not provider-specific
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility / Upgrade Impact
+      description: Would existing clusters or configurations change on upgrade (resource replacement, new defaults)?
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+
+  - type: dropdown
+    id: contribute
+    attributes:
+      label: Are you willing to contribute it?
+      options:
+        - Yes, I can open a PR
+        - Maybe, with guidance
+        - "No"
+    validations:
+      required: true
